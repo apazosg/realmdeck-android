@@ -1,40 +1,39 @@
-# Emulador Android x86_64 headless (host Linux)
+# Headless Android x86_64 emulator (Linux host)
 
-> Instalado y verificado el 2026-09-28 en `hermes` (Ubuntu 26.04, x86_64).
-> Propósito: desarrollar y probar el **futuro launcher Android** del proyecto.
-> **No** sirve para el runtime del juego (ver Limitaciones).
+> Installed and verified on 2026-09-28 on `hermes` (Ubuntu 26.04, x86_64).
+> Purpose: develop and test Android tooling and the separate diagnostic app.
+> It is **not** suitable for the game runtime (see Limitations).
 
-## Qué hay instalado
+## Installed components
 
-| Componente | Versión exacta | Ruta |
+| Component | Exact version | Path |
 |---|---|---|
 | Command line tools | 15859902 (`commandlinetools-linux-15859902_latest.zip`, sdkmanager 22.0) | `~/.local/opt/android-sdk/cmdline-tools/latest/` |
 | Emulator | 37.1.11 (build_id 15917651) | `~/.local/opt/android-sdk/emulator/` |
 | platform-tools (adb, fastboot) | 37.0.1 | `~/.local/opt/android-sdk/platform-tools/` |
 | platforms;android-35 | rev 2 (Android 15, API 35, ext level 13) | `~/.local/opt/android-sdk/platforms/android-35/` |
 | build-tools;35.0.0 | 35.0.0 | `~/.local/opt/android-sdk/build-tools/35.0.0/` |
-| Imagen de sistema | `system-images;android-35;google_apis;x86_64` **rev 9** (`x86_64-35_r09`) | `~/.local/opt/android-sdk/system-images/android-35/google_apis/x86_64/` |
-| AVD `wowtest` | perfil `pixel_5`, API 35, ABI x86_64 | `~/.android/avd/wowtest.avd/config.ini` |
-| Artefactos (log, PID, capturas, APK trivial) | — | `/home/adrian/wowforever-artifacts/android-emulator/` (fuera del repo) |
+| System image | `system-images;android-35;google_apis;x86_64` **rev 9** (`x86_64-35_r09`) | `~/.local/opt/android-sdk/system-images/android-35/google_apis/x86_64/` |
+| AVD `wowtest` | `pixel_5` profile, API 35, ABI x86_64 | `~/.android/avd/wowtest.avd/config.ini` |
+| Artifacts (log, PID, screenshots, trivial APK) | — | `/home/adrian/wowforever-artifacts/android-emulator/` (outside the repository) |
 
-Configuración relevante del AVD (`config.ini`): `hw.ramSize=4096M`,
-`hw.gpu.mode=swiftshader_indirect` + `hw.gpu.enabled=yes` (render por software,
-sin GPU física), `hw.audioInput=no`, `hw.audioOutput=no`,
-`hw.camera.back=none`, `hw.camera.front=none`. Arranque con
+Relevant AVD configuration (`config.ini`): `hw.ramSize=4096M`,
+`hw.gpu.mode=swiftshader_indirect` + `hw.gpu.enabled=yes` (software rendering,
+no physical GPU), `hw.audioInput=no`, `hw.audioOutput=no`,
+`hw.camera.back=none`, `hw.camera.front=none`. Start with
 `-no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect -memory 4096`.
 
-Notas de instalación:
+Installation notes:
 
-- `/dev/kvm` existe; el usuario pertenece al grupo `kvm`, pero la sesión puede
-  no tenerlo activo (comprobar con `id -nG`). Si falta, los comandos del
-  emulador se lanzan con `sg kvm -c '<comando>'` (el script ya lo hace solo).
-- Al crear el AVD, `avdmanager` dejó placeholders de plantilla en
-  `config.ini` (`avd.id=<build>`, `avd.name=<build>`,
-  `disk.dataPartition.path=<temp>`): se corrigieron a mano
-  (`avd.id/name=wowtest`, línea `<temp>` eliminada). Sin esto el AVD igual
-  aparece en `-list-avds`, pero conviene dejarlo sano.
+- `/dev/kvm` exists; the user belongs to the `kvm` group, but the session may not
+  have it active (check with `id -nG`). If unavailable, launch emulator commands
+  with `sg kvm -c '<command>'` (the script already does this automatically).
+- When creating the AVD, `avdmanager` left template placeholders in `config.ini`
+  (`avd.id=<build>`, `avd.name=<build>`, `disk.dataPartition.path=<temp>`): these
+  were manually corrected (`avd.id/name=wowtest`, `<temp>` line removed). Without
+  this, the AVD still appears in `-list-avds`, but it is best to keep it healthy.
 
-## Uso (vía script)
+## Usage (via script)
 
 ```bash
 scripts/android-emulator.sh start            # arranca y espera a sys.boot_completed=1 (timeout 600 s)
@@ -43,14 +42,14 @@ scripts/android-emulator.sh status           # proceso + estado adb + boot
 scripts/android-emulator.sh screencap [ruta] # PNG de la pantalla (defecto: $EMU_DIR/screencap-<fecha>.png)
 ```
 
-Variables: `ANDROID_SDK_ROOT` (defecto `~/.local/opt/android-sdk`),
-`ANDROID_EMU_DIR` (defecto
+Variables: `ANDROID_SDK_ROOT` (default `~/.local/opt/android-sdk`),
+`ANDROID_EMU_DIR` (default
 `/home/adrian/wowforever-artifacts/android-emulator`),
-`ANDROID_EMU_AVD` (defecto `wowtest`),
-`ANDROID_EMU_SERIAL` (defecto `emulator-5554`),
-`ANDROID_EMU_BOOT_TIMEOUT` (defecto 600 s).
+`ANDROID_EMU_AVD` (default `wowtest`),
+`ANDROID_EMU_SERIAL` (default `emulator-5554`),
+`ANDROID_EMU_BOOT_TIMEOUT` (default 600 s).
 
-Equivalentes manuales:
+Manual equivalents:
 
 ```bash
 export ANDROID_SDK_ROOT=$HOME/.local/opt/android-sdk
@@ -60,29 +59,29 @@ $ANDROID_SDK_ROOT/platform-tools/adb shell getprop sys.boot_completed  # 1 = lis
 $ANDROID_SDK_ROOT/platform-tools/adb -s emulator-5554 emu kill         # parar
 ```
 
-**Aviso:** para parar, usar siempre el PID guardado (`emulator.pid`) o
-`adb emu kill`. **No** usar `pkill -f`/`grep -f` con un patrón que aparezca
-literalmente en la propia línea de comandos: mataría la propia shell.
+**Warning:** to stop the emulator, always use the saved PID (`emulator.pid`) or
+`adb emu kill`. **Do not** use `pkill -f`/`grep -f` with a pattern that appears
+literally in the command line itself: it would kill the shell itself.
 
-## Ver la pantalla sin ventana
+## View the screen without a window
 
 ```bash
 $ANDROID_SDK_ROOT/platform-tools/adb -s emulator-5554 exec-out screencap -p > /home/adrian/wowforever-artifacts/android-emulator/boot.png
 ```
 
-Verificado: PNG de 1080×2340 con el launcher y las apps de Google visibles.
+Verified: a 1080×2340 PNG with the launcher and Google apps visible.
 
-## Instalar APKs de prueba
+## Install test APKs
 
-`adb install` funciona. Verificado con un APK trivial (`org.wowforever.trivial`,
-en `android-emulator/trivial-apk/trivial.apk`): `Success` y aparece en
+`adb install` works. Verified with a trivial APK (`org.wowforever.trivial`, at
+`android-emulator/trivial-apk/trivial.apk`): `Success`, and it appears in
 `pm list packages`.
 
-**Hallazgo:** en Android 15 un APK **sin `classes.dex` no instala**
-(`INSTALL_FAILED_INVALID_APK: … code is missing`), aunque no declare ninguna
-activity. Hay que incluir un `classes.dex` mínimo (generado con
-`javac` + `d8 --min-api 21`), añadirlo al APK tras `aapt2 link`, y después
-`zipalign` + `apksigner sign`. Orden correcto:
+**Finding:** on Android 15, an APK **without `classes.dex` does not install**
+(`INSTALL_FAILED_INVALID_APK: … code is missing`), even if it declares no
+activity. A minimal `classes.dex` (generated with `javac` + `d8 --min-api 21`) must
+be included in the APK after `aapt2 link`, followed by `zipalign` + `apksigner sign`.
+Correct order:
 
 ```bash
 aapt2 link -o trivial-unsigned.apk --manifest AndroidManifest.xml -I android.jar …
@@ -92,21 +91,23 @@ apksigner sign --ks debug.keystore --ks-pass pass:android --key-pass pass:androi
 adb -s emulator-5554 install -r trivial.apk
 ```
 
-## Proyecto del launcher (Fase 5)
+## Diagnostic Android project (historically Phase 5)
 
-El proyecto Android vive en `android/` (Gradle Kotlin DSL, Kotlin, Views, sin
-Compose). Toolchain:
+The separate diagnostic Android project lives in `android/` (Gradle Kotlin DSL,
+Kotlin, Views, no Compose). It is not the functional launcher; current functional
+launcher sources are under `scripts/arm64-prototype/app/`. Toolchain for this
+diagnostic project:
 
-| Componente | Versión | Nota |
+| Component | Version | Note |
 |---|---|---|
-| NDK | **27.0.12077973** | Primer NDK estable con cabeceras finales de `android-35`; encaja con `build-tools 35.0.0` |
-| AGP / Gradle | 8.9.1 / 8.11.1 | Ya en caché local; el build funciona con `--offline` |
+| NDK | **27.0.12077973** | First stable NDK with final `android-35` headers; compatible with `build-tools 35.0.0` |
+| AGP / Gradle | 8.9.1 / 8.11.1 | Already in the local cache; the build works with `--offline` |
 | Kotlin | 2.1.21 | — |
-| `minSdk` / `targetSdk` / `compileSdk` | 26 / 28 / 35 | `abiFilters`: `x86_64` (emulador) + `arm64-v8a` (móvil) |
+| `minSdk` / `targetSdk` / `compileSdk` | 26 / 28 / 35 | `abiFilters`: `x86_64` (emulator) + `arm64-v8a` (phone) |
 
-La biblioteca nativa es el puente JNI al patcher (`crates/forever-patcher-jni`,
-crate aparte; el núcleo `crates/forever-patcher` sigue sin `unsafe`). **Las `.so`
-no se versionan**: se regeneran antes de ensamblar el APK.
+The native library is the JNI bridge to the patcher (`crates/forever-patcher-jni`,
+a separate crate; the `crates/forever-patcher` core still has no `unsafe`). **The
+`.so` files are not versioned**: they are regenerated before assembling the APK.
 
 ```bash
 scripts/build-android-native.sh          # cross-compila y copia a jniLibs/
@@ -115,14 +116,14 @@ $ANDROID_SDK_ROOT/platform-tools/adb -s emulator-5554 install -r app/build/outpu
 $ANDROID_SDK_ROOT/platform-tools/adb -s emulator-5554 shell am start -n com.wowforever.launcher/.MainActivity
 ```
 
-## Smoke test reproducible sin UI
+## Reproducible smoke test without UI
 
-El autotest cross-proceso se dispara con un `Intent` (`run_selftest=true`), por lo
-que no requiere tocar la pantalla. `--serial` es obligatorio: el runner nunca
-elige un dispositivo implícito. Cada ejecución genera un `run_id` único, lo pasa a
-la Activity y acepta únicamente una línea `ForeverJNI` con ese identificador.
-No borra el buffer global de logcat; los logs antiguos quedan en la evidencia,
-pero no pueden producir un resultado de la ejecución actual.
+The cross-process self-test is triggered with an `Intent` (`run_selftest=true`), so
+it does not require touching the screen. `--serial` is mandatory: the runner never
+selects an implicit device. Each run generates a unique `run_id`, passes it to the
+Activity, and accepts only a `ForeverJNI` line with that identifier. It does not
+clear the global logcat buffer; old logs remain in the evidence but cannot produce
+a result for the current run.
 
 ```bash
 scripts/android-launcher-smoke.py \
@@ -130,108 +131,105 @@ scripts/android-launcher-smoke.py \
   --apk android/app/build/outputs/apk/debug/app-debug.apk
 ```
 
-Los códigos son `0=PASS`, `1=FAIL` y `2=TIMEOUT`. La evidencia queda fuera del
-repositorio, en `/home/adrian/wowforever-artifacts/android-launcher/smoke/<run_id>/`:
-`run.json`, `result.json`, `commands.txt`, salida de instalación/arranque y
-`logcat.txt`. Se puede cambiar la raíz con `--output-dir`, pero el runner rechaza
-rutas dentro del repositorio y genera siempre el `run_id`; no hay override público
-que permita reutilizar uno antiguo. Si `adb` no está en `PATH`, el runner usa
-también `/home/adrian/.local/opt/android-sdk/platform-tools/adb`.
+Exit codes are `0=PASS`, `1=FAIL`, and `2=TIMEOUT`. Evidence is kept outside the
+repository, at `/home/adrian/wowforever-artifacts/android-launcher/smoke/<run_id>/`:
+`run.json`, `result.json`, `commands.txt`, installation/launch output, and
+`logcat.txt`. The root can be changed with `--output-dir`, but the runner rejects
+paths inside the repository and always generates the `run_id`; there is no public
+override that allows reuse of an old one. If `adb` is not in `PATH`, the runner
+also uses `/home/adrian/.local/opt/android-sdk/platform-tools/adb`.
 
-El asset `contract.json` ya no se mantiene a mano: la tarea incremental
-`:app:generateContractAsset` copia `forever/contract.json` mediante una dependencia
-de entrada/salida declarada y lo incluye en el APK durante `preBuild`. Para
-comprobarlo offline:
+The `contract.json` asset is no longer maintained by hand: the incremental task
+`:app:generateContractAsset` copies `forever/contract.json` using a declared
+input/output dependency and includes it in the APK during `preBuild`. To verify it
+offline:
 
 ```bash
 cd android
 ./gradlew --offline :app:generateContractAsset
 ```
 
-La prueba de invalidación de Gradle es opt-in y construye un proyecto mínimo en
-un directorio temporal, sin modificar `android/app/build/`:
+The Gradle invalidation test is opt-in and builds a minimal project in a temporary
+directory without modifying `android/app/build/`:
 
 ```bash
 WOWFOREVER_RUN_GRADLE_INTEGRATION=1 \
   /home/adrian/.local/bin/uv run pytest tests/test_android_contract_asset.py -q
 ```
 
-## Banco de pruebas diagnóstico
+## Diagnostic test bench
 
-La pantalla Views del APK mantiene el smoke anterior y añade una batería
-secuencial de tres pruebas reales: `JNI + contrato`, `ExecProbe` y
-`crossProcessSelfTest`. Cada corrida se guarda en el almacenamiento privado de la
-app como `files/diagnostics/runs/<run_id>.json` más un log `<run_id>.log`. El JSON
-incluye versión de app, ABI, SDK/`targetSdk`, tiempos por prueba y los estados
-`PASS`, `FAIL`, `TIMEOUT` o `UNSUPPORTED`; `runtime=none` y `gpu=not_measured` son
-explícitos. Un timeout no mata ni declara cancelada la llamada JNI: la cola espera
-a que termine antes de iniciar otra prueba.
+The APK's Views screen retains the previous smoke test and adds a sequential suite
+of three real tests: `JNI + contrato`, `ExecProbe`, and `crossProcessSelfTest`. Each
+run is saved in the app's private storage as `files/diagnostics/runs/<run_id>.json`
+plus a `<run_id>.log` log. The JSON includes app version, ABI, SDK/`targetSdk`, time
+per test, and the `PASS`, `FAIL`, `TIMEOUT`, or `UNSUPPORTED` states; `runtime=none`
+and `gpu=not_measured` are explicit. A timeout does not kill or declare the JNI call
+canceled: the queue waits for it to finish before starting another test.
 
-Los botones de exportación usan `ACTION_CREATE_DOCUMENT` (SAF), sin permisos de
-almacenamiento ni dependencias nuevas, y ofrecen JSON o texto. La cola vive en un
-singleton del proceso y la Activity solo se vuelve a suscribir al estado, por lo
-que una recreación no duplica sondas ni pierde los resultados ya escritos. Tras la
-muerte completa del proceso, un run que quedó `RUNNING` se conserva como
-`TIMEOUT` incierto al reabrirlo; no se finge cancelación nativa.
+Export buttons use `ACTION_CREATE_DOCUMENT` (SAF), with no storage permissions or
+new dependencies, and offer JSON or text. The queue lives in a process singleton
+and the Activity only resubscribes to its state, so recreation does not duplicate
+probes or lose results already written. After the process dies completely, a run
+left `RUNNING` is retained as an uncertain `TIMEOUT` when reopened; native
+cancellation is not fabricated.
 
-La compatibilidad automatizada existente permanece: `run_selftest=true` y
-`run_id=<id>` disparan únicamente `crossProcessSelfTest`, y el runner acepta el
-marcador `ForeverJNI` de esa corrida. No se empaquetan Winlator/Wine ni se
-ejecutan perfiles externos.
+Existing automated compatibility remains: `run_selftest=true` and
+`run_id=<id>` trigger only `crossProcessSelfTest`, and the runner accepts the
+`ForeverJNI` marker from that run. Winlator/Wine are not packaged, and external
+profiles are not run.
 
-El parser estricto de ExecProbe no convierte un control C2 ausente en PASS:
-`SKIP (sin .so en nativeLibraryDir)` se informa como `UNSUPPORTED`. Con una `.so`
-presente, acepta el rechazo esperado `ENOEXEC`/`EACCES` **o la ejecución confirmada
-por `execve` seguida de una señal del proceso** (por ejemplo, el `.so` intentado
-como ejecutable termina con `SIGSEGV`). Esta última evidencia demuestra que el
-kernel permitió `execve`; no equivale a afirmar que la sonda o la aplicación se
-crasheó. El parser del
-autotest exige campos únicos (`result`, `stores`, `patched`, confirmación del hijo
-y `first_err`) y valores exactos, sin rechazar el diagnóstico adicional con
-espacios que emite Rust.
+The strict ExecProbe parser does not turn a missing C2 control into PASS:
+`SKIP (sin .so en nativeLibraryDir)` is reported as `UNSUPPORTED`. With a `.so`
+present, it accepts the expected `ENOEXEC`/`EACCES` rejection **or execution
+confirmed by `execve` followed by a process signal** (for example, the `.so`
+attempted as an executable ends with `SIGSEGV`). The latter evidence shows that the
+kernel allowed `execve`; it does not mean the probe or application crashed. The
+self-test parser requires unique fields (`result`, `stores`, `patched`, child
+confirmation, and `first_err`) and exact values, without rejecting the additional
+diagnostic with spaces emitted by Rust.
 
-La entrega diagnóstica usa `useLegacyPackaging=true` para que las bibliotecas JNI
-se extraigan a `nativeLibraryDir`, sin permisos de almacenamiento adicionales,
-sin cambiar `targetSdk=28` y sin incluir Winlator/Wine/WoW.
+The diagnostic delivery uses `useLegacyPackaging=true` so JNI libraries are
+extracted to `nativeLibraryDir`, with no additional storage permissions, without
+changing `targetSdk=28`, and without including Winlator/Wine/WoW.
 
-Verificación histórica en `emulator-5554` antes del ajuste de empaquetado: batería
-`run-4d2f6f603cc146a0a4cafedab746936f` terminó `UNSUPPORTED` de forma honesta
-(`JNI + contrato PASS`, `ExecProbe UNSUPPORTED`, `crossProcessSelfTest PASS`). La
-evidencia está en
+Historical verification on `emulator-5554` before the packaging adjustment: suite
+`run-4d2f6f603cc146a0a4cafedab746936f` honestly ended `UNSUPPORTED`
+(`JNI + contrato PASS`, `ExecProbe UNSUPPORTED`, `crossProcessSelfTest PASS`).
+Evidence is at
 `/home/adrian/wowforever-artifacts/android-testbench/run-4d2f6f603cc146a0a4cafedab746936f/`.
-El smoke compatible final terminó `PASS` con run ID
-`run-3f22d5b280c24156aa35124436b46765` en
+The final compatible smoke test ended `PASS` with run ID
+`run-3f22d5b280c24156aa35124436b46765` at
 `/home/adrian/wowforever-artifacts/android-testbench/smoke/run-3f22d5b280c24156aa35124436b46765/`.
 
-Detalle del cross-compile: sin `cargo-ndk`; se fijan
-`CARGO_TARGET_{X86_64,AARCH64}_LINUX_ANDROID_LINKER` al clang del NDK y
-`-C link-arg=-Wl,-z,max-page-size=16384` (Android 15+ exige páginas de 16 KB).
+Cross-compilation details: without `cargo-ndk`; set
+`CARGO_TARGET_{X86_64,AARCH64}_LINUX_ANDROID_LINKER` to the NDK clang and
+`-C link-arg=-Wl,-z,max-page-size=16384` (Android 15+ requires 16 KB pages).
 
-Verificado el 2026-09-28: APK instalado y arrancado en `emulator-5554`; `logcat`
-tag `ForeverJNI` muestra `nativeVersion=… (core KEY_LEN=32)` y
+Verified on 2026-09-28: APK installed and started on `emulator-5554`; the `logcat`
+tag `ForeverJNI` shows `nativeVersion=… (core KEY_LEN=32)` and
 `contractSummary=entries=12 entry_size=40 target_group=8 anchor_group=1`.
-La validación automatizada posterior queda registrada en la sección de evidencia
-de `docs/fase-5-launcher.md`.
+Later automated validation is recorded in the evidence section of
+`docs/fase-5-launcher.md`.
 
-Entrega local diagnóstica verificada: `/home/adrian/wowforever-artifacts/delivery/`
-contiene `wowforever-diagnostic-0.1.1-code2-debug.apk` (1.760.556 bytes,
+Verified local diagnostic delivery: `/home/adrian/wowforever-artifacts/delivery/`
+contains `wowforever-diagnostic-0.1.1-code2-debug.apk` (1.760.556 bytes,
 SHA-256 `b68eb89efb3156b3e266a618ef7752e5dd0c7b5e81c570abc0473848c90ce54e`).
-El APK es debug, `minSdk=26`, `targetSdk=28`, declara cero permisos y contiene
-`arm64-v8a` y `x86_64`; la firma v2 es válida. La batería PASS, el JSON exportado
-por SAF y la relanzada persistente están documentados en `docs/fase-5-launcher.md`.
+The APK is debug, `minSdk=26`, `targetSdk=28`, declares zero permissions, and
+contains `arm64-v8a` and `x86_64`; the v2 signature is valid. The PASS suite, JSON
+exported by SAF, and persistent relaunch are documented in `docs/fase-5-launcher.md`.
 
-## Limitaciones (importante)
+## Limitations (important)
 
-- El emulador es **x86_64**. **No** puede ejecutar **Winlator ni FrontMage**
-  (runtimes arm64-only) ni reproduce el driver Vulkan de ninguna GPU real
-  (aquí todo es SwiftShader por software).
-- Sirve para desarrollar y probar el **launcher** (instalación, UI, adb,
-  gestión del cliente), **no** para el runtime del juego ni para pruebas de
-  rendimiento gráfico.
-- Sin cámara, sin audio, sin Play Store (`PlayStore.enabled=no`, imagen
-  `google_apis`, no `google_apis_playstore`).
+- The emulator is **x86_64**. It **cannot** run **Winlator or FrontMage**
+  (arm64-only runtimes), nor reproduce the Vulkan driver of any real GPU
+  (everything here uses software SwiftShader).
+- It is suitable for developing and testing the diagnostic Android app and
+  adb-based tooling, **not** for the game runtime or graphics performance testing.
+- No camera, no audio, no Play Store (`PlayStore.enabled=no`, `google_apis` image,
+  not `google_apis_playstore`).
 
-## Comandos de referencia
+## Reference commands
 
 ```bash
 adb devices -l

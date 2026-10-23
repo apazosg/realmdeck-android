@@ -1,174 +1,180 @@
-# Arquitectura y baseline (Fase 0)
+# Architecture and baseline (Phase 0)
 
-> Estado: 2026-09-27. Baseline reproducible sobre host Linux x86-64.
-> **Corte actual (2026-10-21):** C127 alcanza Login y entrada al juego con70450
-> ARM64 en xaga/Mali; C128 adelanta el parche, compilada/auditada pero no instalada.
-> ver [punto de reanudación](downloader-handoff.md) y
-> [estado de producto](launcher-app-status.md).
-> Winlator 11.2 / POCO M7 Pro 5G PowerVR abajo son **baseline histórico**, no
-> dispositivo/runtime activos ni decisión nueva de runtime.
-> Fuente de verdad del comportamiento: `.agents/specs/` (SYSTEM.md, US-001.md).
-> Este documento fija las piezas y las decisiones de arquitectura de las Fases 0–1.
+For the current RealmDeck Android release and evidence limits, see
+[current status](current-status.md). The dated baseline below is preserved for context.
 
-## 1. Objetivo
+> Status: 2026-09-27. Reproducible baseline on a Linux x86-64 host.
+> **Status snapshot (2026-10-21):** C127 reaches Login and game entry with 70450
+> ARM64 on xaga/Mali; C128 is further along on the patch, compiled/audited but not installed.
+> See [resumption point](downloader-handoff.md) and
+> [product status](launcher-app-status.md).
+> Winlator 11.2 / POCO M7 Pro 5G PowerVR below are a **historical baseline**, not
+> the active device/runtime or a new runtime decision.
+> Behavioral source of truth: `.agents/specs/` (SYSTEM.md, US-001.md).
+> This document records the components and architecture decisions for Phases 0–1.
 
-Ejecutar el cliente **WoW Classic Beta 1.60.1** contra **Classic Forever** en Android,
-sin Battle.net ni Windows. Fase 0 fija las piezas; Fase 1 obtiene el cliente desde la
-CDN. El proyecto solo sigue si Fase 2 (arrancar `WowB.exe` en Android) da go.
+## 1. Objective
 
-## 2. Cliente y protocolo NGDP/TACT
+Run the **WoW Classic Beta 1.60.1** client against **Classic Forever** on Android,
+without Battle.net or Windows. Phase 0 establishes the components; Phase 1 obtains
+the client from the CDN. The project proceeds only if Phase 2 (starting `WowB.exe`
+on Android) gets a go decision.
 
-| Dato | Valor |
+## 2. Client and NGDP/TACT protocol
+
+| Item | Value |
 |---|---|
-| Producto NGDP | `wow_classic_beta` (no existe `wow_forever` → 404) |
-| Build activo (2026-09) | `1.60.1.70009` (BuildId `70009`) |
-| Build probada en Android (2026-10-21) | `1.60.1.70450`, Windows ARM64/enUS; Login y entrada al juego en C127 |
-| Builds aceptadas por el launcher | `1.60.1.69913`, `1.60.1.69977`, `1.60.1.70009` |
-| Endpoint versiones | `http://us.patch.battle.net:1119/wow_classic_beta/versions` |
-| Endpoint CDNs | `http://us.patch.battle.net:1119/wow_classic_beta/cdns` |
-| CDN path | `tpr/wow` (compartido por toda la familia `wow`) |
+| NGDP product | `wow_classic_beta` (`wow_forever` does not exist → 404) |
+| Active build (2026-09) | `1.60.1.70009` (BuildId `70009`) |
+| Build tested on Android (2026-10-21) | `1.60.1.70450`, Windows ARM64/enUS; Login and game entry in C127 |
+| Builds accepted by the launcher | `1.60.1.69913`, `1.60.1.69977`, `1.60.1.70009` |
+| Versions endpoint | `http://us.patch.battle.net:1119/wow_classic_beta/versions` |
+| CDNs endpoint | `http://us.patch.battle.net:1119/wow_classic_beta/cdns` |
+| CDN path | `tpr/wow` (shared by the entire `wow` family) |
 | CDN config path | `tpr/configs/data` |
 | Hosts | `level3.blizzard.com`, `us.cdn.blizzard.com` |
-| Ejecutable Windows | `WowB.exe` (ARM64: `WowB-arm64.exe`) |
-| Subcarpeta por defecto | `_classic_beta_` |
-| Locale de texto | `enUS` |
-| Requisito de disco (producto) | ~128 GB (todos los tags) |
+| Windows executable | `WowB.exe` (ARM64: `WowB-arm64.exe`) |
+| Default subfolder | `_classic_beta_` |
+| Text locale | `enUS` |
+| Disk requirement (product) | ~128 GB (all tags) |
 
-### Layout de URLs de la CDN
+### CDN URL layout
 
-- Configs de build/CDN → `http://<host>/tpr/wow/config/<a>/<b>/<hash>`
-- Manifiestos de datos (encoding/install/download/size/vfs-root) → `http://<host>/tpr/wow/data/<a>/<b>/<hash>`
+- Build/CDN configs → `http://<host>/tpr/wow/config/<a>/<b>/<hash>`
+- Data manifests (encoding/install/download/size/vfs-root) → `http://<host>/tpr/wow/data/<a>/<b>/<hash>`
 - Product config (JSON) → `http://<host>/tpr/configs/data/<a>/<b>/<hash>`
-- Archivos de datos (buckets) → `http://<host>/tpr/wow/data/<a>/<b>/<cKey>`
+- Data files (buckets) → `http://<host>/tpr/wow/data/<a>/<b>/<cKey>`
 
-### Regla de los pares de hashes (crítica)
+### Hash-pair rule (critical)
 
-Cada campo `<x> = h1 h2` del build config lleva **dos** hashes. Para el CDN elegido
-funciona **el segundo**; el primero da 404. Verificado para `encoding`, `install`,
-`download` y `vfs-root`. **No asumir el primero.**
+Each `<x> = h1 h2` field in the build config contains **two** hashes. For the
+selected CDN, **the second** works; the first returns 404. Verified for `encoding`,
+`install`, `download`, and `vfs-root`. **Do not assume the first.**
 
-El build config es texto plano (no BLTE) en `tpr/wow/config/<a>/<b>/<bcHash>`. El
-manifiesto `root` legacy no se usa (404); el contenido se resuelve vía `vfs-root`
-(TVFS) y el árbol `vfs-1..vfs-N`.
+The build config is plain text (not BLTE) at `tpr/wow/config/<a>/<b>/<bcHash>`. The
+legacy `root` manifest is not used (404); content is resolved through `vfs-root`
+(TVFS) and the `vfs-1..vfs-N` tree.
 
-### Modo de almacenamiento
+### Storage mode
 
-El build config **no** declara `build-file-db` ⇒ modo **contenedor** (archivos CASC),
-no containerless.
+The build config does **not** declare `build-file-db` ⇒ **container** mode (CASC
+files), not containerless.
 
-## 3. Forever (servidor Classic Forever)
+## 3. Forever (Classic Forever server)
 
-Referencia: `defexnicolas/wow-classic-launcher` (MIT).
+Reference: `defexnicolas/wow-classic-launcher` (MIT).
 
-- **Portal**: `auth.gpon.com.co` (certificado emitido para el nombre, no la IP).
-  Login en `:1119`, mundo en `:8085`.
-- **Configuración**: el launcher crea/actualiza `WTF/BetaSuspendedTest.wtf` con
-  `SET portal "auth.gpon.com.co"` (copia `Config.wtf` la primera vez) y lanza
-  `WowB.exe -config BetaSuspendedTest.wtf`. **No modifica `Config.wtf`.**
-- **Parche de clave**: busca en la memoria privada del proceso (rw, no código, no
-  disco) el almacén de 12 claves públicas Ed25519 de `NetClient::CertStore` y
-  sustituye la clave del grupo 8 por la clave pública del servidor, reaplicando si el
-  cliente la recrea. La clave 1 es ancla de búsqueda y nunca se toca.
-- Detalle operativo (constantes, layout de entradas, flags): `.agents/references/classic-forever-patch.md`.
-- No ejecutar con `sudo` (Wine como root → BC_ASSERT).
+- **Portal**: `auth.gpon.com.co` (certificate issued for the hostname, not the IP).
+  Login on `:1119`, world on `:8085`.
+- **Configuration**: the launcher creates/updates `WTF/BetaSuspendedTest.wtf` with
+  `SET portal "auth.gpon.com.co"` (copies `Config.wtf` the first time) and launches
+  `WowB.exe -config BetaSuspendedTest.wtf`. **It does not modify `Config.wtf`.**
+- **Key patch**: searches the process's private memory (rw, not code or disk) for
+  the 12-key Ed25519 public-key store in `NetClient::CertStore` and replaces the
+  group 8 key with the server's public key, reapplying it if the client recreates
+  the store. Key 1 is the search anchor and is never changed.
+- Operational details (constants, entry layout, flags): `.agents/references/classic-forever-patch.md`.
+- Do not run with `sudo` (Wine as root → BC_ASSERT).
 
-## 4. Runtime Android (candidatos, Fase 2)
+## 4. Android runtime (candidates, Phase 2)
 
-El siguiente es el baseline histórico de septiembre, no el runtime/dispositivo
-activo. La ruta posterior validada está en [estado de producto](launcher-app-status.md).
+The following is the historical September baseline, not the active runtime/device.
+The later validated path is in [product status](launcher-app-status.md).
 
-Dispositivo de aquel baseline: **POCO M7 Pro 5G** (Dimensity 7025, GPU **PowerVR B-Series
-BXM-8-256**, Vulkan 1.4, Android 16). Inventario completo y capacidades Vulkan:
+Device from that baseline: **POCO M7 Pro 5G** (Dimensity 7025, GPU **PowerVR B-Series
+BXM-8-256**, Vulkan 1.4, Android 16). Full inventory and Vulkan capabilities:
 `docs/device-poco-m7-pro-5g.md`.
 
-Sin decisión de runtime tomada. Candidatos a evaluar por combinación estable de:
+No runtime decision has been made. Candidates to evaluate for a stable combination of:
 
-| Capa | Candidatos |
+| Layer | Candidates |
 |---|---|
-| Contenedor | Winlator u equivalente |
+| Container | Winlator or equivalent |
 | Wine | build ARM64/ARM64EC |
 | x86-64→ARM64 | FEX-Emu, Box64 |
-| D3D→Vulkan | DXVK (+ VKD3D si aplica) |
-| Driver Vulkan | **propietario PowerVR** (no hay Turnip: es Adreno-only) |
+| D3D→Vulkan | DXVK (+ VKD3D if applicable) |
+| Vulkan driver | **proprietary PowerVR** (no Turnip: Adreno-only) |
 
-Restricción derivada del dispositivo: el driver Vulkan es el del vendor (PowerVR), sin
-alternativa libre; el riesgo se concentra en estabilidad y rendimiento de DXVK sobre él.
+Device-derived constraint: the Vulkan driver is the vendor's (PowerVR), with no
+free alternative; the risk is concentrated in DXVK stability and performance on it.
 
-**Runtime elegido (baseline histórico de Fase 2)**: **Winlator oficial v11.2** (`com.winlator`,
-versionCode 33, minSdk 26) — el APK más ligero de su familia (150 MB) y el único con vía
-de driver para GPU no-Adreno (*System Driver*/Vortek/Gladio). Instalado y verificado
-arrancando en el POCO M7 Pro 5G. Config inicial del contenedor: Graphics Driver =
-*System Driver* (Vulkan PowerVR), DX Wrapper = DXVK, emulador = Box64.
+**Selected runtime (historical Phase 2 baseline)**: **official Winlator v11.2** (`com.winlator`,
+versionCode 33, minSdk 26) — the lightest APK in its family (150 MB) and the only one
+with a driver path for non-Adreno GPUs (*System Driver*/Vortek/Gladio). Installed and
+verified to start on the POCO M7 Pro 5G. Initial container configuration: Graphics
+Driver = *System Driver* (PowerVR Vulkan), DX Wrapper = DXVK, emulator = Box64.
 
-Se probará sobre `WowB.exe` real (no `Wow.exe`), arquitectura objetivo ARM64. No se
-escribe runtime propio hasta que Fase 2 dé go.
+Testing will use the real `WowB.exe` (not `Wow.exe`), targeting ARM64. No custom
+runtime will be written until Phase 2 gets a go decision.
 
-## 5. Licencias y redistribución
+## 5. Licenses and redistribution
 
-| Componente | Licencia | ¿Empaquetable en APK? |
+| Component | License | Packagable in APK? |
 |---|---|---|
-| `wow-classic-launcher` | MIT | Sí (con atribución) |
-| `cascette-py` | MIT / Apache-2.0 | Sí (con atribución) |
-| Cliente WoW / CASC / `WowB.exe` | Propietario Blizzard | **No** — se descarga en el dispositivo |
-| Wine / FEX / Box64 / DXVK | LGPL/MIT/etc. | Sí, respetando sus licencias |
-| Runtime Android (Winlator) | GPL en su caso | Revisar al elegir |
+| `wow-classic-launcher` | MIT | Yes (with attribution) |
+| `cascette-py` | MIT / Apache-2.0 | Yes (with attribution) |
+| WoW client / CASC / `WowB.exe` | Blizzard proprietary | **No** — downloaded on the device |
+| Wine / FEX / Box64 / DXVK | LGPL/MIT/etc. | Yes, subject to their licenses |
+| Android runtime (Winlator) | GPL if applicable | Review when selecting |
 
-El APK debe ser ligero: descarga runtime y cliente en el dispositivo en lugar de
-empaquetarlos.
+The APK should be lightweight: download the runtime and client to the device rather
+than packaging them.
 
-## 6. Decisiones de arquitectura
+## 6. Architecture decisions
 
-| ID | Decisión | Motivo |
+| ID | Decision | Reason |
 |---|---|---|
-| **D-001** | Motor TACT = `cascette-py` por URL git fijada a commit | No está en PyPI; implementa el flujo de `agent.exe` y resuelve `wow_classic_beta` correctamente |
-| **D-002** | Producto autoritativo = `wow_classic_beta`; `cascette-py` se usa desde un **repo propio** (`apazosg/cascette-py`, fork con el enum añadido), dependencia por URL git fijada a commit | El `cdns` de la familia `wow` es idéntico (`tpr/wow`), pero nombrar el producto correcto evita deuda silenciosa. El fork se mantiene como repo propio; **no se contribuye a repos de terceros** |
-| **D-003** | Python + `uv` para el provisionador | `uv` ya instalado; sin `pip3` en el host |
-| **D-004** | Instalación autocontenida en un directorio (`WowB.exe` + `Data/` + metadatos en la raíz) | El launcher lanza `WowB.exe` desde el directorio de juego |
-| **D-005** | Fase 1 se valida en Linux sin Android | Desacopla la incertidumbre de provisión de la de runtime |
+| **D-001** | TACT engine = `cascette-py` via a git URL pinned to a commit | Not on PyPI; implements the `agent.exe` flow and correctly resolves `wow_classic_beta` |
+| **D-002** | Authoritative product = `wow_classic_beta`; use `cascette-py` from an **owned repository** (`apazosg/cascette-py`, fork with the enum added), dependency via a git URL pinned to a commit | The `cdns` for the `wow` family is identical (`tpr/wow`), but naming the correct product avoids silent debt. The fork is maintained in our own repository; **no contributions are made to third-party repositories** |
+| **D-003** | Python + `uv` for the provisioner | `uv` is already installed; no `pip3` on the host |
+| **D-004** | Self-contained installation in one directory (`WowB.exe` + `Data/` + metadata at the root) | The launcher starts `WowB.exe` from the game directory |
+| **D-005** | Validate Phase 1 on Linux without Android | Decouples provisioning uncertainty from runtime uncertainty |
 
-## 7. Provisión: `forever-client`
+## 7. Provisioning: `forever-client`
 
-Herramienta de Fase 1 (`US-001`). Subcomandos: `resolve`, `install`, `verify`,
-`repair`. Genera el layout `WowB.exe` + `Data/` + metadatos y soporta instalación
-mínima (`--loose-only`) para desbloquear Fase 2 con una descarga pequeña.
+Phase 1 tool (`US-001`). Subcommands: `resolve`, `install`, `verify`, `repair`. It
+creates the `WowB.exe` + `Data/` + metadata layout and supports a minimal
+installation (`--loose-only`) to unblock Phase 2 with a small download.
 
-## 8. Organización de repositorios y compatibilidad upstream
+## 8. Repository organization and upstream compatibility
 
-Objetivo explícito del proyecto: **ser la versión Android del servidor Classic Forever**,
-compatible con `defexnicolas/wow-classic-launcher` **y con sus versiones futuras**.
+Explicit project goal: **be the Android version of the Classic Forever server**,
+compatible with `defexnicolas/wow-classic-launcher` **and its future versions**.
 
-Reparto (principio: lo nuestro en un monorepo; lo ajeno que hay que modificar, repo propio):
+Division of repositories (principle: our work in one monorepo; external code we need
+to modify in our own repository):
 
-| Repo | Rol | Relación |
+| Repository | Role | Relationship |
 |---|---|---|
-| `apazosg/wowforever` | Monorepo de **todo lo nuestro** (Fase 1 `src/forever_client`, contrato `forever/`, Fase 5 `android/`, specs, docs) | — |
-| `apazosg/cascette-py` | Repo propio (fork) del motor TACT, con `wow_classic_beta` añadido | Dependencia por URL git fijada a commit |
-| `apazosg/wow-classic-launcher` | Repo propio (espejo de solo lectura) para **seguir el contrato** del launcher | No se compila ni se vendoriza |
+| `apazosg/realmdeck-android` | Project monorepo: host tooling in `src/forever_client`, the `forever/` contract, diagnostic `android/` project, functional launcher under `scripts/arm64-prototype/app/`, specs and docs | — |
+| `apazosg/cascette-py` | Owned repository (fork) of the TACT engine, with `wow_classic_beta` added | Dependency via a git URL pinned to a commit |
+| `apazosg/wow-classic-launcher` | Owned repository (read-only mirror) to **follow the launcher contract** | Not compiled or vendored |
 
-**Política**: no se abren PRs ni se hace merge en repos de terceros. Todo el trabajo vive en
-nuestros repos; el launcher y `cascette-py` upstream solo se **leen** (y el cambio de
-`cascette-py` se mantiene en nuestro repo, no se envía río arriba).
+**Policy**: do not open PRs or merge into third-party repositories. All work lives
+in our repositories; upstream launcher and `cascette-py` are only **read** (and the
+`cascette-py` change is maintained in our repository, not sent upstream).
 
-Una copia vendorizada del launcher sería deuda: no reutilizamos su *código* (WPF + script
-Python), reproducimos su *comportamiento*. **Seguir ≠ copiar.**
+A vendored copy of the launcher would create debt: we do not reuse its *code* (WPF +
+Python script); we reproduce its *behavior*. **Following ≠ copying.**
 
-### Compatibilidad con futuras versiones: contrato versionado + chequeo de deriva
+### Future-version compatibility: versioned contract + drift check
 
-El contrato del parche **ya divergió** entre plataformas (relleno `7F 00 00` en Windows
-frente a `00 00 00` bajo Wine/Proton, medido 2026-09-27). Por eso el contrato no se
-hardcodea disperso: vive en un módulo versionado y se comprueba contra upstream.
+The patch contract has **already diverged** between platforms (padding `7F 00 00` on
+Windows versus `00 00 00` under Wine/Proton, measured 2026-09-27). Therefore, the
+contract is not hardcoded in multiple places: it lives in a versioned module and is
+checked against upstream.
 
-- `forever/contract.json` — portal, puertos, 12 claves, `TARGET_GROUP`, `ENTRY_SIZE`,
-  flags, **regla de relleno por plataforma**, builds soportadas, URL de `status.json`, y
-  el commit upstream validado.
-- `scripts/contract-drift-check` — extrae las constantes del launcher en un commit/tag
-  dado y **falla si difieren** de nuestro contrato. Un build nuevo, una clave nueva o un
-  cambio de portal no nos rompen en silencio.
+- `forever/contract.json` — portal, ports, 12 keys, `TARGET_GROUP`, `ENTRY_SIZE`,
+  flags, **platform-specific padding rule**, supported builds, `status.json` URL, and
+  the validated upstream commit.
+- `scripts/contract-drift-check` — extracts launcher constants at a given commit/tag
+  and **fails if they differ** from our contract. A new build, key, or portal change
+  will not silently break things.
 
-## 9. Riesgos abiertos
+## 9. Open risks
 
-- **Fase 2** (arranque en Android) es la puerta real del proyecto; ninguna decisión de
-  Fase 1 debe acoplarse a ella.
-- **Cambio de build** en la CDN: el launcher solo soporta `69913/69977/70009`; un build
-  nuevo rompería el flujo hasta que el launcher lo soporte.
-- **Peso real** del subconjunto `Windows`+`x86_64`+`enUS`: sin medir aún.
+- **Phase 2** (starting on Android) is the project's real gate; no Phase 1 decision
+  should become coupled to it.
+- **CDN build change**: the launcher only supports `69913/69977/70009`; a new build
+  would break the flow until the launcher supports it.
+- **Actual size** of the `Windows`+`x86_64`+`enUS` subset: not yet measured.

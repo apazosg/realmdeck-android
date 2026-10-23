@@ -1,49 +1,55 @@
-# Provisionar Winlator sin tocar la UI (Fase 2/5)
+# Provision Winlator without touching the UI (Phase 2/5)
 
-Técnica verificada el 2026-09-27 en el POCO M7 Pro 5G con **Winlator oficial v11.2**.
-Permite crear un contenedor completo (incluido el Wine prefix) **solo con ADB**, sin root
-y sin simular toques. Es la base de lo que tendrá que hacer el APK de la Fase 5.
+> Historical, platform-specific procedure, verified on 2026-09-27. This is not a
+> description of the current functional launcher's runtime. See
+> [current status](current-status.md) before treating an old result as current evidence.
 
-## Por qué funciona: la app es *debuggable*
+Technique verified on 2026-09-27 on the POCO M7 Pro 5G with **official Winlator
+v11.2**. It allows creating a complete container (including the Wine prefix) **using
+ADB only**, without root and without simulating taps. It is the basis for what the
+Phase 5 APK would need to do.
 
-`adb shell run-as com.winlator <cmd>` **funciona** (el APK oficial se distribuye debug).
-Eso da acceso de lectura/escritura al directorio privado de la app:
+## Why it works: the app is *debuggable*
+
+`adb shell run-as com.winlator <cmd>` **works** (the official APK is distributed as debug).
+This provides read/write access to the app's private directory:
 `/data/data/com.winlator/files/`.
 
-Comprobación:
+Check:
 
 ```bash
 adb -s <serial> shell run-as com.winlator id
 # uid=10525(u0_a525) ... context=u:r:runas_app:s0
 ```
 
-## Estructura de un contenedor (leída del código de `brunodev85/winlator-app`)
+## Container structure (read from the `brunodev85/winlator-app` code)
 
-- Raíz del rootfs: `/data/data/com.winlator/files/rootfs/`
-- Home de contenedores: `rootfs/home/<USER>-<id>/` con `USER = "xuser"` → `xuser-0`, `xuser-1`, …
-- Config del contenedor: `<home>/xuser-<id>/.container` (JSON).
+- Rootfs root: `/data/data/com.winlator/files/rootfs/`
+- Container home: `rootfs/home/<USER>-<id>/` with `USER = "xuser"` → `xuser-0`, `xuser-1`, …
+- Container config: `<home>/xuser-<id>/.container` (JSON).
 - Wine prefix: `<home>/xuser-<id>/.wine/drive_c/...`
-- Contenedor "activo": symlink `rootfs/home/xuser` → `xuser-<id>`.
-- `ContainerManager.loadContainers()` **solo escanea** `home/*` con prefijo `xuser-` y lee su
-  `.container`: con crear el directorio y el JSON, la app ya lo lista.
+- "Active" container: symlink `rootfs/home/xuser` → `xuser-<id>`.
+- `ContainerManager.loadContainers()` **only scans** `home/*` with the `xuser-`
+  prefix and reads its `.container`: creating the directory and JSON is enough for
+  the app to list it.
 
-### Claves del `.container` (todas opcionales salvo `name`; se aplican los defaults)
+### `.container` keys (all optional except `name`; defaults are applied)
 
-`id`, `name`, `screenSize` (def. `1280x720`), `envVars`, `cpuList`, `cpuListWoW64`,
+`id`, `name`, `screenSize` (default `1280x720`), `envVars`, `cpuList`, `cpuListWoW64`,
 `graphicsDriver`, `dxwrapper`, `dxwrapperConfig`, `graphicsDriverConfig`, `audioDriverConfig`,
-`audioDriver` (def. `alsa`), `wincomponents`, `drives`, `hudMode`, `startupSelection`
+`audioDriver` (default `alsa`), `wincomponents`, `drives`, `hudMode`, `startupSelection`
 (0 normal / 1 essential / 2 aggressive), `box64Preset`, `desktopTheme`,
-`extraData` (incluye `appVersion`), `wineVersion` (solo si NO es el principal).
+`extraData` (includes `appVersion`), `wineVersion` (only if it is NOT the primary version).
 
 - Drivers: Vulkan = `turnip` \| `vortek`; OpenGL = `zink` \| `virgl` \| `gladio`.
-  Por defecto `graphicsDriver = "vortek,gladio"` (Vortek es la capa Vulkan genérica para
-  GPUs sin Turnip → **es la que necesita PowerVR**). `GraphicsDrivers.toString()` une con coma.
-- DX wrappers: `wined3d` \| `dxvk` \| `vkd3d` \| `cnc-ddraw` \| `d7vk` (def. `dxvk`).
-- `box64Preset`: `STABILITY` \| `CONSERVATIVE` \| `INTERMEDIATE` \| `PERFORMANCE` (def.).
-- `drives`: formato concatenado `D:<ruta>E:<ruta>` sin separador. Por defecto
+  Default `graphicsDriver = "vortek,gladio"` (Vortek is the generic Vulkan layer for
+  GPUs without Turnip → **the one needed by PowerVR**). `GraphicsDrivers.toString()` joins with commas.
+- DX wrappers: `wined3d` \| `dxvk` \| `vkd3d` \| `cnc-ddraw` \| `d7vk` (default `dxvk`).
+- `box64Preset`: `STABILITY` \| `CONSERVATIVE` \| `INTERMEDIATE` \| `PERFORMANCE` (default).
+- `drives`: concatenated format `D:<path>E:<path>` with no separator. Defaults:
   `D:` = `/storage/emulated/0/Download`, `E:` = `/data/data/com.winlator/storage`.
 
-Ejemplo mínimo usado:
+Minimal example used:
 
 ```json
 {"id":0,"name":"WoW-Forever","screenSize":"1280x720","graphicsDriver":"vortek,gladio",
@@ -51,39 +57,39 @@ Ejemplo mínimo usado:
  "box64Preset":"PERFORMANCE","extraData":{"appVersion":"33"}}
 ```
 
-## El Wine prefix: extraer `container_pattern.tzst`
+## The Wine prefix: extracting `container_pattern.tzst`
 
-Winlator crea el prefix extrayendo `assets/container_pattern.tzst` (dentro del APK) en el
-directorio del contenedor. Se puede hacer desde fuera:
+Winlator creates the prefix by extracting `assets/container_pattern.tzst` (inside the
+APK) into the container directory. This can be done externally:
 
-1. Sacar el asset del APK: `unzip -o -j Winlator_11.2.apk assets/container_pattern.tzst`
-2. En el móvil **no hay `zstd`** (y `toybox tar -Z` intenta ejecutar un `zstd` externo →
-   `exec zstd: Permission denied`). Solución: descomprimir en el host y enviar el tar ya
-   expandido por **stdin** (binario-seguro; verificado con md5):
+1. Extract the asset from the APK: `unzip -o -j Winlator_11.2.apk assets/container_pattern.tzst`
+2. The phone has **no `zstd`** (and `toybox tar -Z` tries to run an external `zstd` →
+   `exec zstd: Permission denied`). Solution: decompress on the host and send the
+   already expanded tar over **stdin** (binary-safe; verified with md5):
    ```bash
    zstd -d -c container_pattern.tzst > pattern.tar
    adb -s <serial> shell "run-as com.winlator sh -c 'cd files/rootfs/home/xuser-0 && tar xf -'" < pattern.tar
    ```
-   (54 MB de prefix: `drive_c/{Program Files, Program Files (x86), ProgramData, users, windows}`)
+    (54 MB prefix: `drive_c/{Program Files, Program Files (x86), ProgramData, users, windows}`)
 
-Nota: `run-as` **no puede leer `/sdcard`** (namespace/SELinux distintos); por eso el envío va
-por stdin al directorio privado, no por `adb push` + `run-as tar`.
+Note: `run-as` **cannot read `/sdcard`** (different namespace/SELinux); therefore,
+the data is sent over stdin to the private directory, not with `adb push` + `run-as tar`.
 
-## Lo que NO se puede automatizar (tal cual está el dispositivo)
+## What CANNOT be automated (with the device as configured)
 
-- **`adb shell input tap/swipe/text`** → `SecurityException: INJECT_EVENTS`. HyperOS lo
-  bloquea salvo que se active **"Depuración USB (Ajustes de seguridad)"** en Opciones de
-  desarrollador (Xiaomi pide cuenta Mi + SIM + red).
-- **Lanzar la actividad de juego** `com.winlator/.XServerDisplayActivity`: **no está
-  exportada**. `am start` desde shell falla
-  (`not exported from uid 10525`), y desde `run-as` falla porque el paquete llamante
-  declarado es `com.android.shell` y no coincide con el uid 10525.
-  Acepta extras: `container_id` (int), `exec_path` (ruta UNIX; se convierte con
+- **`adb shell input tap/swipe/text`** → `SecurityException: INJECT_EVENTS`. HyperOS
+  blocks it unless **"Depuración USB (Ajustes de seguridad)"** is enabled in Developer
+  options (Xiaomi requires a Mi account + SIM + network).
+- **Launching the game activity** `com.winlator/.XServerDisplayActivity`: it is **not
+  exported**. `am start` from the shell fails (`not exported from uid 10525`), and
+  from `run-as` it fails because the declared caller package is `com.android.shell`
+  and does not match uid 10525.
+  It accepts extras: `container_id` (int), `exec_path` (UNIX path; converted with
   `unixToDOSPath`), `shortcut_path`, `wine_info`, `generate_wineprefix`.
-  → Lanzar el juego **requiere un toque humano** hasta que el APK propio haga esta llamada
-  como proceso propio (uid correcto), que es precisamente lo que hará la Fase 5.
+  → Launching the game **requires a human tap** until the project's own APK makes
+  this call as its own process (correct uid), which is exactly what Phase 5 was to do.
 
-## Comandos de referencia
+## Reference commands
 
 ```bash
 ADB=~/.local/opt/platform-tools/adb; D="-s <serial>"
@@ -95,17 +101,18 @@ $ADB $D shell "am force-stop com.winlator"; $ADB $D shell am start -n com.winlat
 $ADB $D exec-out screencap -p > screen.png   # verificación visual
 ```
 
-## Lanzar un ejecutable: formato EXACTO del acceso directo (crítico)
+## Launching an executable: EXACT shortcut format (critical)
 
-Los accesos directos son ficheros `.desktop` en
-`<prefix>/drive_c/users/xuser/Desktop/` y aparecen en la pantalla *Shortcuts* de la app.
-La app los lanza con `XServerDisplayActivity` + `shortcut_path`.
+Shortcuts are `.desktop` files in `<prefix>/drive_c/users/xuser/Desktop/` and appear
+on the app's *Shortcuts* screen. The app launches them with
+`XServerDisplayActivity` + `shortcut_path`.
 
-`Shortcut.java` deriva la ruta del ejecutable **del campo `Exec`**, tomando todo lo que
-hay **después del último `"wine "`**, y luego `XServerDisplayActivity.getWineStartCommand()`
-hace `FileUtils.getDirname(execPath)`, que corta por el último separador.
+`Shortcut.java` derives the executable path **from the `Exec` field**, taking
+everything **after the last `"wine "`**, and then
+`XServerDisplayActivity.getWineStartCommand()` calls `FileUtils.getDirname(execPath)`,
+which cuts at the last separator.
 
-- **Correcto** (barras normales + al menos un directorio, como el propio `.startmenu` de Winlator):
+- **Correct** (forward slashes + at least one directory, as in Winlator's own `.startmenu`):
   ```
   [Desktop Entry]
   Type=Application
@@ -115,34 +122,35 @@ hace `FileUtils.getDirname(execPath)`, que corta por el último separador.
   [Extra Data]
   container_id=0
   ```
-- **Incorrecto** y causa crash de la app: `Exec=wine "D:\WowB.exe"` ⇒ `getDirname` no
-  encuentra separador (`substring(0, -1)`) ⇒
-  `StringIndexOutOfBoundsException` en `FileUtils.getDirname` ← `getWineStartCommand` ← `setupXEnvironment`.
-  También falla `D:/WowB.exe` (sin directorio): `D:/` no tiene subcarpeta.
+- **Incorrect** and causes an app crash: `Exec=wine "D:\WowB.exe"` ⇒ `getDirname` finds
+  no separator (`substring(0, -1)`) ⇒
+  `StringIndexOutOfBoundsException` in `FileUtils.getDirname` ← `getWineStartCommand` ← `setupXEnvironment`.
+  `D:/WowB.exe` (without a directory) also fails: `D:/` has no subdirectory.
 
-## Caminos descartados (con evidencia)
+## Rejected approaches (with evidence)
 
-- **Lanzar Wine desde `adb shell run-as`**: inviable. `run-as` no puede leer `/sdcard`
-  (dominio SELinux `runas_app`) y el rootfs provoca `noexec` ⇒
-  `map_image_into_view failed to set protection on ...ntdll.dll` + aborto de glibc.
-- **`RunOnce` del registro de Wine**: el `explorer.exe` de Winlator no lo procesa
-  (verificado: arranca sin lanzar el programa).
-- **`am start` con extras** (`--es exec_path` / `--es shortcut_path`):
-  `SecurityException: ... not exported from uid 10525`. Sin extras sí sirve para traer la tarea al frente.
+- **Launching Wine via `adb shell run-as`**: infeasible. `run-as` cannot read `/sdcard`
+  (SELinux domain `runas_app`), and the rootfs triggers `noexec` ⇒
+  `map_image_into_view failed to set protection on ...ntdll.dll` + glibc abort.
+- **Wine registry `RunOnce`**: Winlator's `explorer.exe` does not process it
+  (verified: it starts without launching the program).
+- **`am start` with extras** (`--es exec_path` / `--es shortcut_path`):
+  `SecurityException: ... not exported from uid 10525`. Without extras, it can bring
+  the task to the foreground.
 
-## Estado del lanzamiento de `WowB.exe` (verificado)
+## `WowB.exe` launch status (verified)
 
-Con el acceso directo corregido, `WowB.exe` **se ejecuta** en el POCO: el logcat muestra
-el proceso (`pid` propio) ejecutando `ntdll.dll` y creando ficheros temporales de Wine,
-y su RSS crece hasta ~500 MB. Después **termina** (~5-40 s) y Winlator cierra el
-escritorio; no se crea `Logs/` en el directorio del juego.
+With the corrected shortcut, `WowB.exe` **runs** on the POCO: logcat shows the
+process (its own `pid`) executing `ntdll.dll` and creating Wine temporary files,
+and its RSS grows to ~500 MB. It then **exits** (~5-40 s) and Winlator closes the
+desktop; no `Logs/` directory is created in the game directory.
 
-Pendiente de diagnosticar por qué termina. Hipótesis, en orden:
-1. datos CASC insuficientes (`Data/data` = 395 MB de un total de ~100 GiB) y el cliente
-   no completa el arranque;
-2. el directorio del juego está en `/sdcard` (fuse) y el cliente no puede escribir
-   `WTF/`, `Cache/` ni `Logs/`;
-3. inicialización gráfica (DXVK sobre Vulkan propietario PowerVR).
+Why it exits remains to be diagnosed. Hypotheses, in order:
+1. insufficient CASC data (`Data/data` = 395 MB out of ~100 GiB total), so the client
+   does not finish starting;
+2. the game directory is on `/sdcard` (fuse), and the client cannot write to
+   `WTF/`, `Cache/`, or `Logs/`;
+3. graphics initialization (DXVK on proprietary PowerVR Vulkan).
 
-Experimento de aislamiento recomendado: lanzar `Z:/opt/apps/TestD3D.exe` (probador D3D
-que trae Winlator) antes de culpar al juego.
+Recommended isolation experiment: launch `Z:/opt/apps/TestD3D.exe` (the D3D tester
+included with Winlator) before blaming the game.

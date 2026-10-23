@@ -1,49 +1,55 @@
-# WoW Forever for Android
+# RealmDeck Android
 
 An experimental project to run **WoW Classic Beta 1.60.1** on Android ARM64 and
 connect to **Classic Forever**—without Battle.net or a Windows host. The project
 combines a Linux client-provisioning tool, an Android launcher/runtime prototype,
-and native Forever-compatibility components.
+and native Forever-compatibility components. Project site: [realmdeck.fyi](https://realmdeck.fyi).
 
-> **Experimental, not a general release.** A single-device trial reached the
-> Classic Forever login and in-game entry. This does not establish long-session
-> stability, measured performance, broad device support, or a one-click install.
-> The game client is proprietary and is not included or redistributed here.
+RealmDeck Android is the project and repository brand; existing in-app names and
+the Android package ID are unchanged.
+
+> **Experimental preview, not a general release.** A user reported a successful
+> first login on C141 on one device. C142 has not been installed or visually tested
+> on a device. There is no evidence of long-session stability, measured performance,
+> broad device support, or a one-click install. The proprietary game client is not
+> included or redistributed here.
 
 ## Current status
 
-Evidence snapshot: **2026-10-21**. The latest documented physical result used the
-functional launcher C127 on the `xaga` device (model 22041216G; Android 14;
-Mali-G610MC6) with the Windows ARM64 `1.60.1.70450` `enUS` client, Proton
-11.0-90624 ARM64EC, DXVK 2.4.1-wow-aarch64-test/PanVK, and D3D11. The user confirmed
-Classic Forever login and entry into the game, with no observed graphics glitches
-in that test.
+Evidence snapshot: **2026-10-23**. The latest published launcher is C142,
+version `0.2.118-apk-update-notice` (version code 142). The latest positive
+device report is for C141: the user reported a successful first login. That result
+does not validate C142.
 
-That result is deliberately narrow:
+The evidence remains deliberately narrow:
 
-- No 30–60 minute session, FPS, temperature, audio, or physical-controller results
-  have been recorded.
-- No multi-device compatibility matrix or generally installable product release
-  has been validated.
-- C127 is the installed/tested launcher version. C128 and C129 have source/build
-  audits, but have **not** been installed on the test phone.
-- The latest documented game login was manual. APK-level protected auto-login and
-  a complete one-click setup remain unvalidated.
-- The client publisher's C117 download completed; this project is not currently
-  reporting an active client download.
+- C142 has not been installed or visually tested on a physical device. No measured
+  performance or long-session result is reported.
+- No multi-device compatibility matrix or general product release has been
+  validated. The ARM64 launcher remains experimental.
+- A successful first login is not evidence of sustained gameplay, performance,
+  audio, or controller support.
 
-For the detailed, dated evidence and limitations, see
-[`docs/launcher-app-status.md`](docs/launcher-app-status.md). The host provisioning
-tool and Android ARM64 client pipeline are separate: the host tool's current
-contract targets Windows `x86_64`/`enUS` builds, while `1.60.1.70450` is the
-separately tested Android ARM64 client.
+See [current status](docs/current-status.md) for release and source limitations,
+and the [historical evidence archive](docs/launcher-app-status.md) for dated
+implementation and device records. The host provisioning tool and Android ARM64
+client pipeline are separate: the host tool's current contract targets Windows
+`x86_64`/`enUS` builds.
+
+## Android preview release
+
+[RealmDeck Android 0.2.118 · Preview (C142)](https://github.com/apazosg/realmdeck-android/releases/tag/c142-0.2.118-test)
+is available as a manual APK download. It is an experimental, debug-signed ARM64
+build; review its [release notes](docs/releases/c142-0.2.118.md) and installation
+limitations before trying it. The app does not provide a reliable automatic update
+path after the repository rename.
 
 ## Launcher preview
 
 These are genuine captures from the functional launcher prototype, not mockups.
 They show older prototype revisions (C116 and code79), with Spanish UI; they are
-included to illustrate the interface, **not** to represent the current installed
-build, current client state, or a release-ready app.
+included to illustrate the interface, **not** to represent the current build,
+current client state, or a release-ready app.
 
 | Launcher home | Display resolution settings |
 |---|---|
@@ -68,9 +74,10 @@ build, current client state, or a release-ready app.
   of truth for expected behavior. See [`AGENTS.md`](AGENTS.md) for the spec-first
   development workflow.
 
-The Android prototype currently depends on externally provisioned, pinned build
-inputs and artifacts; this repository does not provide a simple self-contained
-Android build or a public APK download. See the
+The Android prototype depends on externally provisioned, pinned build inputs and
+artifacts. The C142 preview APK is published in GitHub Releases, but its attached
+source archive is partial and this repository is not a self-contained Android
+build environment. See the
 [prototype build/history notes](scripts/arm64-prototype/app/README.md) and
 [launcher design](docs/launcher-design.md).
 
@@ -131,7 +138,9 @@ and the limits of `.gitignore`.
 
 ## Project documentation
 
-- [Product status and test evidence](docs/launcher-app-status.md)
+- [Current status and release limitations](docs/current-status.md)
+- [Historical product status and test evidence](docs/launcher-app-status.md)
+- [Release process](docs/releasing.md) and [release-notes template](docs/release-notes-template.md)
 - [Architecture baseline and decisions](docs/architecture.md)
 - [Launcher design](docs/launcher-design.md)
 - [Client installation findings](docs/fase-1-instalacion-cliente.md)
