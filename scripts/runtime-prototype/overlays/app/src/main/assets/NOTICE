@@ -1,0 +1,13 @@
+EXPERIMENTAL PRIVATE EVALUATION ONLY; NOT FOR PUBLIC REDISTRIBUTION.
+
+Based on marcocastignoli/wow-mobile, commit
+0c8068f617737d9c0fb6246f37b54f85b620b09d:
+https://github.com/marcocastignoli/wow-mobile
+The upstream root project is LGPL-2.1; see its LICENSE file in the source tree.
+
+This build modifies the application identifier, launcher activity, probe-mode
+lifecycle, report storage, and build provenance. It contains no WoW client.
+
+Incomplete third-party inventory for private evaluation: Android SDK/build
+tools, NDK, CMake, Gradle, JDK, Wine/Box64/rootfs assets, and their upstream
+licenses/notices. No redistribution permission is implied.

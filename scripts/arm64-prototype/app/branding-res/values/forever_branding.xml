@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Approved Forever palette: emblem gold on the deep-navy gradient from the
+         reviewed icon study. Referenced by the adaptive icon, splash theme and
+         splash/legacy starting-window backgrounds. -->
+    <color name="forever_gold">#DFA849</color>
+    <color name="forever_navy_top">#192C3C</color>
+    <color name="forever_navy_bottom">#080E15</color>
+</resources>

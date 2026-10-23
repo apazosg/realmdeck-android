@@ -1,0 +1,22 @@
+diff --git a/app/src/main/java/com/winlator/core/ProcessHelper.java b/app/src/main/java/com/winlator/core/ProcessHelper.java
+--- a/app/src/main/java/com/winlator/core/ProcessHelper.java
++++ b/app/src/main/java/com/winlator/core/ProcessHelper.java
+@@ -38,6 +38,9 @@ public abstract class ProcessHelper {
+     }
+ 
+     public static int exec(String command, String[] envp, File workingDir, Callback<Integer> terminationCallback) {
++        if (com.wowforever.fexprobe.FexProcessDiagnostics.isEnabled()) {
++            return com.wowforever.fexprobe.FexProcessDiagnostics.exec(splitCommand(command), envp, workingDir, terminationCallback, snapshotDebugCallbacks());
++        }
+         int pid = -1;
+@@ -57,6 +60,15 @@ public abstract class ProcessHelper {
+         return pid;
+     }
+ 
++    static ArrayList<Callback<String>> snapshotDebugCallbacks() {
++        synchronized (debugCallbacks) {
++            return new ArrayList<>(debugCallbacks);
++        }
++    }
++
+     private static void createDebugThread(final InputStream inputStream) {

@@ -1,0 +1,177 @@
+#!/usr/bin/env python3
+"""Comprueba que nuestro contrato Forever sigue coincidiendo con el launcher upstream.
+
+El contrato del parche (portal, claves, flags, relleno, builds) vive en
+`forever/contract.json`. Este script extrae las mismas constantes de las fuentes
+upstream (src/Patcher.cs, linux/classic-forever-linux.py, src/Status.cs) en un
+commit/tag dado y falla si difieren, para que un build nuevo, una clave nueva o un
+cambio de portal no nos rompan en silencio.
+
+Uso:
+    scripts/contract-drift-check [--ref <commit|tag|rama>] [--contract <ruta>]
+Exit: 0 = sin deriva; 1 = deriva o error; 2 = uso incorrecto.
+Solo biblioteca estandar.
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import re
+import sys
+import urllib.error
+import urllib.request
+
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DEFAULT_CONTRACT = os.path.join(REPO_ROOT, "forever", "contract.json")
+TOKEN_FILE = "/home/adrian/dev/proyectos/.secrets/github-token"
+HEX64 = re.compile(r"[0-9A-Fa-f]{64}")
+
+
+def fetch_raw(repo: str, ref: str, path: str, token: str | None) -> str:
+    url = f"https://raw.githubusercontent.com/{repo}/{ref}/{path}"
+    req = urllib.request.Request(url)
+    if token:
+        req.add_header("Authorization", f"token {token}")
+    with urllib.request.urlopen(req, timeout=30) as resp:
+        return resp.read().decode("utf-8", "replace")
+
+
+def load_token(path: str | None) -> str | None:
+    path = path or TOKEN_FILE
+    try:
+        with open(path, encoding="utf-8") as f:
+            return f.read().strip() or None
+    except OSError:
+        return None
+
+
+def first(pattern: str, text: str, label: str, flags: int = 0) -> str:
+    m = re.search(pattern, text, flags)
+    if not m:
+        raise ValueError(f"no encontrado: {label}")
+    return m.group(1)
+
+
+def keys_block(pattern: str, text: str, label: str) -> list[str]:
+    m = re.search(pattern, text, flags=re.DOTALL)
+    if not m:
+        raise ValueError(f"no encontrado: {label}")
+    return [k.upper() for k in HEX64.findall(m.group(1))]
+
+
+def parse_windows(patcher_cs: str, status_cs: str) -> dict:
+    return {
+        "portal": first(r'const string Portal = "([^"]+)"', patcher_cs, "Portal"),
+        "config_name": first(r'const string ConfigName = "([^"]+)"', patcher_cs, "ConfigName"),
+        "exe": first(r'const string ExeName = "([^"]+)"', patcher_cs, "ExeName"),
+        "measured_version": first(r'const string ExpectedVersion = "([^"]+)"', patcher_cs, "ExpectedVersion"),
+        "supported_versions": re.findall(r'"(1\.\d+\.\d+\.\d+)"', first(
+            r"SupportedVersions = \{([^}]*)\}", patcher_cs, "SupportedVersions")),
+        "known_keys": keys_block(r"KnownKeys = \{(.*?)\};", patcher_cs, "KnownKeys"),
+        "new_key": first(r'NewKeyHex = "([0-9A-Fa-f]{64})"', patcher_cs, "NewKeyHex").upper(),
+        "target_group": int(first(r"TargetGroup = (\d+)", patcher_cs, "TargetGroup")),
+        "entry_size": int(first(r"EntrySize = (\d+)", patcher_cs, "EntrySize")),
+        "entry_count": int(first(r"EntryCount = (\d+)", patcher_cs, "EntryCount")),
+        "expected_flags": [int(x) for x in re.findall(r"\d+", first(
+            r"ExpectedFlags = \{([^}]*)\}", patcher_cs, "ExpectedFlags"))],
+        "padding_windows": first(r"raw\[o \+ 37\] != 0x(\w\w)", patcher_cs, "padding Windows").lower() + "0000",
+        "login_port": int(first(r"LoginPort = (\d+)", status_cs, "LoginPort")),
+        "world_port": int(first(r"WorldPort = (\d+)", status_cs, "WorldPort")),
+        "status_url": first(r'FeedUrl = "([^"]+)"', status_cs, "FeedUrl"),
+    }
+
+
+def parse_linux(linux_py: str) -> dict:
+    target, entry_size, entry_count = re.search(
+        r"TARGET_GROUP, ENTRY_SIZE, ENTRY_COUNT = (\d+), (\d+), (\d+)", linux_py).groups()
+    return {
+        "portal": first(r"PORTAL = '([^']+)'", linux_py, "PORTAL"),
+        "config_name": first(r"CONFIG_NAME = '([^']+)'", linux_py, "CONFIG_NAME"),
+        "exe": first(r"EXE_NAME = '([^']+)'", linux_py, "EXE_NAME"),
+        "new_key": first(r"NEW_KEY = bytes\.fromhex\('([0-9A-Fa-f]{64})'\)", linux_py, "NEW_KEY").upper(),
+        "known_keys": keys_block(r"KNOWN_KEYS = \[bytes\.fromhex\(h\) for h in \((.*?)\)\]", linux_py, "KNOWN_KEYS"),
+        "target_group": int(target),
+        "entry_size": int(entry_size),
+        "entry_count": int(entry_count),
+        "expected_flags": [int(x) for x in re.findall(r"\d+", first(
+            r"EXPECTED_FLAGS = \[([^\]]*)\]", linux_py, "EXPECTED_FLAGS"))],
+        "accepts_wine_padding": "0x7f, 0x00" in linux_py,
+    }
+
+
+def check(name: str, expected, actual, failures: list[str]) -> None:
+    if expected != actual:
+        failures.append(f"{name}: contrato={expected!r} upstream={actual!r}")
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description="Chequeo de deriva del contrato Forever.")
+    ap.add_argument("--ref", help="commit/tag/rama upstream (por defecto: el validado en el contrato)")
+    ap.add_argument("--contract", default=DEFAULT_CONTRACT)
+    ap.add_argument("--token-file", default=None)
+    args = ap.parse_args()
+
+    with open(args.contract, encoding="utf-8") as f:
+        c = json.load(f)
+    repo = c["upstream"]["repo"].removeprefix("https://github.com/").removesuffix(".git")
+    ref = args.ref or c["upstream"]["validated_commit"]
+    token = load_token(args.token_file)
+
+    src = c["upstream"]["sources"]
+    try:
+        patcher_cs = fetch_raw(repo, ref, src["windows"], token)
+        status_cs = fetch_raw(repo, ref, src["status"], token)
+        linux_py = fetch_raw(repo, ref, src["linux"], token)
+    except (urllib.error.URLError, ValueError) as e:
+        print(f"ERROR: no se pudo leer upstream {repo}@{ref}: {e}", file=sys.stderr)
+        return 1
+    try:
+        win = parse_windows(patcher_cs, status_cs)
+        lin = parse_linux(linux_py)
+    except (ValueError, AttributeError) as e:
+        print(f"ERROR: no se pudo parsear el contrato upstream en {ref}: {e}", file=sys.stderr)
+        return 1
+
+    k = c["key_store"]
+    srv = c["server"]
+    lch = c["launcher"]
+    failures: list[str] = []
+
+    check("portal", srv["portal"], win["portal"], failures)
+    check("portal (linux)", srv["portal"], lin["portal"], failures)
+    check("exe", lch["exe"], win["exe"], failures)
+    check("exe (linux)", lch["exe"], lin["exe"], failures)
+    check("config_name", lch["config_name"], win["config_name"], failures)
+    check("config_name (linux)", lch["config_name"], lin["config_name"], failures)
+    check("measured_version", lch["measured_version"], win["measured_version"], failures)
+    check("supported_versions", lch["supported_versions"], win["supported_versions"], failures)
+    check("known_keys", k["known_keys"], win["known_keys"], failures)
+    check("known_keys (linux)", k["known_keys"], lin["known_keys"], failures)
+    check("new_key", k["new_key"], win["new_key"], failures)
+    check("new_key (linux)", k["new_key"], lin["new_key"], failures)
+    check("target_group", k["target_group"], win["target_group"], failures)
+    check("target_group (linux)", k["target_group"], lin["target_group"], failures)
+    check("entry_size", k["entry_size"], win["entry_size"], failures)
+    check("entry_count", k["entry_count"], win["entry_count"], failures)
+    check("expected_flags", k["expected_flags"], win["expected_flags"], failures)
+    check("expected_flags (linux)", k["expected_flags"], lin["expected_flags"], failures)
+    check("padding windows", k["padding_after_flag"]["windows"], win["padding_windows"], failures)
+    check("login_port", srv["login_port"], win["login_port"], failures)
+    check("world_port", srv["world_port"], win["world_port"], failures)
+    check("status_url", lch["status_url"], win["status_url"], failures)
+    if not lin["accepts_wine_padding"]:
+        failures.append("linux: el script upstream ya no acepta relleno Wine (0x00) tras el flag")
+
+    if failures:
+        print(f"DERIVA detectada en {repo}@{ref}:")
+        for f in failures:
+            print(f"  - {f}")
+        print("\nActualiza forever/contract.json (y docs/specs) tras revisar el cambio upstream.")
+        return 1
+    print(f"OK: contrato Forever consistente con {repo}@{ref}.")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

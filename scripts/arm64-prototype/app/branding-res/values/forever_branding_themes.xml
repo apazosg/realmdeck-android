@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Splash for the functional entry activity. Inherits all of Theme.Pluvia
+         (transparent bars, cutout, edge-to-edge), so the first composed frame
+         is unchanged; the pre-31 starting window is the legacy layer-list
+         (navy plus centered emblem). No extra activity, timer, animation or
+         splashscreen dependency. -->
+    <style name="Theme.ForeverFunctionalSplash" parent="@style/Theme.Pluvia">
+        <item name="android:windowBackground">@drawable/forever_splash_legacy</item>
+    </style>
+</resources>

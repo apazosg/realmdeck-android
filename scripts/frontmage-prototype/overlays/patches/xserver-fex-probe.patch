@@ -1,0 +1,112 @@
+diff --git a/app/src/main/java/com/winlator/XServerDisplayActivity.java b/app/src/main/java/com/winlator/XServerDisplayActivity.java
+--- a/app/src/main/java/com/winlator/XServerDisplayActivity.java
++++ b/app/src/main/java/com/winlator/XServerDisplayActivity.java
+@@ -8,6 +8,8 @@ import android.os.Build;
+ import android.os.Bundle;
++import android.os.Handler;
++import android.os.Looper;
+ import android.os.SystemClock;
+@@ -96,5 +98,6 @@ import java.io.File;
+ import java.util.ArrayList;
+ import java.util.Iterator;
+ import java.util.concurrent.Executors;
++import java.util.concurrent.atomic.AtomicBoolean;
+ 
+@@ -147,1 +150,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements NavigationView.OnNavigationItemSelectedListener {
+     private boolean winHandlerLiteLaunchQueued = false;
++    private boolean fexProbeMode = false;
++    private String fexProbeRunId;
++    private final AtomicBoolean fexProbeTerminal = new AtomicBoolean(false);
++    private final Handler fexProbeHandler = new Handler(Looper.getMainLooper());
++    private Runnable fexProbeTimeout;
++    private com.winlator.core.Callback<String> fexProbeSink;
+@@ -163,4 +172,15 @@ public class XServerDisplayActivity extends AppCompatActivity implements NavigationView.OnNavigationItemSelectedListener {
+         NavigationView navigationView = findViewById(R.id.NavigationView);
+         ProcessHelper.removeAllDebugCallbacks();
++        fexProbeMode = getIntent().getBooleanExtra("fex_probe_mode", false);
++        fexProbeRunId = getIntent().getStringExtra("fex_probe_run_id");
++        if (fexProbeMode && !com.wowforever.fexprobe.ProbeRunStore.isValidRunId(fexProbeRunId)) {
++            finish();
++            return;
++        }
++        if (fexProbeMode) {
++            fexProbeSink = line -> com.wowforever.fexprobe.ProbeRunStore.appendHostLog(this, fexProbeRunId, line);
++            ProcessHelper.addDebugCallback(fexProbeSink);
++            com.wowforever.fexprobe.FexProcessDiagnostics.setEnabled(true);
++            com.wowforever.fexprobe.ProbeRunStore.appendHostLog(this, fexProbeRunId, "RUNTIME-UI-BEGIN foreground=true");
++        }
+         boolean enableLogs = preferences.getBoolean("enable_wine_debug", false);
+@@ -347,5 +367,12 @@ public class XServerDisplayActivity extends AppCompatActivity implements NavigationView.OnNavigationItemSelectedListener {
+     @Override
+     protected void onDestroy() {
++        if (fexProbeMode) {
++            fexProbeHandler.removeCallbacksAndMessages(null);
++            boolean quiescent = com.wowforever.fexprobe.FexProcessDiagnostics.stopAndAwait(5000L, java.util.Collections.singletonList(fexProbeSink));
++            if (fexProbeTerminal.compareAndSet(false, true)) com.wowforever.fexprobe.ProbeRunStore.snapshot(this, fexProbeRunId, "activity-destroyed cleanup_quiescent="+quiescent);
++            if (fexProbeSink != null) ProcessHelper.removeDebugCallback(fexProbeSink);
++            com.wowforever.fexprobe.FexProcessDiagnostics.setEnabled(false);
++            super.onDestroy();
++            return;
++        }
+         shutdownRuntimeOnce();
+         super.onDestroy();
+@@ -415,8 +442,13 @@ public class XServerDisplayActivity extends AppCompatActivity implements NavigationView.OnNavigationItemSelectedListener {
+     private void exit() {
++        if (fexProbeMode) {
++            boolean quiescent = com.wowforever.fexprobe.FexProcessDiagnostics.stopAndAwait(5000L, java.util.Collections.singletonList(fexProbeSink));
++            if (fexProbeTerminal.compareAndSet(false, true)) com.wowforever.fexprobe.ProbeRunStore.snapshot(this, fexProbeRunId, "user-exit cleanup_quiescent="+quiescent);
++            finish();
++            return;
++        }
+         synchronized (this) {
+             if (restartRequested) return;
+             restartRequested = true;
+         }
+         shutdownRuntimeOnce();
+         AppUtils.restartApplication(this);
+@@ -680,1 +712,1 @@ public class XServerDisplayActivity extends AppCompatActivity implements NavigationView.OnNavigationItemSelectedListener {
+-            if (container.getStartupSelection() == Container.STARTUP_SELECTION_AGGRESSIVE) winHandler.killProcess("services.exe");
++            if (!fexProbeMode && container.getStartupSelection() == Container.STARTUP_SELECTION_AGGRESSIVE) winHandler.killProcess("services.exe");
+@@ -682,8 +714,11 @@ public class XServerDisplayActivity extends AppCompatActivity implements NavigationView.OnNavigationItemSelectedListener {
+             boolean wow64Mode = container.isWoW64Mode();
+             // On arm64ec Wine builds, "wine explorer" behaves like a wrapper that starts the system32 explorer
+             // and drops extra arguments. We need the Winlator-provided explorer shim at C:\windows\explorer.exe
+             // so it can forward "winhandler.exe wfm.exe" and keep the container alive.
+             String explorerExe = (wineInfo != null && wineInfo.isArm64EC()) ? " C:\\windows\\explorer.exe" : " explorer";
+-            String guestExecutable = wineInfo.getExecutable(this, wow64Mode)+ explorerExe +" /desktop=shell,"+xServer.screenInfo+" "+getWineStartCommand();
++            String guestExecutable = fexProbeMode
++                    ? "wine cmd /c C:\\wow\\diag\\"+fexProbeRunId+"\\run-probes.bat"
++                    : wineInfo.getExecutable(this, wow64Mode)+ explorerExe +" /desktop=shell,"+xServer.screenInfo+" "+getWineStartCommand();
+             guestProgramLauncherComponent.setWoW64Mode(wow64Mode);
+             guestProgramLauncherComponent.setGuestExecutable(guestExecutable);
+@@ -743,3 +778,8 @@ public class XServerDisplayActivity extends AppCompatActivity implements NavigationView.OnNavigationItemSelectedListener {
+         guestProgramLauncherComponent.setEnvVars(envVars);
+-        guestProgramLauncherComponent.setTerminationCallback((status) -> exit());
++        guestProgramLauncherComponent.setTerminationCallback((status) -> {
++            if (fexProbeMode) {
++                if (fexProbeTerminal.compareAndSet(false, true)) com.wowforever.fexprobe.ProbeRunStore.finish(this, fexProbeRunId, status);
++                runOnUiThread(this::finish);
++            }
++            else exit();
++        });
+         environment.addComponent(guestProgramLauncherComponent);
+@@ -781,2 +821,11 @@ public class XServerDisplayActivity extends AppCompatActivity implements NavigationView.OnNavigationItemSelectedListener {
+         environment.startEnvironmentComponents();
++        if (fexProbeMode) {
++            fexProbeTimeout = () -> {
++                boolean quiescent = com.wowforever.fexprobe.FexProcessDiagnostics.stopAndAwait(5000L, java.util.Collections.singletonList(fexProbeSink));
++                if (fexProbeTerminal.compareAndSet(false, true)) {
++                    com.wowforever.fexprobe.ProbeRunStore.snapshot(this, fexProbeRunId, "RUNTIME-TIMEOUT timeoutMs=180000 cleanup_quiescent="+quiescent);
++                    runOnUiThread(this::finish);
++                }
++            };
++            fexProbeHandler.postDelayed(fexProbeTimeout, com.wowforever.fexprobe.ProbeRunStore.RUNTIME_TIMEOUT_MS);
++        }
+         envVars.clear();
+@@ -424,6 +473,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements NavigationView.OnNavigationItemSelectedListener {
+         synchronized (this) {
+             if (shutdownCompleted) return;
+             shutdownCompleted = true;
+         }
++        if (fexProbeMode) return;
+         stopSessionLogging();

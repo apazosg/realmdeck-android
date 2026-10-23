@@ -1,0 +1,400 @@
+---
+name: skill-maintenance
+description: >
+  Audits, reconciles, and maintains the agent documentation ecosystem:
+  skills, references/, and agents.md. Use this skill whenever the user asks to review
+  or update a skill, detect duplicated content between skills and references/, check
+  if a skill section references deleted or refactored code, move cross-cutting
+  principles to agents.md, align the references/ folder with the current skill set,
+  or verify that the knowledge structure enables subagent self-loading.
+  Also use when the user says "la skill está desactualizada", "hay duplicados",
+  "refactoriza la documentación del agente", "sanea el agents.md", "audita las skills",
+  "hay código que ya no existe en la skill", or "limpia la documentación de agentes".
+  NEVER skip the planning phase — always produce an approved plan before making changes.
+  Also use when the user wants to CREATE a new skill: "crea una skill para", "necesito una skill",
+  "escribe una skill", "añade una skill", "documenta este patrón como skill".
+---
+
+# Skill Maintenance
+
+## Purpose
+
+Guide an AI agent to audit, reconcile, and maintain the agent documentation
+ecosystem so it stays consistent, non-redundant, and aligned with the project.
+
+The overarching goal of this ecosystem is **subagent self-loading**: a parent agent
+assigns a task to a subagent, the subagent reads `agents.md`, and from that single file
+it can determine exactly what to load next — without the parent injecting context. Every
+audit must verify this property is preserved.
+
+---
+
+## Knowledge Taxonomy
+
+Before auditing or creating a skill, internalise this classification. Every piece of content
+belongs in exactly one place.
+
+| Content type | Canonical location | Why |
+|---|---|---|
+| Cross-cutting agent behavior (no sycophancy, calibrate uncertainty, etc.) | `agents.md` — `Agent Behavior` section | Always loaded; applies to every task and every subagent |
+| Project orientation: architecture, guardrails, spec index, load rules | `agents.md` | Always loaded; gives any subagent its bearings |
+| Operational knowledge: build, test, branching — too small for a skill | `.agents/references/*.md` | Lazy-loaded on demand via Context Loading Rules |
+| Domain implementation guide: rich enough for ✅/❌ examples + checklist | `.agents/skills/{name}/SKILL.md` | Auto-triggered by skill `description` |
+
+**Decision heuristic for new content:**
+- Applies to every task regardless of domain → `agents.md`.
+- Operational, < ~2 pages, no workflow needed → `references/`.
+- Domain-specific, warrants a workflow + examples + checklist → new or existing skill.
+
+## Shared Skill Mirrors
+
+`/workspace/.agents/skills/` is the only editable source for shared skills. Every
+directory with `.agents/specs/SYSTEM.md` must contain an exact, standalone mirror at
+`.agents/skills/`; it is not a place for repository-specific instructions.
+
+- Before and after changing a shared skill, run `.agents/scripts/sync-shared-skills.sh --check`.
+- After changing the source, run `.agents/scripts/sync-shared-skills.sh --write`, then `--check`.
+- A mirror with an unexpected local skill is a finding: the script must fail rather than delete it.
+
+---
+
+## Source of Truth Hierarchy
+
+When the same subject appears in multiple files, the higher priority wins.
+
+| Priority | Location |
+|---|---|
+| 1 (highest) | `/workspace/.agents/skills/{name}/SKILL.md` — canonical implementation guide; repository copies are exact mirrors |
+| 2 | `agents.md` — global rules and routing |
+| 3 | `.agents/references/*.md` — operational details with no owning skill |
+
+When content at priority 3 is fully covered by a skill, delete it from the reference
+file. Move any unique information into the skill first, then delete.
+
+---
+
+> **Auditing mode** — Use the sections below to audit and reconcile an existing ecosystem.
+
+## Workflow
+
+### Phase A — Audit + Plan
+
+1. Read `agents.md` fully.
+2. List all files under `.agents/skills/` and `.agents/references/`.
+3. For each skill, read its frontmatter and skim section headers.
+4. For each `references/` file, identify its subject and check taxonomy fit.
+5. Check `agents.md` for content that belongs in a skill or should be removed.
+6. Detect inconsistencies (see §Inconsistency Types below).
+7. Draft the plan file (see §Plan Document Format).
+
+**STOP. Write the plan file to disk. Do not change any file until the user approves.**
+
+### Phase B — Reconcile
+
+1. Re-read the plan from disk.
+2. Execute in plan order. Check each item off after completion.
+3. If execution reveals new information affecting other items, **STOP**, add to
+   `## Open Issues`, and surface to the user.
+4. After all items are done, set `state: done` in the plan frontmatter.
+
+---
+
+## Plan Document Format
+
+Use `skill-audit` as the topic (or `skill-audit-<component>` for scoped audits, e.g. `skill-audit-dotnet`).
+
+| State | Path |
+|---|---|
+| Active | `.agents/planning/skill-audit-plan.md` |
+| Completed | `.agents/planning/done/skill-audit-plan.md` |
+
+Required frontmatter:
+
+```yaml
+---
+id: skill-audit-YYYY-MM-DD
+state: draft   # draft | approved | in-progress | done
+date: YYYY-MM-DD
+---
+```
+
+For the full plan body format (required sections, structure, examples), load the `task-planning` skill.
+
+---
+
+## Inconsistency Types
+
+### Type 1 — Duplication between `references/` and a skill
+
+A reference file covers a domain already owned by a skill.
+
+**Detection**: Compare each reference file's subject with the skill taxonomy table.
+
+**Resolution**: Move any unique content from the reference into the skill, then delete
+the duplicate section. If the reference file is empty after removal, delete it and
+update `agents.md` Context Loading Rules and References Folder inventory.
+
+---
+
+### Type 2 — Cross-cutting principle buried in a skill
+
+A principle is listed in a skill's `## Agent Behavior` section but applies to all tasks
+(not just that domain). Examples: no sycophancy, calibrate uncertainty, lean scope,
+never fabricate references.
+
+**Detection**: Read each skill's Agent Behavior section. For each principle, ask:
+"Would this make sense in a skill that has nothing to do with this domain?"
+If yes, it is cross-cutting.
+
+**Resolution**: Move it to the `Agent Behavior` section of `agents.md`. In the skill, replace the
+section with `## Agent Behavior Extensions` listing only domain-specific rules and
+a note that the universal principles in `agents.md` apply.
+
+---
+
+### Type 3 — Legacy section in a skill
+
+A skill documents a pattern, library, or architectural decision that has been
+refactored or abandoned. Teaching this pattern leads the agent to produce code
+that no longer fits the codebase.
+
+**Detection** (requires codebase scan — see §Optional: Codebase Scan): Extract file paths,
+class names, and patterns from skill examples. Search the workspace to verify they exist.
+
+**Resolution**: If the old pattern still exists as legacy code, move the description
+to a clearly marked `## Legacy Patterns` section with a warning. If the pattern is
+completely gone, delete the section.
+
+---
+
+### Type 4 — `agents.md` contains implementation detail
+
+`agents.md` has coding rules, style guidelines, or architectural decisions that belong
+in a skill. This inflates the always-loaded context and breaks the routing model.
+
+**Detection**: Read each section of `agents.md`. Flag any content that is domain-specific
+(only relevant when doing .NET work, or only when doing React work).
+
+**Resolution**: Move the content into the appropriate skill. Replace with a one-line
+pointer if helpful.
+
+---
+
+### Type 5 — Context Loading Rules are stale or ambiguous
+
+A rule in `agents.md §Context Loading Rules` references a file whose content has
+changed, a file that no longer exists, or is phrased ambiguously such that a subagent
+could not self-load without parent guidance.
+
+**Detection**: For each rule, verify:
+- The referenced file exists.
+- The file's current content still matches the rule's stated rationale.
+- The trigger condition ("for build tasks", "for implementation tasks") is unambiguous.
+
+**Resolution**: Update the rule description to match actual content, or remove the
+rule if the file's content is fully covered by a skill.
+
+---
+
+### Type 6 — Skill description does not discriminate well
+
+A skill's `description` frontmatter is too vague to auto-trigger reliably, or it
+triggers for tasks that belong to a different skill.
+
+**Detection**: Read the description and ask: "Could a model reading only this description
+decide when NOT to use this skill?" If not, it is too broad.
+
+**Resolution**: Rewrite to include specific trigger phrases (Spanish + English),
+explicit task types, and explicit exclusions where needed.
+
+---
+
+## Subagent Self-Loading Audit
+
+Run this check as the final step of every audit. The ecosystem is healthy when:
+
+1. **`agents.md` is self-sufficient for orientation.** A subagent reading only
+   `agents.md` knows: the project, the guardrails, its own behavioral rules, and what
+   to load next for any task type. It does not need the parent to inject additional context.
+
+2. **Context Loading Rules are actionable.** Each rule maps a task type to a file.
+   No ambiguity about which rule applies to a given task.
+
+3. **Skills auto-trigger from their description.** A model should select the right
+   skill from the description alone, without needing to read the skill body first.
+
+4. **`agents.md` is lean.** If `agents.md` grows beyond ~150 lines of prose (excluding
+   the Spec Index table), re-examine whether some content belongs in a reference file
+   or skill instead.
+
+Flag any violation as a Type 4 or Type 5 finding and include it in the plan.
+
+---
+
+## Audit Checklist
+
+- [ ] Read `agents.md` fully
+- [ ] List all `.agents/skills/` and `.agents/references/` files
+- [ ] For each `references/` file: does a skill own this domain? → Type 1 if yes
+- [ ] For each skill: does `§Agent Behavior` contain cross-cutting principles? → Type 2
+- [ ] For each section in `agents.md`: is this implementation detail? → Type 4
+- [ ] For each Context Loading Rule: is the file current and the trigger unambiguous? → Type 5
+- [ ] For each skill description: does it discriminate well? → Type 6
+- [ ] If legacy patterns suspected: run Optional Codebase Scan (Type 3)
+- [ ] Run Subagent Self-Loading Audit
+- [ ] Draft plan with all findings — **STOP, get approval**
+- [ ] Execute approved changes
+- [ ] Verify `agents.md` is still self-sufficient after changes
+
+---
+
+> **Creation mode** — Use the sections below to create a new skill from scratch.
+
+## Creating a New Skill
+
+Use this workflow when a new domain needs a skill and no existing skill can absorb it.
+
+### Step 1 — Confirm the skill is warranted
+
+Before creating, verify against §Knowledge Taxonomy above:
+
+- Does this domain already have a skill? → Add a section to it instead.
+- Is the content < ~2 pages with no workflow or examples needed? → Put it in `references/`.
+- Is it project-agnostic (not specific to this project)? → Do not create a project skill; reference external docs.
+
+Only proceed if the domain is project-specific, warrants a workflow, has ≥1 concrete example,
+and a subagent would fail without it.
+
+**`name` field constraints:**
+- Lowercase letters, numbers, and hyphens only (no uppercase, no underscores)
+- Must not start or end with a hyphen; no consecutive hyphens (`--`)
+- Must match the parent directory name exactly
+- Max 64 characters
+
+### Step 2 — Design the description (trigger)
+
+The `description` field in YAML frontmatter is the **only** mechanism that triggers a skill.
+A model reads the description and decides whether to load the skill.
+
+**Rules for a good description:**
+
+1. **Cover the language(s) your team uses.** Include trigger phrases that match how developers naturally type requests on this project. Include 3–6 natural phrases covering the domain.
+   Example: `"create a new endpoint"`, `"add a new module"`, `"implement feature X"`.
+
+1. **Lean toward triggering.** Skills tend to undertrigger — models skip them when they would be useful.
+   Write descriptions that lean slightly toward activation rather than being conservative. If the skill
+   *might* apply to a request, phrase the description so it covers that case too. An undertriggered
+   skill is invisible; a slightly over-triggered skill just gets skimmed and ignored.
+
+1. **Name the domain explicitly.** Say what the skill is for, not just what it does.
+   ✅ `"Use for backend API implementation tasks"`
+   ❌ `"Use when writing code"`
+
+1. **Include explicit exclusions.** If the skill could be confused with another, say what it is NOT for.
+   Example: `"DO NOT USE for React frontend work — use react-frontend-coding instead."`
+
+1. **Add a NEVER clause** for the most critical workflow constraint, if any.
+   Example: `"NEVER skip the planning phase."`
+
+1. **Keep it under ~20 lines.** Descriptions that are too long become ambiguous.
+
+### Step 3 — Draft the skill body
+
+Every skill must have the following sections in this order — read `assets/skill-template.md` when drafting.
+
+**Required sections**: Purpose, Workflow (with Phase A STOP gate), Agent Behavior Extensions, Checklist.
+**Optional but recommended**: Plan Document Format, Architecture Map / Layer Patterns, Naming Conventions, Domain Glossary.
+
+**Skill folder anatomy** — beyond `SKILL.md`, a skill can bundle:
+
+```
+{skill-name}/
+├── SKILL.md          # Required: metadata + instructions
+├── scripts/          # Optional: executable code agents can run
+├── references/       # Optional: docs loaded on demand
+└── assets/           # Optional: templates, static files
+```
+
+Reference these from `SKILL.md` with an explicit load condition:
+> "Read `references/api-errors.md` if the API returns a non-200 status code."
+A generic "see references/ for details" is not enough — the agent won't know when to load it.
+
+**Size and progressive disclosure:**
+Keep `SKILL.md` under 500 lines. Move detailed reference material (large tables, full examples,
+edge-case docs) to `references/`. The full body loads into context on every activation, so every
+line competes for the agent's attention.
+
+Include the `compatibility` field in the frontmatter if the skill requires a specific agent
+or toolchain (e.g., `compatibility: Requires Python 3.10+ and access to the internet`).
+
+**Writing principles for the body:**
+
+- **Explain the why.** Instead of `ALWAYS use parameterized queries`, write: "Use parameterized
+  queries — string interpolation in SQL is the primary vector for injection attacks." Agents that
+  understand the reason behind an instruction make better context-dependent decisions.
+- **Add a Gotchas section** for non-obvious, project-specific facts — concrete corrections to
+  mistakes the agent would make without being told. Keep it in `SKILL.md` so the agent reads it
+  before encountering the situation.
+- **Procedures over declarations.** Teach the agent *how to approach a class of problems*, not
+  just what to produce for one specific case. The approach should generalize even when individual
+  details are specific.
+- **Add what the agent lacks; omit what it knows.** Don't explain general concepts the agent
+  already understands. Focus on project-specific conventions, non-obvious edge cases, and
+  the particular tools or APIs to use.
+
+### Step 4 — Language and terminology conventions
+
+Follow the language and terminology conventions defined in your project's `agents.md`.
+If the project has no conventions defined, establish them in `agents.md` before creating skills.
+
+This ensures skill content uses consistent names for domain concepts and matches the
+language(s) developers naturally use when writing requests.
+
+### Step 5 — Register the skill
+
+After creating the skill file at `.agents/skills/{name}/SKILL.md`:
+
+1. No manual registration is needed — the VS Code skills system auto-discovers skills from their frontmatter.
+2. Update `agents.md §Documentation Maintenance` to mention the new skill if it governs a new category of documentation.
+3. If the skill has a corresponding `references/` file that is now superseded, reduce or remove that file
+   following Type 1 resolution (move unique content into the skill first).
+4. Update `agents.md §Context Loading Rules` if the new skill changes what a subagent should load for a given task type.
+
+---
+
+## Agent Behavior Extensions
+
+The universal agent behavior principles in `agents.md §Agent Behavior` apply to all tasks.
+The following rules are specific to documentation maintenance work:
+
+- **Verify before deleting.** Before removing any content, confirm it is fully captured at
+  the destination (or is genuinely redundant with no information loss). "Lean scope" does not
+  justify silent deletion — maintenance tasks have an asymmetric risk: it is easy to destroy
+  institutional knowledge that is hard to reconstruct.
+
+- **Self-application of the standard.** When the task involves modifying a skill, that skill
+  must be evaluated with the same audit criteria (Taxonomy, Inconsistency Types, Subagent
+  Self-Loading) as any other skill. Do not exempt the file being edited from the audit.
+
+- **Taxonomy-anchored proposals.** Every proposed change must include an explicit taxonomic
+  justification — state which category the content belongs to (global, `references/`, or skill)
+  and why, referencing the Knowledge Taxonomy. A move without a taxonomy reason is not a
+  sufficient proposal.
+
+---
+
+## Optional: Codebase Scan (Type 3 — Legacy Detection)
+
+Run when the user suspects a skill documents code that no longer exists, or after
+a significant refactor.
+
+1. Extract from the skill all file paths, class names, method names, and API endpoints
+   cited in examples and rules.
+2. For each reference, search the workspace:
+   - File paths → verify the file exists.
+   - Class/method names → grep for the identifier.
+   - API endpoints → grep controllers for the route.
+3. Flag any missing reference as a potential Type 3 (Legacy) finding.
+4. Add findings to the audit plan.
+
+Offer this step explicitly before running — do not run by default.

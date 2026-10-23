@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Approved Forever emblem: the original 32x32 ForeverFunctionalIcons.Emblem
+     shield/diamond geometry, scaled x1.75 and centered in the 108dp adaptive
+     viewport. All ink (including half the stroke width) stays inside the 66dp
+     diameter safe zone, so circular and squircle masks never clip the glyph. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:pathData="M54 29.5L75 38.25L71.5 66.25L54 78.5L36.5 66.25L33 38.25Z"
+        android:strokeWidth="2.625"
+        android:strokeColor="@color/forever_gold"
+        android:strokeLineJoin="round"
+        android:fillColor="#00000000" />
+    <path
+        android:pathData="M54 40L62.75 54L54 69.75L45.25 54Z"
+        android:fillColor="@color/forever_gold"
+        android:fillAlpha="0.24"
+        android:strokeWidth="2.625"
+        android:strokeColor="@color/forever_gold"
+        android:strokeLineJoin="round" />
+</vector>

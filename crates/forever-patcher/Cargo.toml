@@ -1,0 +1,19 @@
+[package]
+name = "forever-patcher"
+version = "0.1.0"
+edition = "2021"
+description = "Localiza y sustituye en memoria el almacén de claves del cliente WoW Classic Beta (parche Forever)"
+license = "MIT"
+
+[[bin]]
+name = "forever-patch"
+path = "src/bin/forever-patch.rs"
+
+[[bin]]
+name = "store_holder"
+path = "src/bin/store_holder.rs"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+libc = "0.2"

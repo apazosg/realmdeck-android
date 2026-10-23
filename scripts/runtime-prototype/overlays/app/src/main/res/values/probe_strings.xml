@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="probe_app_name">Forever Runtime Probe</string>
+    <string name="probe_provenance">Standalone Wine + Box64 diagnostics\nSource: wow-mobile commit 0c8068f617737d9c0fb6246f37b54f85b620b09d\nNo WoW client, Config.wtf, or ADB dependency.</string>
+    <string name="probe_status_installing">Installing the private runtime…</string>
+    <string name="probe_status_ready">Runtime ready. Run both probes.</string>
+    <string name="probe_status_preparing">Preparing an isolated run…</string>
+    <string name="probe_status_prepare_failed">Could not prepare this probe run.</string>
+    <string name="probe_status_cleanup_blocked">Cleanup was not proven; restart the app before another run.</string>
+    <string name="probe_status_no_report">No completed report is available.</string>
+    <string name="probe_status_exported">Report exported.</string>
+    <string name="probe_status_export_failed">Could not export the report.</string>
+    <string name="probe_run">RUN API + DYNCODE PROBES</string>
+    <string name="probe_export">EXPORT LATEST REPORT</string>
+</resources>

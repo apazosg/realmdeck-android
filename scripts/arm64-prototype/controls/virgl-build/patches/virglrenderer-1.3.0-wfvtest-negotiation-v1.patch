@@ -1,0 +1,241 @@
+--- a/vtest/vtest.h
++++ b/vtest/vtest.h
+@@ -115,5 +115,15 @@
+ 
+ void vtest_set_max_length(uint32_t length);
+ 
++#ifdef WFVTEST_NEGOTIATION_TRACE
++void wfvtest_negotiation_command(uint32_t length, uint32_t id);
++void wfvtest_negotiation_protocol(uint32_t requested, uint32_t selected);
++void wfvtest_negotiation_capset_request(uint32_t id, uint32_t version,
++                                        uint32_t max_version,
++                                        uint32_t max_size, bool valid);
++void wfvtest_negotiation_capset_reply(uint32_t id, uint32_t version,
++                                      uint32_t bytes, bool valid,
++                                      const void *caps);
++#endif
+ #endif
+ 
+--- a/vtest/vtest_renderer.c
++++ b/vtest/vtest_renderer.c
+@@ -64,6 +64,157 @@
+ #include "util/u_pointer.h"
+ #include "util/u_hash_table.h"
+ #include "drm.h"
++#include <stddef.h>
++#ifdef WFVTEST_NEGOTIATION_TRACE
++#define WFVTEST_NEGOTIATION_LIMIT 64u
++
++static unsigned wfvtest_negotiation_rows;
++static unsigned wfvtest_negotiation_sequence;
++static bool wfvtest_negotiation_truncated;
++
++static bool
++wfvtest_negotiation_begin(void)
++{
++   if (wfvtest_negotiation_rows < WFVTEST_NEGOTIATION_LIMIT) {
++      wfvtest_negotiation_rows++;
++      return true;
++   }
++
++   if (!wfvtest_negotiation_truncated) {
++      fprintf(stderr, "WFVTEST_NEGOTIATION {\"schema\":1,\"event\":\"trace_truncated\"}\n");
++      wfvtest_negotiation_truncated = true;
++   }
++   return false;
++}
++
++static bool
++wfvtest_negotiation_u32(const void *data, uint32_t bytes, size_t offset,
++                        uint32_t *value)
++{
++   if (!data || offset > bytes || bytes - offset < sizeof(*value))
++      return false;
++   memcpy(value, (const char *)data + offset, sizeof(*value));
++   return true;
++}
++
++static void
++wfvtest_negotiation_cap_fields(const void *caps, uint32_t bytes,
++                               uint32_t *glsl_level, uint32_t *bset,
++                               uint32_t *rawbitmask, uint32_t *primitive_mask,
++                               uint32_t *max_texture_array_layers,
++                               uint32_t *max_streamout_buffers,
++                               uint32_t *max_dual_source_render_targets,
++                               uint32_t *max_render_targets,
++                               uint32_t *max_samples, uint32_t *max_tbo_size,
++                               uint32_t *max_uniform_blocks,
++                               uint32_t *max_viewports,
++                               uint32_t *max_texture_gather_components,
++                               uint32_t *capability_bits,
++                               bool *has_capability_bits)
++{
++#define WFVTEST_CAP1(field, output) \
++   wfvtest_negotiation_u32(caps, bytes, offsetof(struct virgl_caps_v1, field), output)
++   *glsl_level = 0;
++   *bset = 0;
++   *rawbitmask = 0;
++   *primitive_mask = 0;
++   *max_texture_array_layers = 0;
++   *max_streamout_buffers = 0;
++   *max_dual_source_render_targets = 0;
++   *max_render_targets = 0;
++   *max_samples = 0;
++   *max_tbo_size = 0;
++   *max_uniform_blocks = 0;
++   *max_viewports = 0;
++   *max_texture_gather_components = 0;
++   *capability_bits = 0;
++   *has_capability_bits = false;
++
++   WFVTEST_CAP1(glsl_level, glsl_level);
++   WFVTEST_CAP1(bset, bset);
++   *rawbitmask = *bset;
++   WFVTEST_CAP1(prim_mask, primitive_mask);
++   WFVTEST_CAP1(max_texture_array_layers, max_texture_array_layers);
++   WFVTEST_CAP1(max_streamout_buffers, max_streamout_buffers);
++   WFVTEST_CAP1(max_dual_source_render_targets, max_dual_source_render_targets);
++   WFVTEST_CAP1(max_render_targets, max_render_targets);
++   WFVTEST_CAP1(max_samples, max_samples);
++   WFVTEST_CAP1(max_tbo_size, max_tbo_size);
++   WFVTEST_CAP1(max_uniform_blocks, max_uniform_blocks);
++   WFVTEST_CAP1(max_viewports, max_viewports);
++   WFVTEST_CAP1(max_texture_gather_components, max_texture_gather_components);
++   *has_capability_bits = wfvtest_negotiation_u32(
++      caps, bytes, offsetof(struct virgl_caps_v2, capability_bits), capability_bits);
++#undef WFVTEST_CAP1
++}
++
++static void
++wfvtest_negotiation_cap_reply(uint32_t id, uint32_t version, uint32_t bytes,
++                              bool valid, const void *caps)
++{
++   uint32_t glsl_level, bset, rawbitmask, primitive_mask;
++   uint32_t max_texture_array_layers, max_streamout_buffers;
++   uint32_t max_dual_source_render_targets, max_render_targets, max_samples;
++   uint32_t max_tbo_size, max_uniform_blocks, max_viewports;
++   uint32_t max_texture_gather_components, capability_bits;
++   bool has_capability_bits;
++   char capability_bits_text[12] = "null";
++
++   if (!wfvtest_negotiation_begin())
++      return;
++   wfvtest_negotiation_cap_fields(
++      valid ? caps : NULL, valid ? bytes : 0, &glsl_level, &bset,
++      &rawbitmask, &primitive_mask, &max_texture_array_layers,
++      &max_streamout_buffers, &max_dual_source_render_targets,
++      &max_render_targets, &max_samples, &max_tbo_size, &max_uniform_blocks,
++      &max_viewports, &max_texture_gather_components, &capability_bits,
++      &has_capability_bits);
++   if (has_capability_bits)
++      snprintf(capability_bits_text, sizeof(capability_bits_text), "%u", capability_bits);
++   fprintf(stderr,
++           "WFVTEST_NEGOTIATION {\"schema\":1,\"event\":\"cap_reply\",\"sequence\":%u,\"id\":%u,\"version\":%u,\"bytes\":%u,\"valid\":%u,\"glsl_level\":%u,\"bset\":%u,\"rawbitmask\":%u,\"primitiveMask\":%u,\"max_texture_array_layers\":%u,\"max_streamout_buffers\":%u,\"max_dual_source_render_targets\":%u,\"max_render_targets\":%u,\"max_samples\":%u,\"max_tbo_size\":%u,\"max_uniform_blocks\":%u,\"max_viewports\":%u,\"max_texture_gather_components\":%u,\"capability_bits\":%s}\n",
++           ++wfvtest_negotiation_sequence, id, version, bytes, valid ? 1u : 0u,
++           glsl_level, bset, rawbitmask, primitive_mask,
++           max_texture_array_layers, max_streamout_buffers,
++           max_dual_source_render_targets, max_render_targets, max_samples,
++           max_tbo_size, max_uniform_blocks, max_viewports,
++           max_texture_gather_components, capability_bits_text);
++}
++
++void
++wfvtest_negotiation_command(uint32_t length, uint32_t id)
++{
++   if (wfvtest_negotiation_begin())
++      fprintf(stderr, "WFVTEST_NEGOTIATION {\"schema\":1,\"event\":\"command\",\"sequence\":%u,\"length\":%u,\"id\":%u}\n",
++              ++wfvtest_negotiation_sequence, length, id);
++}
++
++void
++wfvtest_negotiation_protocol(uint32_t requested, uint32_t selected)
++{
++   if (wfvtest_negotiation_begin())
++      fprintf(stderr, "WFVTEST_NEGOTIATION {\"schema\":1,\"event\":\"protocol\",\"sequence\":%u,\"requested\":%u,\"selected\":%u}\n",
++              ++wfvtest_negotiation_sequence, requested, selected);
++}
++
++void
++wfvtest_negotiation_capset_request(uint32_t id, uint32_t version,
++                                   uint32_t max_version, uint32_t max_size,
++                                   bool valid)
++{
++   if (wfvtest_negotiation_begin())
++      fprintf(stderr, "WFVTEST_NEGOTIATION {\"schema\":1,\"event\":\"cap_request\",\"sequence\":%u,\"id\":%u,\"version\":%u,\"maxVersion\":%u,\"maxBytes\":%u,\"valid\":%u}\n",
++              ++wfvtest_negotiation_sequence, id, version, max_version,
++              max_size, valid ? 1u : 0u);
++}
++
++void
++wfvtest_negotiation_capset_reply(uint32_t id, uint32_t version,
++                                 uint32_t bytes, bool valid, const void *caps)
++{
++   wfvtest_negotiation_cap_reply(id, version, bytes, valid, caps);
++}
++#endif
+ 
+ #ifndef WIN32
+ #include "util/libsync.h"
+@@ -919,6 +1070,9 @@
+ 
+    hdr_buf[VTEST_CMD_LEN] = VCMD_PROTOCOL_VERSION_SIZE;
+    hdr_buf[VTEST_CMD_ID] = VCMD_PROTOCOL_VERSION;
++#ifdef WFVTEST_NEGOTIATION_TRACE
++   wfvtest_negotiation_protocol(version_buf[VCMD_PROTOCOL_VERSION_VERSION], ctx->protocol_version);
++#endif
+ 
+    version_buf[VCMD_PROTOCOL_VERSION_VERSION] = ctx->protocol_version;
+ 
+@@ -1040,6 +1194,10 @@
+ 
+    virgl_renderer_get_cap_set(id, &max_version, &max_size);
+ 
++#ifdef WFVTEST_NEGOTIATION_TRACE
++   wfvtest_negotiation_capset_request(id, version, max_version, max_size,
++                                      (max_version || max_size) && version <= max_version);
++#endif
+    /* unsupported id or version */
+    if ((!max_version && !max_size) || version > max_version) {
+       resp_buf[VTEST_CMD_LEN] = 1;
+@@ -1060,6 +1218,9 @@
+    resp_buf[VTEST_CMD_LEN] = 1 + max_size / 4;
+    resp_buf[VTEST_CMD_ID] = VCMD_GET_CAPSET;
+    resp_buf[VTEST_CMD_DATA_START] = true;
++#ifdef WFVTEST_NEGOTIATION_TRACE
++   wfvtest_negotiation_capset_reply(id, version, max_size, true, caps);
++#endif
+    ret = vtest_block_write(ctx->out_fd, resp_buf, sizeof(resp_buf));
+    if (ret >= 0)
+       ret = vtest_block_write(ctx->out_fd, caps, max_size);
+@@ -1115,6 +1276,9 @@
+ 
+    hdr_buf[0] = max_size + 1;
+    hdr_buf[1] = 2;
++#ifdef WFVTEST_NEGOTIATION_TRACE
++   wfvtest_negotiation_capset_reply(2, 1, max_size, true, caps_buf);
++#endif
+    ret = vtest_block_write(ctx->out_fd, hdr_buf, 8);
+    if (ret < 0) {
+       goto end;
+@@ -1149,6 +1313,9 @@
+ 
+    hdr_buf[0] = max_size + 1;
+    hdr_buf[1] = 1;
++#ifdef WFVTEST_NEGOTIATION_TRACE
++   wfvtest_negotiation_capset_reply(1, 1, max_size, true, caps_buf);
++#endif
+    ret = vtest_block_write(ctx->out_fd, hdr_buf, 8);
+    if (ret < 0) {
+       goto end;
+--- a/vtest/vtest_server.c
++++ b/vtest/vtest_server.c
+@@ -745,6 +745,9 @@
+    else if (ret < 0 || (size_t)ret < sizeof(header))
+       return VTEST_CLIENT_ERROR_INPUT_READ;
+ 
++#ifdef WFVTEST_NEGOTIATION_TRACE
++   wfvtest_negotiation_command(header[VTEST_CMD_LEN], header[VTEST_CMD_ID]);
++#endif
+    if (!client->context) {
+       /* The first command MUST be VCMD_CREATE_RENDERER */
+       if (header[1] != VCMD_CREATE_RENDERER) {

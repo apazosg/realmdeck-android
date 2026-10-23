@@ -1,0 +1,16 @@
+diff --git a/app/src/main/java/com/winlator/xenvironment/components/GuestProgramLauncherComponent.java b/app/src/main/java/com/winlator/xenvironment/components/GuestProgramLauncherComponent.java
+--- a/app/src/main/java/com/winlator/xenvironment/components/GuestProgramLauncherComponent.java
++++ b/app/src/main/java/com/winlator/xenvironment/components/GuestProgramLauncherComponent.java
+@@ -521,12 +521,13 @@ public class GuestProgramLauncherComponent extends EnvironmentComponent {
+         command += " --bind=" + externalLogDir.getAbsolutePath();
+ 
+         // Provide legacy rootfs path expected by some Wine builds.
+-        File legacyRootfsParent = new File(rootDir, "/data/data/com.winlator/files");
++        String guestFilesPath = "/data/data/" + context.getPackageName() + "/files";
++        File legacyRootfsParent = new File(rootDir, guestFilesPath);
+         if (!legacyRootfsParent.isDirectory()) legacyRootfsParent.mkdirs();
+         File hostRootfs = new File(environment.getContext().getFilesDir(), "rootfs");
+         if (hostRootfs.exists()) {
+-            command += " --bind=" + hostRootfs.getPath() + ":/data/data/com.winlator/files/rootfs";
++            command += " --bind=" + hostRootfs.getPath() + ":" + guestFilesPath + "/rootfs";
+         }

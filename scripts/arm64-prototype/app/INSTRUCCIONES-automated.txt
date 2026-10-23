@@ -1,0 +1,113 @@
+WoW Forever — APK automatizado experimental 0.2.11 (code 35)
+
+APK: wowforever-automated-0.2.11-code35-debug.apk
+Tamaño: {{APK_BYTES}} bytes (~362 MB / 345 MiB).
+SHA-256: {{APK_SHA256}}
+Paquete: com.wowforever.arm64probe. Nombre visible: Forever.
+Android 10 o posterior, arm64-v8a; firma debug compatible con el APK anterior.
+
+QUÉ CAMBIA
+Se elimina el envoltorio de escritorio de Wine: el cliente AA64 verificado se
+entrega directamente a Wine, sin `explorer /desktop=shell` ni winhandler.exe.
+El gate comprueba PE AA64, MD5/tamaño, ruta/cwd, unidad A:, contenedor y RUN.
+En el móvil USB xaga (Wine ARM64) esto llegó a ejecutar de verdad WowB-ARM64.exe:
+cargó el cliente, aplicó el portal Forever (auth.gpon.com.co) y escribió sus
+propios logs, pero falló al crear la ventana ("CreateWindowEx failed") antes de
+crear el dispositivo gráfico ("No GX Device Created"). Los errores de memoria
+posteriores son de su cierre. No hay todavía PID WoW validado ni frame.
+Esta versión 0.2.11 es un DIAGNÓSTICO: mismo runtime/datos/comando, pero amplía
+WINEDEBUG a los canales de ventanas/X11 y D3D (antes solo se veía el canal module)
+para capturar la causa exacta del fallo de ventana. No cambia Wine, DXVK, driver,
+cliente ni datos. NO es una APK jugable y no promete render ni login.
+Conserva el bootstrap Bionic ImageFS original (corrige el CANNOT LINK por falta de
+libredirect-bionic-wx.so) y el lector de catálogo de 8 MiB con sus guardas.
+Las versiones 0.2.7/0.2.8 fueron iteraciones internas de laboratorio.
+
+CORRECCIONES ANTERIORES CONSERVADAS
+Corrige el rechazo inmediato "client catalog exceeds bounded launch read" de
+0.2.5: el asset real ocupa 2.501.689 bytes y el nuevo gate tenía un límite de 2 MiB.
+Provisión y arranque usan ahora un único lector validado con límite de 8 MiB,
+rechazo de exceso y UTF-8/JSON/pins inválidos. El audit del APK comprueba también
+que el catálogo empaquetado cabe en ese límite. El catálogo/CDN/cliente no cambia
+ni se descarga de nuevo lo que ya esté verificado. Son metadatos, no los datos
+completos del juego. Conserva la ruta AA64 directa y los checks de PE/MD5/rutas.
+Se aprovecha una diferencia concreta de jaredgei/wow-forever-android: el cliente
+ARM64 verificado se entrega directamente a Wine/explorer, sin envolverlo en el
+helper Windows winhandler.exe. El gate comprueba PE AA64, MD5/tamaño, ruta/cwd,
+unidad A:, contenedor y RUN; no basta un nombre que contenga ARM64. Los controles
+X11/Java WinHandler se conservan. No se cambia Wine, DXVK, driver ni startup.
+Esto es un ensayo funcional, no prueba de que el helper causara nuestro SIGINT.
+La corrida de 0.2.4 demuestra salida del host Android por SIGINT, pero no su emisor.
+Ahora se conservan inicio y cola reciente de stdout/stderr con snapshots atómicos
+periódicos, metadata de grupos y diagnóstico de errores IO. Un snapshot exportado
+se etiqueta UNKNOWN respecto al estado final: no garantiza capturar la última
+fracción de segundo. La captura nativa de emisor sigue UNSUPPORTED en Android y
+no instala handlers, ignora señales ni inventa containment. Se mantienen la
+recuperación INTERRUPTED, el spawn único y el rechazo de procesos ajenos.
+Conserva las correcciones de perfiles/BLTE/CDN, el runtime y la caché válida.
+Ya no hay que preparar tres juegos de prueba ni seleccionar Wine/DXVK. La acción
+"Preparar y lanzar" importa/reutiliza el runtime fijado, descarga y verifica el
+bootstrap ARM64 oficial, genera BetaSuspendedTest.wtf y solicita el arranque de
+WowB-ARM64.exe. Incluye supervisión y parche Forever con validación estricta.
+Esto no demuestra todavía render ni login. No se ha probado esta versión en el
+Poco/PowerVR; en xaga el cliente ya arranca pero no crea ventana.
+
+PRUEBA
+1. Instala este APK como actualización del anterior. No desinstales ni borres
+   datos. El último ensayo USB sí arrancó Wine: reinicia Android antes de repetir.
+   El error del catálogo sucede antes del spawn supervisado: si tu último
+   intento solo llegó a ese error, no exige reinicio por sí mismo. Si quedó una
+   corrida previa que sí inició Wine o el launcher bloquea por terminación
+   desconocida, REINICIA ANDROID antes de probarlo. No toques los datos del runtime.
+2. Usa Wi-Fi y mantén la app en primer plano. Es recomendable tener al menos
+   8 GB libres. El bootstrap del cliente necesita unos 714 MiB de descarga y
+   ~1,8 GiB de espacio de trabajo; ImageFS/runtime puede necesitar varios GB
+   adicionales y puede reutilizar componentes ya instalados.
+3. Abre Forever, lee la cifra de descarga y marca la autorización. Pulsa una vez
+   "Preparar y lanzar". Acepta los permisos del sistema que aparezcan.
+4. Deja que termine la preparación. No hay Steam/Battle.net/ADB, ni un cliente
+   que tengas que copiar desde el PC. El launcher no pide credenciales.
+5. En este primer ensayo, mantén la app en primer plano sin minimizarla. Si queda
+   negra, vuelve a la pantalla de Forever o sale al escritorio, abre Forever y pulsa
+   "Exportar diagnóstico de esta corrida". Guarda el ZIP y envíalo junto con
+   la última etapa/mensaje que viste. No repitas las tres sondas antiguas.
+6. Si aparece WoW, anota hasta dónde llega (ventana, render, login). No tomes
+   "proceso iniciado" o "parche aplicado" como prueba de login Forever.
+
+LÍMITE DE SEGURIDAD DE ESTA VERSIÓN
+Después de iniciar Wine, salir o cancelar exige REINICIAR ANDROID antes de otro
+intento. Un muestreo de PIDs no demuestra que todos sus hijos hayan terminado:
+preferimos bloquear la repetición a lanzar/parchear una instancia equivocada.
+Cerrar/reabrir la app no sustituye al reinicio. No hace falta borrar datos.
+Los errores anteriores al spawn permiten reintentar y reutilizan lo verificado.
+El fallo de lectura del catálogo no confirma spawn; una corrida anterior con
+Wine sí requiere reinicio antes de otra tentativa. No se garantiza todavía mantener/restaurar la pantalla del juego al
+minimizar; ahora la pérdida de supervisión debe quedar explícita y exportable.
+
+DATOS Y DIAGNÓSTICO
+El APK no contiene el cliente Blizzard ni CASC. Solo se provisiona un conjunto
+finito de arranque (35 loose + 832 objetos de metadatos + 1.402 índices CDN).
+No es la instalación completa de ~84,7 GB: su suficiencia y el streaming del juego
+siguen sin demostrar. La cifra inicial tampoco incluye el runtime ni garantiza
+cuánto dato adicional podría necesitar el propio juego.
+El ZIP contiene estado, versiones/hashes, argv/entorno permitido, archivos de
+inicio/cola stdout/stderr y sus manifests, preflight de helpers/bibliotecas,
+lifecycle, PGID/SID como metadata y logs del juego disponibles. Un helper ausente
+es opcional para la ruta directa; su metadata no habilita parcheo ni prueba render.
+La atribución de salida del launcher exige PID, package, corrida y tiempo; un
+SIGTERM antiguo sin identidad suficiente sigue siendo no atribuido. SIGINT del
+host no prueba quién lo envió; UNSUPPORTED significa que no tenemos esa captura.
+Puede incluir salida con datos del usuario;
+revísalo antes de compartirlo. La GPU/driver efectivo se marca sin medir hasta
+tener evidencia; no se instala Turnip en PowerVR.
+
+EVIDENCIA Y FUENTES
+Junto al APK están el audit JSON, SHA256SUMS y un ZIP de recetas/fuentes propias.
+Fuentes GameNative modificadas disponibles en hermes:
+/home/adrian/wowforever-artifacts/arm64-prototype/toolchain/GameNative/
+Fuente base fijada: GameNative commit 205cbf8ddc06f855a1b85ba57c78c4be9a6930aa.
+Receta: scripts/arm64-prototype/app/apply_overlay.py.
+Ensayo privado, no release público; auditoría completa de licencias de terceros
+pendiente. La prueba automatizada real en xaga/Mali confirma que WowB-ARM64.exe se
+ejecuta y aplica el portal Forever, pero el launcher aún no consigue render/login;
+no se ha probado esta versión en PowerVR.

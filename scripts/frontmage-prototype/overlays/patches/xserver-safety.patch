@@ -1,0 +1,140 @@
+diff --git a/app/src/main/java/com/winlator/xenvironment/XEnvironment.java b/app/src/main/java/com/winlator/xenvironment/XEnvironment.java
+--- a/app/src/main/java/com/winlator/xenvironment/XEnvironment.java
++++ b/app/src/main/java/com/winlator/xenvironment/XEnvironment.java
+@@ -61,6 +61,14 @@ public class XEnvironment implements Iterable<EnvironmentComponent> {
+     public void stopEnvironmentComponents() {
+         for (int i = components.size() - 1; i >= 0; i--) {
+             components.get(i).stop();
+         }
+     }
++
++    public void stopEnvironmentComponentsExcept(Class<?> excludedClass) {
++        for (int i = components.size() - 1; i >= 0; i--) {
++            EnvironmentComponent component = components.get(i);
++            if (excludedClass == null || !excludedClass.isInstance(component)) component.stop();
++        }
++    }
+ 
+     public void onPause() {
+diff --git a/app/src/main/java/com/winlator/XServerDisplayActivity.java b/app/src/main/java/com/winlator/XServerDisplayActivity.java
+--- a/app/src/main/java/com/winlator/XServerDisplayActivity.java
++++ b/app/src/main/java/com/winlator/XServerDisplayActivity.java
+@@ -151,6 +151,8 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
+     private final Handler fexProbeHandler = new Handler(Looper.getMainLooper());
+     private Runnable fexProbeTimeout;
+     private com.winlator.core.Callback<String> fexProbeSink;
++    private final Object fexProbeLifecycleLock = new Object();
++    private volatile boolean fexProbeDestroyed = false;
+ 
+     @Override
+     public void onCreate(Bundle savedInstanceState) {
+@@ -308,10 +310,13 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
+ 
+         setupUI();
+ 
+         Executors.newSingleThreadExecutor().execute(() -> {
++            if (!fexProbeCanContinue()) return;
+             if (!isGenerateWineprefix()) {
+                 setupWineSystemFiles();
+                 extractGraphicsDriverFiles();
+                 changeWineAudioDriver();
+             }
++            if (!fexProbeCanContinue()) return;
+             setupXEnvironment();
+         });
+@@ -332,12 +337,14 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
+     public void onResume() {
+         super.onResume();
++        if (fexProbeMode) return;
+         if (environment != null) {
+             xServerView.onResume();
+             environment.onResume();
+@@ -339,26 +346,36 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
+     public void onPause() {
+         super.onPause();
++        if (fexProbeMode) return;
+         if (environment != null) {
+             environment.onPause();
+             xServerView.onPause();
+@@ -347,17 +364,25 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
+     @Override
+     protected void onDestroy() {
+         if (fexProbeMode) {
++            synchronized (fexProbeLifecycleLock) { fexProbeDestroyed = true; }
+             fexProbeHandler.removeCallbacksAndMessages(null);
+             boolean quiescent = com.wowforever.fexprobe.FexProcessDiagnostics.stopAndAwait(5000L, java.util.Collections.singletonList(fexProbeSink));
++            shutdownFexRuntimeOnce();
+             if (fexProbeTerminal.compareAndSet(false, true)) com.wowforever.fexprobe.ProbeRunStore.snapshot(this, fexProbeRunId, "activity-destroyed cleanup_quiescent="+quiescent);
+             if (fexProbeSink != null) ProcessHelper.removeDebugCallback(fexProbeSink);
+             com.wowforever.fexprobe.FexProcessDiagnostics.setEnabled(false);
+             super.onDestroy();
+-            return;
++            return;
+         }
+@@ -445,11 +470,13 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
+     private void exit() {
+         if (fexProbeMode) {
++            synchronized (fexProbeLifecycleLock) { fexProbeDestroyed = true; }
+             boolean quiescent = com.wowforever.fexprobe.FexProcessDiagnostics.stopAndAwait(5000L, java.util.Collections.singletonList(fexProbeSink));
++            shutdownFexRuntimeOnce();
+             if (fexProbeTerminal.compareAndSet(false, true)) com.wowforever.fexprobe.ProbeRunStore.snapshot(this, fexProbeRunId, "user-exit cleanup_quiescent="+quiescent);
+             finish();
+             return;
+@@ -454,6 +481,17 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
+         AppUtils.restartApplication(this);
+     }
++
++    private void shutdownFexRuntimeOnce() {
++        synchronized (this) {
++            if (shutdownCompleted) return;
++            shutdownCompleted = true;
++        }
++        stopSessionLogging();
++        winHandler.stop();
++        if (wineRequestHandler != null) wineRequestHandler.stop();
++        if (environment != null) {
++            environment.stopEnvironmentComponentsExcept(
++                    com.winlator.xenvironment.components.GuestProgramLauncherComponent.class);
++        }
++    }
++
++    private boolean fexProbeCanContinue() {
++        synchronized (fexProbeLifecycleLock) {
++            return !fexProbeMode || (!fexProbeDestroyed && !fexProbeTerminal.get());
++        }
++    }
+ 
+     private void shutdownRuntimeOnce() {
+@@ -658,6 +658,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
+     private void setupXEnvironment() {
++        if (!fexProbeCanContinue()) return;
+         envVars.put("LC_ALL", "en_US.UTF-8");
+@@ -782,7 +820,10 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
+ 
+         guestProgramLauncherComponent.setEnvVars(envVars);
+         guestProgramLauncherComponent.setTerminationCallback((status) -> {
+             if (fexProbeMode) {
++                if (!fexProbeCanContinue()) return;
+                 if (fexProbeTerminal.compareAndSet(false, true)) com.wowforever.fexprobe.ProbeRunStore.finish(this, fexProbeRunId, status);
+-                runOnUiThread(this::finish);
++                runOnUiThread(() -> { if (!fexProbeDestroyed) finish(); });
+             }
+             else exit();
+         });
+@@ -822,8 +863,15 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
++        if (!fexProbeCanContinue()) return;
+         winHandler.start();
+         if (wineRequestHandler == null) wineRequestHandler = new WineRequestHandler(this);
+         wineRequestHandler.start();
+         queueWinHandlerLiteStart();
+-        environment.startEnvironmentComponents();
++        synchronized (fexProbeLifecycleLock) {
++            if (fexProbeMode && (fexProbeDestroyed || fexProbeTerminal.get())) return;
++            environment.startEnvironmentComponents();
++        }
+         if (fexProbeMode) {
+             fexProbeTimeout = () -> {
++                if (!fexProbeCanContinue()) return;
+                 boolean quiescent = com.wowforever.fexprobe.FexProcessDiagnostics.stopAndAwait(5000L, java.util.Collections.singletonList(fexProbeSink));
+                 if (fexProbeTerminal.compareAndSet(false, true)) {
+                     com.wowforever.fexprobe.ProbeRunStore.snapshot(this, fexProbeRunId, "RUNTIME-TIMEOUT timeoutMs=180000 cleanup_quiescent="+quiescent);

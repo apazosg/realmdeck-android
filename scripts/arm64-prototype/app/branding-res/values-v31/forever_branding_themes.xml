@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- API 31+ native splash: same parent and legacy windowBackground as the
+         base splash theme, plus the platform splash background and the emblem
+         as the static animated icon. No animation duration override, no
+         branding image, no core-splashscreen dependency. -->
+    <style name="Theme.ForeverFunctionalSplash" parent="@style/Theme.Pluvia">
+        <item name="android:windowBackground">@color/forever_navy_bottom</item>
+        <item name="android:windowSplashScreenBackground">@color/forever_navy_bottom</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/forever_emblem_foreground</item>
+    </style>
+</resources>

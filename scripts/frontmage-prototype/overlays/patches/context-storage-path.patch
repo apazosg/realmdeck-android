@@ -1,0 +1,19 @@
+diff --git a/app/src/main/java/com/winlator/container/Container.java b/app/src/main/java/com/winlator/container/Container.java
+--- a/app/src/main/java/com/winlator/container/Container.java
++++ b/app/src/main/java/com/winlator/container/Container.java
+@@ -34,3 +34,5 @@
+-    // For our current package id (com.winlator.llm), use an app-private writable storage root.
+-    // External downloads remain on D: (requires storage permission on newer Android versions).
+-    public static final String DEFAULT_DRIVES = "D:"+Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)+"E:/data/data/com.winlator.llm/storage";
++    // The private E: drive must follow the installed application identity.
++    public static final String DEFAULT_DRIVES = "D:"+Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
++
++    public static String getDefaultDrives(android.content.Context context) {
++        return DEFAULT_DRIVES + "E:" + new File(context.getFilesDir(), "storage").getPath();
++    }
+diff --git a/app/src/main/java/com/winlator/ContainerDetailFragment.java b/app/src/main/java/com/winlator/ContainerDetailFragment.java
+--- a/app/src/main/java/com/winlator/ContainerDetailFragment.java
++++ b/app/src/main/java/com/winlator/ContainerDetailFragment.java
+@@ -540,1 +540,1 @@
+-        final String drives = isEditMode() ? container.getDrives() : Container.DEFAULT_DRIVES;
++        final String drives = isEditMode() ? container.getDrives() : Container.getDefaultDrives(context);

@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">WoW Forever</string>
+    <string name="title">WoW Forever — banco de pruebas</string>
+    <string name="native_header">Biblioteca nativa (JNI)</string>
+    <string name="app_version_fmt">App: %1$s</string>
+    <string name="abi_fmt">ABI: %1$s</string>
+    <string name="runtime_fmt">Runtime: %1$s</string>
+    <string name="gpu_fmt">GPU: %1$s</string>
+    <string name="jni_error">ERROR JNI: %1$s</string>
+    <string name="unsupported_native">JNI: UNSUPPORTED (%1$s)</string>
+    <string name="unsupported_test">Contrato: UNSUPPORTED</string>
+    <string name="battery_header">Batería secuencial</string>
+    <string name="battery_button">Ejecutar batería</string>
+    <string name="run_status_fmt">Corrida %1$s — %2$s</string>
+    <string name="rejected_fmt">RECHAZADO: %1$s</string>
+    <string name="export_json_button">Exportar JSON</string>
+    <string name="export_text_button">Exportar texto</string>
+    <string name="exported_fmt">Exportado: %1$s</string>
+    <string name="export_failed_fmt">EXPORT FAIL: %1$s</string>
+    <string name="compat_header">Compatibilidad autotest existente</string>
+    <string name="selftest_button">Probar parcheo cross-proceso</string>
+    <string name="selftest_running">Autotest en cola… (hijo fork + /proc/mem)</string>
+    <string name="selftest_header">Autotest cross-proceso (D-L3)</string>
+    <string name="execprobe_header">Sonda execve (experimento targetSdk)</string>
+    <string name="execprobe_button">Probar ejecución de binarios (execve)</string>
+    <string name="execprobe_running">Sonda execve en cola… (copia + fork + execve)</string>
+</resources>

@@ -1,0 +1,21 @@
+{
+  "name": "diagnostics-backend",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Backend mínimo de diagnóstico remoto (ingestión anónima + consulta de mantenedor). Sin Next.js ni frontend.",
+  "type": "module",
+  "scripts": {
+    "test": "tsc && node --test dist/tests/*.test.js",
+    "typecheck": "tsc --noEmit",
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@vercel/blob": "^2.0.0",
+    "pg": "^8.23.1"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "@types/pg": "^8.23.1",
+    "typescript": "^5.9.3"
+  }
+}

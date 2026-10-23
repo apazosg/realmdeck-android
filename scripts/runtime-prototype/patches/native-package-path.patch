@@ -1,0 +1,33 @@
+diff --git a/app/src/main/cpp/winlator/include/winlator.h b/app/src/main/cpp/winlator/include/winlator.h
+--- a/app/src/main/cpp/winlator/include/winlator.h
++++ b/app/src/main/cpp/winlator/include/winlator.h
+@@ -11,7 +11,7 @@
+ #define BITMASK_UNSET(bits, flag) bits &= ~flag
+ #define GETEXP(x) (31 - __builtin_clz(x))
+ 
+-#define APP_CACHE_DIR "/data/data/it.wowmobile/cache"
++#define APP_CACHE_DIR "/data/data/com.wowforever.runtimeprobe/cache"
+ #define LIBVULKAN_PATH "/system/lib64/libvulkan.so"
+ 
+ #define CLOSEFD(x) \
+diff --git a/app/src/main/cpp/vortekrenderer/include/vortek.h b/app/src/main/cpp/vortekrenderer/include/vortek.h
+--- a/app/src/main/cpp/vortekrenderer/include/vortek.h
++++ b/app/src/main/cpp/vortekrenderer/include/vortek.h
+@@ -5,7 +5,7 @@
+ #define MEMORY_POOL_MAX_SIZE 65536
+ #define SERVER_RING_BUFFER_SIZE 4194304
+ #define CLIENT_RING_BUFFER_SIZE 262144
+-#define VORTEK_SERVER_PATH "/data/data/it.wowmobile/files/rootfs/tmp/.vortek/V0"
++#define VORTEK_SERVER_PATH "/data/data/com.wowforever.runtimeprobe/files/rootfs/tmp/.vortek/V0"
+ #define VK_HANDLE_BYTE_COUNT 8
+ #define THREAD_POOL_NUM_THREADS 8
+diff --git a/app/src/main/cpp/gladiorenderer/include/gladio.h b/app/src/main/cpp/gladiorenderer/include/gladio.h
+--- a/app/src/main/cpp/gladiorenderer/include/gladio.h
++++ b/app/src/main/cpp/gladiorenderer/include/gladio.h
+@@ -13,7 +13,7 @@
+ #define THREAD_POOL_NUM_THREADS 4
+ #define PIXEL_READ_CACHE_SKIP_FRAMES 3
+ #define SKIP_GL_FINISH 1
+-#define X11_SERVER_PATH "/data/data/it.wowmobile/files/rootfs/tmp/.X11-unix/X0"
++#define X11_SERVER_PATH "/data/data/com.wowforever.runtimeprobe/files/rootfs/tmp/.X11-unix/X0"
+ 

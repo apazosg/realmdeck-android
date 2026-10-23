@@ -1,0 +1,58 @@
+{
+  "schema": "wowforever.arm64-runtime.recipe.v1",
+  "mode": "static-materialize-only",
+  "source": {
+    "bundle": "/home/adrian/wowforever-artifacts/references/gamenative-rp6/WoW-Forever-GameNative-RP6-all-in-one-2026-09-25.zip",
+    "sha256": "70f1f9924d3649fed811634024eb5b40544485aa11b43d0f28959e95211fa3e2",
+    "proton_wcp": "components/proton-11.0-90624-arm64ec.wcp",
+    "dxvk_wcp": "components/dxvk-2.4.1-wow-aarch64-test.wcp"
+  },
+  "target": {
+    "client_arch": "ARM64",
+    "wine_arch": "aarch64-unix+aarch64-windows",
+    "android_abi": "arm64-v8a",
+    "gpu": "PowerVR BXM-8-256",
+    "vulkan": "system",
+    "turnip": false
+  },
+  "components": {
+    "proton": {
+      "version": "proton-11.0-90624-arm64ec",
+      "prefix_pack": "prefixPack.txz",
+      "bin_path": "bin",
+      "lib_path": "lib"
+    },
+    "dxvk": {
+      "version": "2.4.1-wow-aarch64-test",
+      "windows_targets": ["system32/dxgi.dll", "system32/d3d11.dll"]
+    }
+  },
+  "launcher_interface": {
+    "runtime_dir": "<app-private-files>/runtimes/arm64/<version>",
+    "prefix_dir": "<app-private-files>/prefixes/arm64/<version>",
+    "client_pe": "<mapped-drive>/WowB-ARM64.exe",
+    "argv": ["<runtime_dir>/proton-11.0-90624-arm64ec/bin/wine", "explorer", "/desktop=shell,<screen-size>", "<client-pe>", "-d3d11"],
+    "cwd": "parent directory of client_pe",
+    "env": {
+      "WINEPREFIX": "<prefix_dir>",
+      "HOME": "<imagefs>/home/xuser",
+      "PATH": "<imagefs>/usr/bin:<runtime_dir>/proton-11.0-90624-arm64ec/bin",
+      "LD_LIBRARY_PATH": "<imagefs>/usr/lib:/system/lib64:<runtime_dir>/proton-11.0-90624-arm64ec/lib",
+      "WINEESYNC": "0",
+      "DISPLAY": ":0",
+      "XDG_DATA_DIRS": "<imagefs>/usr/share",
+      "PREFIX": "<imagefs>/usr",
+      "renderer": "system Vulkan only; no Turnip/Adrenotools or VK_ICD_FILENAMES",
+      "dll_search": "native ARM64 system32 only; no x86_64 override",
+      "android_glue": "ANDROID_SYSVSHM_SERVER plus app-provided LD_PRELOAD glue"
+    },
+    "logs": ["runtime-provision.log", "wine-stdout.log", "wine-stderr.log", "runtime-manifest.json"]
+  },
+  "gates": [
+    "verify outer ZIP hash and reject traversal",
+    "stream-extract both WCP tarballs with traversal/special-file rejection",
+    "audit every extracted ELF and PE header without execution",
+    "audit prefixPack.txz member paths and architecture-compatible root",
+    "run only on Android arm64 hardware; x86_64 emulator is not evidence"
+  ]
+}

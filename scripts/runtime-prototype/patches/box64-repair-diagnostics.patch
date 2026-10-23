@@ -1,0 +1,128 @@
+diff --git a/app/src/main/java/com/winlator/core/GeneralComponents.java b/app/src/main/java/com/winlator/core/GeneralComponents.java
+--- a/app/src/main/java/com/winlator/core/GeneralComponents.java
++++ b/app/src/main/java/com/winlator/core/GeneralComponents.java
+@@ -202,16 +202,16 @@
+         return type.getSource(context, identifier).getPath();
+     }
+ 
+-    public static void extractFile(Type type, Context context, String identifier, String defaultVersion) {
+-        extractFile(type, context, identifier, defaultVersion, null);
++    public static boolean extractFile(Type type, Context context, String identifier, String defaultVersion) {
++        return extractFile(type, context, identifier, defaultVersion, null);
+     }
+ 
+-    public static void extractFile(Type type, Context context, String identifier, String defaultVersion, TarCompressorUtils.OnExtractFileListener onExtractFileListener) {
++    public static boolean extractFile(Type type, Context context, String identifier, String defaultVersion, TarCompressorUtils.OnExtractFileListener onExtractFileListener) {
+         File destination = type.getDestination(context);
+ 
+         if (isBuiltinComponent(type, identifier)) {
+             String sourcePath = type.assetFolder()+"/"+type.lowerName()+"-"+identifier+".tzst";
+-            TarCompressorUtils.extract(TarCompressorUtils.Type.ZSTD, context, sourcePath, destination, onExtractFileListener);
++            return TarCompressorUtils.extract(TarCompressorUtils.Type.ZSTD, context, sourcePath, destination, onExtractFileListener);
+         }
+         else {
+             File componentDir = getComponentDir(type, context);
+@@ -219,8 +219,9 @@
+             boolean success = TarCompressorUtils.extract(TarCompressorUtils.Type.ZSTD, source, destination, onExtractFileListener);
+             if (!success) {
+                 String sourcePath = type.assetFolder()+"/"+type.lowerName()+"-"+defaultVersion+".tzst";
+-                TarCompressorUtils.extract(TarCompressorUtils.Type.ZSTD, context, sourcePath, destination, onExtractFileListener);
++                success = TarCompressorUtils.extract(TarCompressorUtils.Type.ZSTD, context, sourcePath, destination, onExtractFileListener);
+             }
++            return success;
+         }
+     }
+
+diff --git a/app/src/main/java/com/winlator/xenvironment/components/GuestProgramLauncherComponent.java b/app/src/main/java/com/winlator/xenvironment/components/GuestProgramLauncherComponent.java
+--- a/app/src/main/java/com/winlator/xenvironment/components/GuestProgramLauncherComponent.java
++++ b/app/src/main/java/com/winlator/xenvironment/components/GuestProgramLauncherComponent.java
+@@ -20,6 +20,10 @@
+ import com.winlator.xenvironment.EnvironmentComponent;
+ import com.winlator.xenvironment.RootFS;
+ 
++import com.wowforever.runtimeprobe.Box64Diagnostics;
++import com.wowforever.runtimeprobe.Box64InstallPolicy;
++import com.wowforever.runtimeprobe.Box64LaunchPlan;
++
+ import java.io.File;
+ import java.util.List;
+ 
+@@ -29,13 +33,17 @@
+     private EnvVars envVars;
+     private String box64Preset = Box64Preset.CONSERVATIVE;
+     private Callback<Integer> terminationCallback;
++    private static final int PREPARATION_FAILURE_STATUS = 127;
+     private static final Object lock = new Object();
+ 
+     @Override
+     public void start() {
+         synchronized (lock) {
+             stop();
+-            extractBox64File();
++            if (!extractBox64File()) {
++                if (terminationCallback != null) terminationCallback.call(PREPARATION_FAILURE_STATUS);
++                return;
++            }
+             copyDefaultBox64RCFile();
+             pid = execGuestProgram();
+         }
+@@ -105,7 +113,17 @@
+         File shmDir = new File(rootDir, "/tmp/shm");
+         if (!shmDir.isDirectory()) shmDir.mkdirs();
+ 
+-        String command = rootDir+"/usr/local/bin/box64 "+guestExecutable;
++        File box64 = new File(rootDir, "usr/local/bin/box64");
++        String command = Box64LaunchPlan.command(rootDir, box64, guestExecutable);
++        ProcessHelper.addRuntimeDiagnostic("BOX64-EXEC cwd="+rootDir.getAbsolutePath()+
++            " loader="+Box64Diagnostics.resolveInterpreter(rootDir, box64).getAbsolutePath()+
++            " loaderMode=explicit-library-path"+
++            " wine="+rootDir+rootFS.getWinePath()+"/bin/wine wineExists="+
++            new File(rootDir, rootFS.getWinePath()+"/bin/wine").isFile()+
++            " selectedEnv=HOME:"+envVars.get("HOME")+";PATH:"+envVars.get("PATH")+
++            ";LD_LIBRARY_PATH:"+envVars.get("LD_LIBRARY_PATH")+
++            ";BOX64_LD_LIBRARY_PATH:"+envVars.get("BOX64_LD_LIBRARY_PATH")+
++            ";BOX64_RCFILE:"+envVars.get("BOX64_RCFILE"));
+ 
+         return ProcessHelper.exec(command, envVars, rootDir, (status) -> {
+             synchronized (lock) {
+@@ -116,15 +134,42 @@
+     }
+ 
+-    private void extractBox64File() {
++    private boolean extractBox64File() {
+         Context context = environment.getContext();
++        RootFS rootFS = environment.getRootFS();
+         SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(context);
+         String box64Version = preferences.getString("box64_version", DefaultVersion.BOX64);
+         String currentBox64Version = preferences.getString("current_box64_version", "");
+-
+-        if (!box64Version.equals(currentBox64Version)) {
+-            GeneralComponents.extractFile(GeneralComponents.Type.BOX64, context, box64Version, DefaultVersion.BOX64);
+-            preferences.edit().putString("current_box64_version", box64Version).apply();
++        File box64 = new File(rootFS.getRootDir(), "usr/local/bin/box64");
++        boolean validBefore = Box64Diagnostics.isExecutableFile(box64);
++        ProcessHelper.addRuntimeDiagnostic("BOX64-BEFORE version="+box64Version+" oldMarker="+
++            currentBox64Version+" "+Box64Diagnostics.describe("path", box64));
++
++        boolean shouldExtract = Box64InstallPolicy.needsExtraction(box64Version, currentBox64Version, validBefore);
++        boolean extractionSucceeded = !shouldExtract;
++        if (shouldExtract) {
++            extractionSucceeded = GeneralComponents.extractFile(GeneralComponents.Type.BOX64, context, box64Version, DefaultVersion.BOX64);
++            if (extractionSucceeded) box64.setExecutable(true, false);
++        }
++        boolean validAfter = Box64Diagnostics.isExecutableFile(box64);
++        ProcessHelper.addRuntimeDiagnostic("BOX64-AFTER extraction="+extractionSucceeded+
++            " shouldExtract="+shouldExtract+" "+Box64Diagnostics.describe("path", box64));
++        boolean launchable = Box64Diagnostics.isLaunchable(rootFS.getRootDir(), box64);
++        if (!Box64InstallPolicy.mayCommitMarker(extractionSucceeded, validAfter) || !launchable) {
++            preferences.edit().remove("current_box64_version").apply();
++            ProcessHelper.addRuntimeDiagnostic("BOX64-FAIL markerRemoved=true executable="+validAfter+
++                " launchable="+launchable+" status="+PREPARATION_FAILURE_STATUS);
++            return false;
+         }
++        preferences.edit().putString("current_box64_version", box64Version).apply();
++        ProcessHelper.addRuntimeDiagnostic("BOX64-MARKER-COMMITTED version="+box64Version);
++        return true;
+     }
+ 
+     private void copyDefaultBox64RCFile() {

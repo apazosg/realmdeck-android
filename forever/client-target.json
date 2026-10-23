@@ -1,0 +1,41 @@
+{
+  "schema": "wowforever.client-target",
+  "schema_version": 1,
+  "product": "wow_classic_beta",
+  "region": "us",
+  "platform": "Windows",
+  "architecture": "arm64",
+  "locale": "enUS",
+  "version": "1.60.1.70425",
+  "build_id": 70425,
+  "launcher_version_code": 80,
+  "launcher_version_name": "0.2.56-functional-client-manager",
+  "artifact_subdir": "client-updater-packaged-catalog/70425",
+  "build_config": {
+    "hash": "ea9c525eef74f1d682c00a8ef39a5d2b",
+    "bytes": 59537,
+    "sha256": "487140959a68e1443f2fd539f3011581eefe28333a9db8e8750bf1d571635aed"
+  },
+  "cdn_config": {
+    "hash": "fcab7fec2ccc6b8158b56b6938ec4551",
+    "bytes": 59257,
+    "sha256": "56ec0775976db5dd441f05e6c5f03ea011a343739bbc8f45a690a4918bf75b5e"
+  },
+  "catalog": {
+    "bytes": 99647488,
+    "sha256": "8327794ea6867113dec55b07b4f3755c70fe808a67502eb12242ccbf742a69fc",
+    "gzip_bytes": 63202489,
+    "gzip_sha256": "92cfb71b680a21e5fe35c487564454bfc9096dd84c16369c9575236acdb0adb4"
+  },
+  "executable": {
+    "path": "WowB-ARM64.exe",
+    "decoded_bytes": 80562896,
+    "content_key": "5e6f9642d56cf15dff2364a0da6a1abd",
+    "expected_machine": 43620
+  },
+  "server_version_source": "user-confirmed",
+  "native_validation": {
+    "status": "pending",
+    "evidence_sha256": null
+  }
+}

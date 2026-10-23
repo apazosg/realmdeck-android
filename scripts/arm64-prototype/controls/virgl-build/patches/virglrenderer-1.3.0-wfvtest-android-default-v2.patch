@@ -1,0 +1,94 @@
+diff --git a/src/vrend/vrend_winsys_egl.c b/src/vrend/vrend_winsys_egl.c
+--- a/src/vrend/vrend_winsys_egl.c
++++ b/src/vrend/vrend_winsys_egl.c
+@@ -349,6 +352,15 @@
+ 
+    const char *client_extensions = eglQueryString (NULL, EGL_EXTENSIONS);
+    bool has_egl_base = virgl_egl_has_extension_in_string(client_extensions, "EGL_EXT_platform_base");
++#if defined(WFVTEST_ANDROID_DEFAULT) && defined(__ANDROID__)
++#ifdef ENABLE_GBM
++   const bool android_default = gles && !surfaceless && !gbm;
++#else
++   const bool android_default = false;
++#endif
++#else
++   const bool android_default = false;
++#endif
+ #ifdef WFVTEST_DIAG
+    wfvtest_diag_value("compile.gbm", WFVTEST_DIAG_COMPILED_GBM);
+    wfvtest_diag_value("input.surfaceless", surfaceless ? 1 : 0);
+@@ -368,7 +380,7 @@
+    if (surfaceless)
+       conf_att[1] = EGL_PBUFFER_BIT;
+ #ifdef ENABLE_GBM
+-   if (!gbm && (!surfaceless || !has_egl_base)) {
++   if (!gbm && (!surfaceless || !has_egl_base) && !android_default) {
+ #ifdef WFVTEST_DIAG
+       wfvtest_diag_value("init.reject_missing_gbm_or_platform", 1);
+ #endif
+@@ -385,8 +397,13 @@
+ #endif
+ 
++#if defined(WFVTEST_ANDROID_DEFAULT) && defined(__ANDROID__)
++   if (android_default) {
++      egl->egl_display = eglGetDisplay(EGL_DEFAULT_DISPLAY);
++   } else
++#endif
+ #ifdef ENABLE_GBM_ALLOCATION
+    if (virgl_egl_get_display(egl)) {
+      /* Make -Wdangling-else happy. */
+    } else /* Fallback to surfaceless. */
+ #endif
+    if (has_egl_base) {
+@@ -492,0 +509,21 @@
++#if defined(WFVTEST_ANDROID_DEFAULT) && defined(__ANDROID__)
++   if (android_default) {
++      success = eglMakeCurrent(egl->egl_display, EGL_NO_SURFACE, EGL_NO_SURFACE,
++                               egl->egl_ctx);
++      if (!success) {
++         EGLint error = eglGetError();
++         virgl_error("WFVTEST_ANDROID_DEFAULT stage=eglMakeCurrent result=0 egl_error=0x%04x\n", error);
++         goto fail;
++      }
++      const char *vendor = (const char *)glGetString(GL_VENDOR);
++      const char *renderer = (const char *)glGetString(GL_RENDERER);
++      const char *version = (const char *)glGetString(GL_VERSION);
++      virgl_error("WFVTEST_ANDROID_DEFAULT gl.vendor=%.*s\n", 128,
++              vendor ? vendor : "<unavailable>");
++      virgl_error("WFVTEST_ANDROID_DEFAULT gl.renderer=%.*s\n", 128,
++              renderer ? renderer : "<unavailable>");
++      virgl_error("WFVTEST_ANDROID_DEFAULT gl.version=%.*s\n", 128,
++              version ? version : "<unavailable>");
++      goto wfvtest_after_make_current;
++   }
++#endif
+@@ -503,1 +532,4 @@
++#if defined(WFVTEST_ANDROID_DEFAULT) && defined(__ANDROID__)
++wfvtest_after_make_current:
++#endif
+    if (virgl_egl_supports_fences(egl)) {
+@@ -529,4 +562,24 @@
+  fail:
++#if defined(WFVTEST_ANDROID_DEFAULT) && defined(__ANDROID__)
++   if (android_default) {
++      EGLBoolean cleanup_result;
++      if (egl->signaled_fence != EGL_NO_SYNC_KHR) {
++         cleanup_result = eglDestroySyncKHR(egl->egl_display, egl->signaled_fence);
++         virgl_error("WFVTEST_ANDROID_DEFAULT cleanup.sync result=%d\n", cleanup_result ? 1 : 0);
++      }
++      if (egl->egl_ctx != EGL_NO_CONTEXT) {
++         cleanup_result = eglMakeCurrent(egl->egl_display, EGL_NO_SURFACE, EGL_NO_SURFACE,
++                                         EGL_NO_CONTEXT);
++         virgl_error("WFVTEST_ANDROID_DEFAULT cleanup.make_current result=%d\n", cleanup_result ? 1 : 0);
++         cleanup_result = eglDestroyContext(egl->egl_display, egl->egl_ctx);
++         virgl_error("WFVTEST_ANDROID_DEFAULT cleanup.context result=%d\n", cleanup_result ? 1 : 0);
++      }
++      if (egl->egl_display != EGL_NO_DISPLAY) {
++         cleanup_result = eglTerminate(egl->egl_display);
++         virgl_error("WFVTEST_ANDROID_DEFAULT cleanup.display result=%d\n", cleanup_result ? 1 : 0);
++      }
++   }
++#endif
+    free(egl);
+    return NULL;
+ }

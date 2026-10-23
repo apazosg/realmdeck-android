@@ -1,0 +1,70 @@
+# Cliente, CASC y artefactos de descarga (Fase 1) — NUNCA versionar
+/client/
+/data/
+*.build.info
+/build/
+/_classic_beta_/
+
+# Runtime Android / APKs (Fases 5-6)
+*.apk
+*.aab
+*.apks
+/data/apk/
+
+# Proyecto Android (Fase 5)
+# Se versionan el wrapper de Gradle y las .so precompiladas de jniLibs;
+# se ignoran salidas de build y configuración local.
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/.cxx/
+android/captures/
+android/.kotlin/
+
+# Las .so se regeneran con scripts/build-android-native.sh (no versionar binarios)
+android/app/src/main/jniLibs/**/*.so
+
+# Entornos Python
+.venv/
+__pycache__/
+*.py[cod]
+
+# Logs y temporales
+logs/
+*.log
+*.tmp
+
+# Configuración y evidencia privadas; publicar solo ejemplos sin valores reales.
+# Estas reglas no eliminan datos ya versionados ni filtran texto dentro de docs.
+.env
+.env.*
+!.env.example
+.git-credentials
+/private/
+/.agents/references/github-access.md
+*.keystore
+*.jks
+*.key
+*.pem
+*.p12
+*.pfx
+*.har
+*.pcap
+*.pcapng
+
+# Sistema
+.DS_Store
+
+# Backend diagnóstico (Node; secretos y build fuera del repo)
+services/diagnostics/node_modules/
+services/diagnostics/dist/
+.vercel/
+
+# Rust (Fase 3: patcher Forever)
+# El workspace compila en <raíz>/target/
+# (Cargo.lock SÍ se versiona: el binario irá dentro del APK)
+/target/
+/Data/
+/WTF/
+/Logs/

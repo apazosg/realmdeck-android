@@ -1,0 +1,8 @@
+diff --git a/src/mesa/util/os_misc.c b/src/mesa/util/os_misc.c
+--- a/src/mesa/util/os_misc.c
++++ b/src/mesa/util/os_misc.c
+@@ -58,2 +58,2 @@
+-#  include <log/log.h>
+-#  include <cutils/properties.h>
++#  include <android/log.h>
++#  include <sys/system_properties.h>

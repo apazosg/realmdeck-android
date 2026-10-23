@@ -1,0 +1,94 @@
+diff --git a/app/src/main/java/com/winlator/xenvironment/ImageFsInstaller.java b/app/src/main/java/com/winlator/xenvironment/ImageFsInstaller.java
+--- a/app/src/main/java/com/winlator/xenvironment/ImageFsInstaller.java
++++ b/app/src/main/java/com/winlator/xenvironment/ImageFsInstaller.java
+@@ -9,0 +10,1 @@
++import com.winlator.core.Callback;
+@@ -70,4 +70,8 @@
+-            if (success) {
+-                installBundledProton(activity, imageFs);
+-                imageFs.createImgVersionFile(LATEST_VERSION);
+-                resetContainerImgVersions(activity);
++            if (success) {
++                success = installBundledProton(activity, imageFs);
++                if (success) {
++                    imageFs.createImgVersionFile(LATEST_VERSION);
++                    success = imageFs.isValid() && imageFs.getVersion() == LATEST_VERSION;
++                    if (success) resetContainerImgVersions(activity);
++                }
+@@ -81,19 +85,51 @@
+-    private static void installBundledProton(Context context, ImageFs imageFs) {
+-        File optDir = imageFs.getInstalledWineDir();
+-        if (!optDir.isDirectory()) optDir.mkdirs();
+-
+-        File protonArm64ecDir = new File(optDir, DEFAULT_PROTON_ARM64EC);
+-        if (!protonArm64ecDir.isDirectory()) {
+-            TarCompressorUtils.extract(TarCompressorUtils.Type.XZ, context, DEFAULT_PROTON_ARM64EC_ASSET, protonArm64ecDir);
+-        }
+-    }
+-
+-    public static void installIfNeeded(final MainActivity activity) {
+-        ImageFs imageFs = ImageFs.find(activity);
+-        if (!imageFs.isValid() || imageFs.getVersion() < LATEST_VERSION) {
+-            installFromAssets(activity);
+-        }
+-        else {
+-            installBundledProton(activity, imageFs);
+-        }
+-    }
++    private static boolean installBundledProton(Context context, ImageFs imageFs) {
++        File optDir = imageFs.getInstalledWineDir();
++        if (!optDir.isDirectory() && !optDir.mkdirs()) return false;
++        File protonArm64ecDir = new File(optDir, DEFAULT_PROTON_ARM64EC);
++        if (!protonArm64ecDir.isDirectory() && !protonArm64ecDir.mkdirs()) return false;
++        File wine = new File(protonArm64ecDir, "bin/wine");
++        if (!wine.isFile() && !TarCompressorUtils.extract(TarCompressorUtils.Type.XZ, context, DEFAULT_PROTON_ARM64EC_ASSET, protonArm64ecDir)) return false;
++        return wine.isFile() && wine.canExecute();
++    }
++
++    public static void installIfNeeded(final MainActivity activity) {
++        ImageFs imageFs = ImageFs.find(activity);
++        if (!imageFs.isValid() || imageFs.getVersion() < LATEST_VERSION) installFromAssets(activity);
++        else installBundledProton(activity, imageFs);
++    }
++
++    private static final java.util.concurrent.atomic.AtomicBoolean FEX_INSTALL_IN_PROGRESS = new java.util.concurrent.atomic.AtomicBoolean(false);
++    private static final Object FEX_INSTALL_LOCK = new Object();
++    private static final java.util.ArrayList<Callback<Boolean>> FEX_INSTALL_WAITERS = new java.util.ArrayList<>();
++
++    /** Headless installer used by the standalone diagnostic Activity. */
++    public static void installIfNeeded(final Context context, final Callback<Boolean> callback) {
++        synchronized (FEX_INSTALL_LOCK) {
++            if (callback != null) FEX_INSTALL_WAITERS.add(callback);
++            if (!FEX_INSTALL_IN_PROGRESS.compareAndSet(false, true)) return;
++        }
++        final ImageFs imageFs = ImageFs.find(context);
++        Executors.newSingleThreadExecutor().execute(() -> {
++            boolean success = false;
++            try {
++                final File rootDir = imageFs.getRootDir();
++                if (!imageFs.isValid() || imageFs.getVersion() != LATEST_VERSION) {
++                    clearRootDir(rootDir);
++                    success = TarCompressorUtils.extract(TarCompressorUtils.Type.XZ, context, "imagefs.txz", rootDir);
++                    if (success) success = TarCompressorUtils.extract(TarCompressorUtils.Type.ZSTD, context, "imagefs_patches.tzst", rootDir);
++                }
++                else success = true;
++                if (success) success = installBundledProton(context, imageFs);
++                if (success) {
++                    imageFs.createImgVersionFile(LATEST_VERSION);
++                    success = imageFs.isValid() && imageFs.getVersion() == LATEST_VERSION;
++                    if (success) resetContainerImgVersions(context);
++                }
++            }
++            catch (Throwable error) { success = false; }
++            java.util.ArrayList<Callback<Boolean>> waiters;
++            synchronized (FEX_INSTALL_LOCK) {
++                FEX_INSTALL_IN_PROGRESS.set(false);
++                waiters = new java.util.ArrayList<>(FEX_INSTALL_WAITERS);
++                FEX_INSTALL_WAITERS.clear();
++            }
++            for (Callback<Boolean> waiter : waiters) {
++                try { waiter.call(success); }
++                catch (Throwable ignored) {}
++            }
++        });
++    }

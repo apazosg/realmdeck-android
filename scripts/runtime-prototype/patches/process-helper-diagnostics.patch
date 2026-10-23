@@ -1,0 +1,65 @@
+diff --git a/app/src/main/java/com/winlator/core/ProcessHelper.java b/app/src/main/java/com/winlator/core/ProcessHelper.java
+--- a/app/src/main/java/com/winlator/core/ProcessHelper.java
++++ b/app/src/main/java/com/winlator/core/ProcessHelper.java
+@@ -63,6 +63,9 @@ public abstract class ProcessHelper {
+     }
+ 
+     public static int exec(String command, EnvVars envVars, File workingDir, Callback<Integer> terminationCallback) {
++        if (RuntimeProcessDiagnostics.isEnabled()) {
++            return RuntimeProcessDiagnostics.exec(splitCommand(command), envVars, workingDir, terminationCallback, snapshotDebugCallback());
++        }
+         int pid = -1;
+         try {
+             ProcessBuilder processBuilder = (new ProcessBuilder(splitCommand(command))).directory(workingDir);
+@@ -88,6 +91,58 @@ public abstract class ProcessHelper {
+         return pid;
+     }
+ 
++    public static void addRuntimeDiagnostic(String line) {
++        ArrayList<Callback<String>> callbacks;
++        synchronized (debugCallbacks) {
++            callbacks = new ArrayList<>(debugCallbacks);
++        }
++        if (callbacks.isEmpty()) {
++            if (MainActivity.DEBUG_MODE) System.out.println(line);
++            return;
++        }
++        for (Callback<String> callback : callbacks) {
++            try { callback.call(line); }
++            catch (Exception e) {
++                if (MainActivity.DEBUG_MODE) System.out.println("RUNTIME-DIAGNOSTIC-CALLBACK-ERROR type="+e.getClass().getSimpleName());
++            }
++        }
++    }
++
++    private static Callback<String> snapshotDebugCallback() {
++        ArrayList<Callback<String>> callbacks;
++        synchronized (debugCallbacks) {
++            callbacks = new ArrayList<>(debugCallbacks);
++        }
++        return (line) -> {
++            if (!callbacks.isEmpty()) {
++                for (Callback<String> callback : callbacks) {
++                    try { callback.call(line); }
++                    catch (Exception e) {
++                        if (MainActivity.DEBUG_MODE) System.out.println("PROCESS-DIAGNOSTIC-CALLBACK-ERROR type="+e.getClass().getSimpleName());
++                    }
++                }
++            }
++            else if (MainActivity.DEBUG_MODE) System.out.println(line);
++        };
++    }
++
++    public static void awaitRuntimeProcessDiagnostics(long timeoutMs, Callback<Boolean> completion) {
++        RuntimeProcessDiagnostics.awaitAllAsync(timeoutMs, completion);
++    }
++
++    public static void setRuntimeProcessDiagnosticsEnabled(boolean enabled) {
++        RuntimeProcessDiagnostics.setEnabled(enabled);
++    }
++
++    public static void stopRuntimeProcessDiagnostics() {
++        RuntimeProcessDiagnostics.stopAll();
++    }
++
+     private static void createDebugThread(final InputStream inputStream) {

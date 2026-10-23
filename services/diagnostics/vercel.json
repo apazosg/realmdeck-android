@@ -1,0 +1,13 @@
+{
+  "framework": null,
+  "buildCommand": "npm run build",
+  "installCommand": "npm ci",
+  "outputDirectory": "public",
+  "regions": ["fra1"],
+  "crons": [
+    {
+      "path": "/api/cleanup",
+      "schedule": "0 3 * * *"
+    }
+  ]
+}

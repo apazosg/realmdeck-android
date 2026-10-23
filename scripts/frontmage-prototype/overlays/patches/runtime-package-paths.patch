@@ -1,0 +1,20 @@
+diff --git a/app/src/main/java/com/winlator/core/WineUtils.java b/app/src/main/java/com/winlator/core/WineUtils.java
+--- a/app/src/main/java/com/winlator/core/WineUtils.java
++++ b/app/src/main/java/com/winlator/core/WineUtils.java
+@@ -46,1 +46,2 @@
+         for (String[] drive : container.drivesIterator()) {
++        String appStorage = new File(container.getRootDir().getParentFile().getParentFile().getParentFile(), "storage").getPath();
+@@ -49,8 +50,6 @@
+             // Migration: older builds used different package IDs in the default E: path.
+-            if ("/data/data/com.winlator/storage".equals(drivePath) ||
+-                "/data/data/com.winlator.cmod/storage".equals(drivePath)) {
+-                drivePath = "/data/data/com.winlator.llm/storage";
++            if (drivePath.startsWith("/data/data/") && drivePath.endsWith("/storage")) {
++                drivePath = appStorage;
+             }
+@@ -56,6 +54,4 @@
+             if (!linkTarget.isDirectory() && (
+-                    path.endsWith("/com.winlator/storage") ||
+-                    path.endsWith("/com.winlator.cmod/storage") ||
+-                    path.endsWith("/com.winlator.llm/storage"))) {
++                    path.startsWith("/data/data/") && path.endsWith("/storage"))) {

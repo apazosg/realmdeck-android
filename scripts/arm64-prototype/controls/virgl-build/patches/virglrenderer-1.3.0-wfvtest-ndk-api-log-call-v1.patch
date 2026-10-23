@@ -1,0 +1,6 @@
+diff --git a/src/mesa/util/os_misc.c b/src/mesa/util/os_misc.c
+--- a/src/mesa/util/os_misc.c
++++ b/src/mesa/util/os_misc.c
+@@ -120,1 +120,1 @@
+-   LOG_PRI(ANDROID_LOG_ERROR, LOG_TAG, "%s", message);
++   __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, "%s", message);

@@ -1,0 +1,22 @@
+diff --git a/src/meson.build b/src/meson.build
+--- a/src/meson.build
++++ b/src/meson.build
+@@ -265,6 +265,7 @@
+    version : binary_age.to_string() + '.'
+              + interface_age.to_string() + '.'
+              + revision.to_string(),
++   install_rpath : '$ORIGIN',
+    install : true
+ )
+ 
+diff --git a/vtest/meson.build b/vtest/meson.build
+--- a/vtest/meson.build
++++ b/vtest/meson.build
+@@ -71,6 +71,7 @@
+    virgl_test_server_sources,
+    link_with: [libvtest],
+    dependencies : [libvirglrenderer_dep, gallium_dep],
++   install_rpath : '$ORIGIN/../lib',
+    install : true
+ )
+ 

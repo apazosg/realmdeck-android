@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Legacy starting window (API 29-30): solid approved navy with the existing
+     emblem foreground centered at a fixed size. Referenced ONLY by the base
+     Theme.ForeverFunctionalSplash windowBackground; API 31+ keeps the solid
+     navy windowBackground plus the native windowSplashScreen* pair, so the
+     emblem never appears twice in a row. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@color/forever_navy_bottom" />
+    <item
+        android:drawable="@drawable/forever_emblem_foreground"
+        android:width="192dp"
+        android:height="192dp"
+        android:gravity="center" />
+</layer-list>

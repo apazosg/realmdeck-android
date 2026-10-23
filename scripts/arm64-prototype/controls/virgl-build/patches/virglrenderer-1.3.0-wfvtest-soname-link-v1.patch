@@ -1,0 +1,8 @@
+diff --git a/src/meson.build b/src/meson.build
+--- a/src/meson.build
++++ b/src/meson.build
+@@ -268,3 +268,4 @@
+    soversion : '1',
++   link_args : ['-Wl,-soname,libvirglrenderer.so.1'],
+    install_rpath : '$ORIGIN',
+    install : true

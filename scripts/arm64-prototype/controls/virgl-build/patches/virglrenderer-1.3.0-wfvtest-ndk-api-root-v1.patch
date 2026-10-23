@@ -1,0 +1,14 @@
+diff --git a/meson.build b/meson.build
+--- a/meson.build
++++ b/meson.build
+@@ -86,6 +86,10 @@
+ gbm_dep = not_found
+ thread_dep = dependency('threads')
+ epoxy_dep = dependency('epoxy', version: '>= 1.5.4')
++android_log_dep = not_found
++if host_machine.system() == 'android'
++  android_log_dep = cc.find_library('log', required : true)
++endif
+ m_dep = cc.find_library('m', required : false)
+ dl_dep = not_found
+ if not with_host_windows and not with_host_darwin

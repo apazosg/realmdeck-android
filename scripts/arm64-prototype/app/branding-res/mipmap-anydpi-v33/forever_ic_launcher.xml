@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Forever launcher icon for API 33+: same background/foreground plus the
+     monochrome twin so themed icons follow the system theme. -->
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@drawable/forever_emblem_background" />
+    <foreground android:drawable="@drawable/forever_emblem_foreground" />
+    <monochrome android:drawable="@drawable/forever_emblem_monochrome" />
+</adaptive-icon>

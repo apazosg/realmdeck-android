@@ -1,0 +1,30 @@
+--- GuestEglLoader.c
++++ GuestEglLoader.c
+@@ -320,7 +320,7 @@
+ static int environment_name_allowed(const char *name) {
+     static const char *const allowed[] = {
+         "PATH", "ANDROID_ROOT", "ANDROID_DATA", "LD_LIBRARY_PATH", "TMPDIR",
+-        "__EGL_VENDOR_LIBRARY_FILENAMES", "GALLIUM_DRIVER", "VTEST_SOCKET_NAME"
++        "__EGL_VENDOR_LIBRARY_FILENAMES", "GALLIUM_DRIVER", "VTEST_SOCKET_NAME", "EGL_LOG_LEVEL", "MESA_LOG", "MESA_LOG_LEVEL"
+     };
+     size_t i;
+     for (i = 0U; i < sizeof(allowed) / sizeof(allowed[0]); ++i) if (strcmp(name, allowed[i]) == 0) return 1;
+@@ -331,7 +331,7 @@
+     extern char **environ;
+     static const char *const names[] = {
+         "PATH", "ANDROID_ROOT", "ANDROID_DATA", "LD_LIBRARY_PATH", "TMPDIR",
+-        "__EGL_VENDOR_LIBRARY_FILENAMES", "GALLIUM_DRIVER", "VTEST_SOCKET_NAME"
++        "__EGL_VENDOR_LIBRARY_FILENAMES", "GALLIUM_DRIVER", "VTEST_SOCKET_NAME", "EGL_LOG_LEVEL", "MESA_LOG", "MESA_LOG_LEVEL"
+     };
+     const char *values[sizeof(names) / sizeof(names[0])];
+     size_t i;
+@@ -360,7 +360,8 @@
+            strcmp(values[1], "/system") == 0 && strcmp(values[2], "/data") == 0 &&
+            strcmp(values[3], paths->ldLibraryPath) == 0 && strcmp(values[4], paths->cwd) == 0 &&
+            strcmp(values[5], paths->vendorJson) == 0 && strcmp(values[6], "virpipe") == 0 &&
+-           strcmp(values[7], "vtest.sock") == 0;
++           strcmp(values[7], "vtest.sock") == 0 && strcmp(values[8], "debug") == 0 &&
++           strcmp(values[9], "file") == 0 && strcmp(values[10], "debug") == 0;
+ }
+ 
+ static int validate_scope(const char *runId, const Identity *identity, Paths *paths) {

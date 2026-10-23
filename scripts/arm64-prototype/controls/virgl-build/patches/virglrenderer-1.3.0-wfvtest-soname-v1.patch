@@ -1,0 +1,11 @@
+diff --git a/src/meson.build b/src/meson.build
+--- a/src/meson.build
++++ b/src/meson.build
+@@ -265,6 +265,7 @@
+    version : binary_age.to_string() + '.'
+              + interface_age.to_string() + '.'
+              + revision.to_string(),
++   soversion : '1',
+    install_rpath : '$ORIGIN',
+    install : true
+ )

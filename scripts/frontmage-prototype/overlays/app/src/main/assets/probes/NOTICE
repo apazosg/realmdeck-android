@@ -1,0 +1,3 @@
+Probe sources are generated from the repository's diagnostic sources at build time.
+The recovered FrontMage runtime assets remain external reference artifacts; audit
+copyright and redistribution rights before distribution.

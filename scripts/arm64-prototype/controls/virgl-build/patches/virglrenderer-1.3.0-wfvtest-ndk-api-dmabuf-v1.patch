@@ -1,0 +1,6 @@
+diff --git a/src/virgl_util.c b/src/virgl_util.c
+--- a/src/virgl_util.c
++++ b/src/virgl_util.c
+@@ -369,1 +369,1 @@
+-   #ifdef DMA_BUF_SET_NAME_B
++   #ifdef DMA_BUF_SET_NAME

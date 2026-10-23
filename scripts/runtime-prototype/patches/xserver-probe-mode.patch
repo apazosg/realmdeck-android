@@ -1,0 +1,198 @@
+diff --git a/app/src/main/java/com/winlator/XServerDisplayActivity.java b/app/src/main/java/com/winlator/XServerDisplayActivity.java
+--- a/app/src/main/java/com/winlator/XServerDisplayActivity.java
++++ b/app/src/main/java/com/winlator/XServerDisplayActivity.java
+@@ -8,6 +8,7 @@
+ import android.content.Intent;
+ import android.content.SharedPreferences;
+ import android.os.Bundle;
++import android.os.Handler;
++import android.os.Looper;
+ import android.view.KeyEvent;
+ import android.view.Menu;
+ import android.view.MenuItem;
+@@ -44,6 +45,7 @@
+ import com.winlator.contentdialog.VirGLConfigDialog;
+ import com.winlator.contentdialog.WineD3DConfigDialog;
+ import com.winlator.core.AppUtils;
++import com.winlator.core.Callback;
+ import com.winlator.core.DefaultVersion;
+ import com.winlator.core.EnvVars;
+ import com.winlator.core.FileUtils;
+@@ -92,6 +94,7 @@
+ import com.winlator.xserver.WindowManager;
+ import com.winlator.xserver.XServer;
+ 
++import com.wowforever.runtimeprobe.ProbeRunStore;
++import com.wowforever.runtimeprobe.ProbeTerminalState;
+ import org.json.JSONArray;
+ import org.json.JSONException;
+ import org.json.JSONObject;
+@@ -135,6 +138,12 @@
+     private int frameRatingWindowId = -1;
+     private Win32AppWorkarounds win32AppWorkarounds;
+     private String screenEffectProfile;
++    private boolean probeMode;
++    private String probeRunId;
++    private final ProbeTerminalState probeRunFinished = new ProbeTerminalState();
++    private final java.util.concurrent.atomic.AtomicBoolean probeEnvironmentStopped = new java.util.concurrent.atomic.AtomicBoolean(false);
++    private Callback<String> probeDebugCallback;
++    private final Handler probeHandler = new Handler(Looper.getMainLooper());
++    private Runnable probeTimeout;
+ 
+     @Override
+     public void onCreate(Bundle savedInstanceState) {
+@@ -155,6 +164,18 @@
+ 
+         NavigationView navigationView = findViewById(R.id.NavigationView);
+         ProcessHelper.removeAllDebugCallbacks();
++        probeMode = getIntent().getBooleanExtra("probe_mode", false);
++        probeRunId = getIntent().getStringExtra("probe_run_id");
++        if (probeMode && !ProbeRunStore.isValidRunId(probeRunId)) {
++            probeMode = false;
++            finish();
++            return;
++        }
++        if (probeMode && probeRunId != null && !probeRunId.isEmpty()) {
++            probeDebugCallback = (line) -> ProbeRunStore.appendHostLog(this, probeRunId, line);
++            ProcessHelper.addDebugCallback(probeDebugCallback);
++            ProcessHelper.setRuntimeProcessDiagnosticsEnabled(true);
++            ProbeRunStore.appendHostLog(this, probeRunId, "XSERVER-BEGIN");
++        }
+         boolean enableLogs = preferences.getBoolean("enable_wine_debug", false) || preferences.getInt("box64_logs", 0) >= 1;
+         if (enableLogs) ProcessHelper.addDebugCallback(debugDialog = new DebugDialog(this));
+         Menu menu = navigationView.getMenu();
+@@ -164,6 +176,13 @@
+         if (!isGenerateWineprefix()) {
+             ContainerManager containerManager = new ContainerManager(this);
+             container = containerManager.getContainerById(getIntent().getIntExtra("container_id", 0));
+             containerManager.activateContainer(container);
++            if (probeMode && !ProbeRunStore.isContainerActivated(this, container)) {
++                ProbeRunStore.appendHostLog(this, probeRunId, "CONTAINER-ACTIVATION-ERROR expected="+container.getRootDir());
++                if (finishProbe(127)) finish();
++                return;
++            }
+ 
+@@ -310,17 +329,17 @@
+     @Override
+     public void onResume() {
+         super.onResume();
+         if (environment != null) {
+             xServerView.onResume();
+-            environment.onResume();
++            if (!probeMode) environment.onResume();
+         }
+     }
+ 
+     @Override
+     public void onPause() {
+         super.onPause();
+         if (environment != null && !isInPictureInPictureMode()) {
+-            environment.onPause();
++            if (!probeMode) environment.onPause();
+             xServerView.onPause();
+         }
+     }
+ 
+@@ -328,6 +347,10 @@
+     @Override
+     protected void onDestroy() {
++        if (probeMode) requestProbeCleanup(125);
++        if (probeDebugCallback != null) ProcessHelper.removeDebugCallback(probeDebugCallback);
+-        winHandler.stop();
+-        if (environment != null) environment.stopEnvironmentComponents();
++        probeHandler.removeCallbacksAndMessages(null);
++        stopProbeEnvironment();
+         super.onDestroy();
+@@ -415,6 +436,11 @@
+     private void exit() {
++        if (probeMode) {
++            requestProbeCleanup(125);
++            finish();
++            return;
++        }
+         winHandler.stop();
+         if (environment != null) environment.stopEnvironmentComponents();
+ 
+@@ -491,12 +517,16 @@
+         GuestProgramLauncherComponent guestProgramLauncherComponent = new GuestProgramLauncherComponent();
+ 
++        String guestExecutable = null;
++        if (probeMode) {
++            guestExecutable = "wine cmd /c C:\\wow\\diag\\"+probeRunId+"\\run-probes.bat";
++        }
+         if (container != null) {
+             if (container.getHUDMode() == FrameRating.Mode.FULL.ordinal()) envVars.put("X11_WND_GPU_INFO", "1");
+ 
+             String desktopName = shortcut != null || getIntent().hasExtra("exec_path") ? "nogui" : "shell";
+-            String guestExecutable = "wine explorer /desktop="+desktopName+","+xServer.screenInfo+" "+getWineStartCommand();
+-            guestProgramLauncherComponent.setGuestExecutable(guestExecutable);
++            if (!probeMode) guestExecutable = "wine explorer /desktop="+desktopName+","+xServer.screenInfo+" "+getWineStartCommand();
++            if (guestExecutable != null) guestProgramLauncherComponent.setGuestExecutable(guestExecutable);
+ 
+             envVars.putAll(container.getEnvVars());
+             if (shortcut != null) envVars.putAll(shortcut.getExtra("envVars"));
+@@ -540,12 +570,18 @@
+         }
+ 
+         guestProgramLauncherComponent.setEnvVars(envVars);
+-        guestProgramLauncherComponent.setTerminationCallback((status) -> exit());
++        guestProgramLauncherComponent.setTerminationCallback((status) -> {
++            if (probeMode) {
++                if (finishProbe(status)) runOnUiThread(this::finish);
++            }
++            else exit();
++        });
+         environment.addComponent(guestProgramLauncherComponent);
+ 
+@@ -552,6 +588,16 @@
+             overrideEnvVars = null;
+         }
+         environment.startEnvironmentComponents();
++        if (probeMode) {
++            probeTimeout = () -> {
++                probeHandler.removeCallbacks(probeTimeout);
++                requestProbeCleanup(124);
++            };
++            probeHandler.postDelayed(probeTimeout, 120000L);
++        }
+ 
+         winHandler.start();
+         envVars.clear();
+@@ -933,6 +979,16 @@
+         return getIntent().getBooleanExtra("generate_wineprefix", false);
+     }
+ 
++    private boolean finishProbe(int status) {
++        if (!probeMode || !ProbeRunStore.isValidRunId(probeRunId)) return false;
++        if (!probeRunFinished.compareAndSet(false, true)) return false;
++        if (probeTimeout != null) probeHandler.removeCallbacks(probeTimeout);
++        ProbeRunStore.appendHostLog(this, probeRunId, "XSERVER-END status="+status);
++        ProbeRunStore.finish(this, probeRunId, status);
++        return true;
++    }
++
++    private void requestProbeCleanup(int status) {
++        if (!probeMode || !ProbeRunStore.isValidRunId(probeRunId)) return;
++        if (!probeRunFinished.compareAndSet(false, true)) return;
++        if (probeTimeout != null) probeHandler.removeCallbacks(probeTimeout);
++        ProbeRunStore.appendHostLog(this, probeRunId,
++            status == 124 ? "PROBE-TIMEOUT timeoutMs=120000" : "PROBE-DESTROY status="+status);
++        stopProbeEnvironment();
++        ProcessHelper.awaitRuntimeProcessDiagnostics(5000L, (quiescent) -> {
++            ProbeRunStore.appendHostLog(this, probeRunId,
++                "PROBE-CLEANUP quiescent="+quiescent+" termination_unknown=true");
++            ProbeRunStore.blockNewRuns();
++            ProbeRunStore.finish(this, probeRunId, status, true, quiescent);
++            runOnUiThread(this::finish);
++        });
++    }
++
++    private void stopProbeEnvironment() {
++        if (probeMode && !probeEnvironmentStopped.compareAndSet(false, true)) return;
++        ProcessHelper.stopRuntimeProcessDiagnostics();
++        ProcessHelper.setRuntimeProcessDiagnosticsEnabled(false);
++        if (winHandler != null) winHandler.stop();
++        if (environment != null) environment.stopEnvironmentComponents();
++    }
++
+     private String getWineStartCommand() {

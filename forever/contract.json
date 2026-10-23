@@ -1,0 +1,74 @@
+{
+  "$comment": "Contrato del parche Forever. Fuente de verdad del comportamiento: .agents/specs. Verificacion de deriva: scripts/contract-drift-check. NO editar a mano sin correr el chequeo.",
+  "product": {
+    "ngdp": "wow_classic_beta",
+    "region": "us",
+    "cdn_family_product": "wow_classic",
+    "cdn_path": "tpr/wow",
+    "cdn_config_path": "tpr/configs/data",
+    "cdn_hosts": ["level3.blizzard.com", "us.cdn.blizzard.com"],
+    "validated_build_config_hash": "05215079e3905ef5922ae0b03ffefb73",
+    "validated_cdn_config_hash": "9b3c456dbb837d133a026d380c7c13e9",
+    "validated_build_id": 70009,
+    "validated_versions_name": "1.60.1.70009"
+  },
+  "server": {
+    "portal": "auth.gpon.com.co",
+    "login_port": 1119,
+    "world_port": 8085
+  },
+  "tags": {
+    "platform": "Windows",
+    "arch": "x86_64",
+    "locale": "enUS"
+  },
+  "launcher": {
+    "exe": "WowB.exe",
+    "config_name": "BetaSuspendedTest.wtf",
+    "launch_arg": "-config BetaSuspendedTest.wtf",
+    "text_locale": "enUS",
+    "status_url": "https://raw.githubusercontent.com/defexnicolas/wow-classic-launcher/status/status.json",
+    "status_max_age_minutes": 15,
+    "supported_versions": ["1.60.1.69913", "1.60.1.69977", "1.60.1.70009"],
+    "measured_version": "1.60.1.70009",
+    "client_build_regex": "^1\\.60\\.\\d+\\.\\d{5}$"
+  },
+  "key_store": {
+    "entry_size": 40,
+    "entry_count": 12,
+    "target_group": 8,
+    "anchor_group": 1,
+    "expected_flags": [1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1],
+    "padding_after_flag": {
+      "windows": "7f0000",
+      "wine": "000000",
+      "accepts": ["7f0000", "000000"]
+    },
+    "scan_alignment": 4,
+    "known_keys": [
+      "9B0671C815DFF513BFD4A2B26AE1F84EC9106841B2FB620DB65F6ADE7C21AD06",
+      "112451B9843C2799E4750AA3D9B9AFABF536A645B863C4ADB2078B932B354E04",
+      "A6B858485748BF38BE193517AB90F8DE169EFF0989EA9360DB346A378B0FFE15",
+      "50FFDEB807F8FF73A299A16000AA6575C5945BE875ADFC8795374ED3415249AC",
+      "9F842D078755647C008E5FE3E12B839A981DE02A1F520CB2545CC04CD2323E0E",
+      "B8CC75864D8EF461D8DD6AA7425E2C63C24D3982066B8D773A1549BFE24E05EE",
+      "76BB7BBDD9F34E124A4573C3AA227E3C87CC603506697D054F6FDEC342E56EBF",
+      "1FD6DD8FA0EC30D39E3F72E755B8A045BDE0F70449DC71008B767C2EAA89FB9F",
+      "15D618BD7DB577BD9A8D45769C59E4FC631633BF447398A4B489B4C26FBC03AD",
+      "B34EC592D2AC4993F5FFC85B15C3DA9078694051CB224345592AF7136D796C99",
+      "9E91586DD4B115AB0568B21959E181F6545910BC5E2F30B8975CA09D7BC3EFCE",
+      "769C824A1DADD19AEEFA420414D1732DAF44537F98AA229FC5477BCA55F9D59A"
+    ],
+    "new_key": "02596F0D0C061A8B30745988FD72C59E29EC367FB0F341F28E0F08D037BAFC69"
+  },
+  "upstream": {
+    "repo": "https://github.com/defexnicolas/wow-classic-launcher",
+    "validated_commit": "91bc22d44a8d12e9eb5bb0e7529df02f5a40427d",
+    "validated_date": "2026-09-27",
+    "sources": {
+      "windows": "src/Patcher.cs",
+      "linux": "linux/classic-forever-linux.py",
+      "status": "src/Status.cs"
+    }
+  }
+}

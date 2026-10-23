@@ -1,0 +1,11 @@
+diff --git a/src/mesa/meson.build b/src/mesa/meson.build
+--- a/src/mesa/meson.build
++++ b/src/mesa/meson.build
+@@ -21,6 +21,7 @@
+ deps_mesa = [
+   m_dep,
+   thread_dep,
++  android_log_dep,
+ ]
+ 
+ libmesa = static_library(

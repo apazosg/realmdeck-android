@@ -1,0 +1,10 @@
+diff --git a/src/mesa/util/os_misc.c b/src/mesa/util/os_misc.c
+--- a/src/mesa/util/os_misc.c
++++ b/src/mesa/util/os_misc.c
+@@ -175,3 +175,3 @@
+-   char value[PROPERTY_VALUE_MAX];
+-   char key[PROPERTY_KEY_MAX];
+-   char *p = key, *end = key + PROPERTY_KEY_MAX;
++   char value[PROP_VALUE_MAX];
++   char key[PROP_NAME_MAX];
++   char *p = key, *end = key + PROP_NAME_MAX;

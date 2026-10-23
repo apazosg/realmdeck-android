@@ -1,0 +1,3959 @@
+{
+  "schema": "wowforever.wine-prefix-template/v1",
+  "archive": {
+    "name": "prefixPack.txz",
+    "size_bytes": 22067952,
+    "sha256": "ade99dc80b17086a269c038c9bc50167902103a9a61df763cba4d613543ff12a",
+    "member_count": 575,
+    "typed_counts": {
+      "directory": 163,
+      "regular": 408,
+      "symlink": 4
+    },
+    "regular_payload_bytes": 159617307,
+    "members": [
+      {
+        "path": ".wine",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/dosdevices",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/dosdevices/._c:",
+        "type": "regular",
+        "bytes": 249,
+        "mode": 493,
+        "sha256": "c592de4286d22d2d578dfc67aca3297944b6ae26dc8ed4b97d7a3df652427f41"
+      },
+      {
+        "path": ".wine/dosdevices/._d:",
+        "type": "regular",
+        "bytes": 249,
+        "mode": 493,
+        "sha256": "c592de4286d22d2d578dfc67aca3297944b6ae26dc8ed4b97d7a3df652427f41"
+      },
+      {
+        "path": ".wine/dosdevices/._e:",
+        "type": "regular",
+        "bytes": 249,
+        "mode": 493,
+        "sha256": "c592de4286d22d2d578dfc67aca3297944b6ae26dc8ed4b97d7a3df652427f41"
+      },
+      {
+        "path": ".wine/dosdevices/._z:",
+        "type": "regular",
+        "bytes": 249,
+        "mode": 493,
+        "sha256": "c592de4286d22d2d578dfc67aca3297944b6ae26dc8ed4b97d7a3df652427f41"
+      },
+      {
+        "path": ".wine/dosdevices/c:",
+        "type": "symlink",
+        "bytes": 0,
+        "mode": 511,
+        "target": "../drive_c"
+      },
+      {
+        "path": ".wine/dosdevices/d:",
+        "type": "symlink",
+        "bytes": 0,
+        "mode": 511,
+        "target": "/storage/emulated/0/Download"
+      },
+      {
+        "path": ".wine/dosdevices/e:",
+        "type": "symlink",
+        "bytes": 0,
+        "mode": 511,
+        "target": "/data/data/com.winlator.cmod/storage"
+      },
+      {
+        "path": ".wine/dosdevices/z:",
+        "type": "symlink",
+        "bytes": 0,
+        "mode": 511,
+        "target": "/data/user/0/com.winlator.cmod/files/imagefs/home/xuser-1/../.."
+      },
+      {
+        "path": ".wine/drive_c",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/Program Files",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/Program Files/._Common Files",
+        "type": "regular",
+        "bytes": 163,
+        "mode": 448,
+        "sha256": "eab2025664dc83bac6a67a0a2d422dcc00981daa0a37884029b6829040182468"
+      },
+      {
+        "path": ".wine/drive_c/Program Files/._Internet Explorer",
+        "type": "regular",
+        "bytes": 163,
+        "mode": 448,
+        "sha256": "eab2025664dc83bac6a67a0a2d422dcc00981daa0a37884029b6829040182468"
+      },
+      {
+        "path": ".wine/drive_c/Program Files/._Windows Media Player",
+        "type": "regular",
+        "bytes": 163,
+        "mode": 448,
+        "sha256": "eab2025664dc83bac6a67a0a2d422dcc00981daa0a37884029b6829040182468"
+      },
+      {
+        "path": ".wine/drive_c/Program Files/._Windows NT",
+        "type": "regular",
+        "bytes": 163,
+        "mode": 448,
+        "sha256": "eab2025664dc83bac6a67a0a2d422dcc00981daa0a37884029b6829040182468"
+      },
+      {
+        "path": ".wine/drive_c/Program Files/Common Files",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/Program Files/Common Files/._Microsoft Shared",
+        "type": "regular",
+        "bytes": 163,
+        "mode": 448,
+        "sha256": "eab2025664dc83bac6a67a0a2d422dcc00981daa0a37884029b6829040182468"
+      },
+      {
+        "path": ".wine/drive_c/Program Files/Common Files/._System",
+        "type": "regular",
+        "bytes": 163,
+        "mode": 448,
+        "sha256": "eab2025664dc83bac6a67a0a2d422dcc00981daa0a37884029b6829040182468"
+      },
+      {
+        "path": ".wine/drive_c/Program Files/Common Files/Microsoft Shared",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/Program Files/Common Files/Microsoft Shared/._TextConv",
+        "type": "regular",
+        "bytes": 163,
+        "mode": 448,
+        "sha256": "eab2025664dc83bac6a67a0a2d422dcc00981daa0a37884029b6829040182468"
+      },
+      {
+        "path": ".wine/drive_c/Program Files/Common Files/Microsoft Shared/TextConv",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/Program Files/Common Files/System",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/Program Files/Common Files/System/._ADO",
+        "type": "regular",
+        "bytes": 163,
+        "mode": 448,
+        "sha256": "eab2025664dc83bac6a67a0a2d422dcc00981daa0a37884029b6829040182468"
+      },
+      {
+        "path": ".wine/drive_c/Program Files/Common Files/System/._OLE DB",
+        "type": "regular",
+        "bytes": 163,
+        "mode": 448,
+        "sha256": "eab2025664dc83bac6a67a0a2d422dcc00981daa0a37884029b6829040182468"
+      },
+      {
+        "path": ".wine/drive_c/Program Files/Common Files/System/ADO",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/Program Files/Common Files/System/ADO/._msado15.dll",
+        "type": "regular",
+        "bytes": 249,
+        "mode": 448,
+        "sha256": "c592de4286d22d2d578dfc67aca3297944b6ae26dc8ed4b97d7a3df652427f41"
+      },
+      {
+        "path": ".wine/drive_c/Program Files/Common Files/System/ADO/msado15.dll",
+        "type": "regular",
+        "bytes": 1429504,
+        "mode": 448,
+        "sha256": "6b40e87bb866798a5531d0205c4d9a11f7d373fa854ad8377d18a2c7b803851f"
+      },
+      {
+        "path": ".wine/drive_c/Program Files/Common Files/System/OLE DB",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/Program Files/Common Files/System/OLE DB/._msdaps.dll",
+        "type": "regular",
+        "bytes": 249,
+        "mode": 448,
+        "sha256": "c592de4286d22d2d578dfc67aca3297944b6ae26dc8ed4b97d7a3df652427f41"
+      },
+      {
+        "path": ".wine/drive_c/Program Files/Common Files/System/OLE DB/._msdasql.dll",
+        "type": "regular",
+        "bytes": 249,
+        "mode": 448,
+        "sha256": "c592de4286d22d2d578dfc67aca3297944b6ae26dc8ed4b97d7a3df652427f41"
+      },
+      {
+        "path": ".wine/drive_c/Program Files/Common Files/System/OLE DB/._oledb32.dll",
+        "type": "regular",
+        "bytes": 249,
+        "mode": 448,
+        "sha256": "c592de4286d22d2d578dfc67aca3297944b6ae26dc8ed4b97d7a3df652427f41"
+      },
+      {
+        "path": ".wine/drive_c/Program Files/Common Files/System/OLE DB/msdaps.dll",
+        "type": "regular",
+        "bytes": 1548288,
+        "mode": 448,
+        "sha256": "86004a149046b9b28764858b3156fdaf75890ed7f88044ebe268cf9c1d919417"
+      },
+      {
+        "path": ".wine/drive_c/Program Files/Common Files/System/OLE DB/msdasql.dll",
+        "type": "regular",
+        "bytes": 1216512,
+        "mode": 448,
+        "sha256": "1c28d68a1a46605fb1fbde05f178f3b5033e84e1c474b7e58f1e85c646b8b003"
+      },
+      {
+        "path": ".wine/drive_c/Program Files/Common Files/System/OLE DB/oledb32.dll",
+        "type": "regular",
+        "bytes": 1470464,
+        "mode": 448,
+        "sha256": "1c95f77f9f6b98f99b655841c35dd5c0d31486ac6ed26e62b6eccea783286cd3"
+      },
+      {
+        "path": ".wine/drive_c/Program Files/Internet Explorer",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/Program Files/Internet Explorer/._iexplore.exe",
+        "type": "regular",
+        "bytes": 249,
+        "mode": 448,
+        "sha256": "c592de4286d22d2d578dfc67aca3297944b6ae26dc8ed4b97d7a3df652427f41"
+      },
+      {
+        "path": ".wine/drive_c/Program Files/Internet Explorer/iexplore.exe",
+        "type": "regular",
+        "bytes": 188416,
+        "mode": 448,
+        "sha256": "543a6eb6c4879b468aae25109244967c717b1fcd1bbf29c042ba133c8d5fa283"
+      },
+      {
+        "path": ".wine/drive_c/Program Files/Windows Media Player",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/Program Files/Windows Media Player/._wmplayer.exe",
+        "type": "regular",
+        "bytes": 249,
+        "mode": 448,
+        "sha256": "c592de4286d22d2d578dfc67aca3297944b6ae26dc8ed4b97d7a3df652427f41"
+      },
+      {
+        "path": ".wine/drive_c/Program Files/Windows Media Player/wmplayer.exe",
+        "type": "regular",
+        "bytes": 94208,
+        "mode": 448,
+        "sha256": "8651a146e3689e8a5e0dcc15eee4a4d03b2d0fe618c31da287ef783cb814fe0e"
+      },
+      {
+        "path": ".wine/drive_c/Program Files/Windows NT",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/Program Files/Windows NT/._Accessories",
+        "type": "regular",
+        "bytes": 163,
+        "mode": 448,
+        "sha256": "eab2025664dc83bac6a67a0a2d422dcc00981daa0a37884029b6829040182468"
+      },
+      {
+        "path": ".wine/drive_c/Program Files/Windows NT/Accessories",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/Program Files/Windows NT/Accessories/._wordpad.exe",
+        "type": "regular",
+        "bytes": 249,
+        "mode": 448,
+        "sha256": "c592de4286d22d2d578dfc67aca3297944b6ae26dc8ed4b97d7a3df652427f41"
+      },
+      {
+        "path": ".wine/drive_c/Program Files/Windows NT/Accessories/wordpad.exe",
+        "type": "regular",
+        "bytes": 770048,
+        "mode": 448,
+        "sha256": "17cee8a82a5654c809f0206c5dae975f86c2fa32849ad0c2de68c6b379abc71b"
+      },
+      {
+        "path": ".wine/drive_c/Program Files (x86)",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/Program Files (x86)/._Common Files",
+        "type": "regular",
+        "bytes": 163,
+        "mode": 448,
+        "sha256": "eab2025664dc83bac6a67a0a2d422dcc00981daa0a37884029b6829040182468"
+      },
+      {
+        "path": ".wine/drive_c/Program Files (x86)/._Internet Explorer",
+        "type": "regular",
+        "bytes": 163,
+        "mode": 448,
+        "sha256": "eab2025664dc83bac6a67a0a2d422dcc00981daa0a37884029b6829040182468"
+      },
+      {
+        "path": ".wine/drive_c/Program Files (x86)/._Windows Media Player",
+        "type": "regular",
+        "bytes": 163,
+        "mode": 448,
+        "sha256": "eab2025664dc83bac6a67a0a2d422dcc00981daa0a37884029b6829040182468"
+      },
+      {
+        "path": ".wine/drive_c/Program Files (x86)/._Windows NT",
+        "type": "regular",
+        "bytes": 163,
+        "mode": 448,
+        "sha256": "eab2025664dc83bac6a67a0a2d422dcc00981daa0a37884029b6829040182468"
+      },
+      {
+        "path": ".wine/drive_c/Program Files (x86)/Common Files",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/Program Files (x86)/Common Files/._System",
+        "type": "regular",
+        "bytes": 163,
+        "mode": 448,
+        "sha256": "eab2025664dc83bac6a67a0a2d422dcc00981daa0a37884029b6829040182468"
+      },
+      {
+        "path": ".wine/drive_c/Program Files (x86)/Common Files/System",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/Program Files (x86)/Common Files/System/._ADO",
+        "type": "regular",
+        "bytes": 163,
+        "mode": 448,
+        "sha256": "eab2025664dc83bac6a67a0a2d422dcc00981daa0a37884029b6829040182468"
+      },
+      {
+        "path": ".wine/drive_c/Program Files (x86)/Common Files/System/._OLE DB",
+        "type": "regular",
+        "bytes": 163,
+        "mode": 448,
+        "sha256": "eab2025664dc83bac6a67a0a2d422dcc00981daa0a37884029b6829040182468"
+      },
+      {
+        "path": ".wine/drive_c/Program Files (x86)/Common Files/System/ADO",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/Program Files (x86)/Common Files/System/ADO/._msado15.dll",
+        "type": "regular",
+        "bytes": 249,
+        "mode": 448,
+        "sha256": "c592de4286d22d2d578dfc67aca3297944b6ae26dc8ed4b97d7a3df652427f41"
+      },
+      {
+        "path": ".wine/drive_c/Program Files (x86)/Common Files/System/ADO/msado15.dll",
+        "type": "regular",
+        "bytes": 618496,
+        "mode": 448,
+        "sha256": "64471e8d545a8c04fbdd7399233dedb477357bbf47c9c4318fe1a8612542641a"
+      },
+      {
+        "path": ".wine/drive_c/Program Files (x86)/Common Files/System/OLE DB",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/Program Files (x86)/Common Files/System/OLE DB/._msdaps.dll",
+        "type": "regular",
+        "bytes": 249,
+        "mode": 448,
+        "sha256": "c592de4286d22d2d578dfc67aca3297944b6ae26dc8ed4b97d7a3df652427f41"
+      },
+      {
+        "path": ".wine/drive_c/Program Files (x86)/Common Files/System/OLE DB/._msdasql.dll",
+        "type": "regular",
+        "bytes": 249,
+        "mode": 448,
+        "sha256": "c592de4286d22d2d578dfc67aca3297944b6ae26dc8ed4b97d7a3df652427f41"
+      },
+      {
+        "path": ".wine/drive_c/Program Files (x86)/Common Files/System/OLE DB/._oledb32.dll",
+        "type": "regular",
+        "bytes": 249,
+        "mode": 448,
+        "sha256": "c592de4286d22d2d578dfc67aca3297944b6ae26dc8ed4b97d7a3df652427f41"
+      },
+      {
+        "path": ".wine/drive_c/Program Files (x86)/Common Files/System/OLE DB/msdaps.dll",
+        "type": "regular",
+        "bytes": 626688,
+        "mode": 448,
+        "sha256": "be498b8a3d40f14e895c6c83b99c538d668bac81b805ef2b319698120f73a9f5"
+      },
+      {
+        "path": ".wine/drive_c/Program Files (x86)/Common Files/System/OLE DB/msdasql.dll",
+        "type": "regular",
+        "bytes": 552960,
+        "mode": 448,
+        "sha256": "96d87fb1955e65368ddeb03adaafee0f8c8689b7d0787059972e5e541d74418d"
+      },
+      {
+        "path": ".wine/drive_c/Program Files (x86)/Common Files/System/OLE DB/oledb32.dll",
+        "type": "regular",
+        "bytes": 671744,
+        "mode": 448,
+        "sha256": "6bb7bcabd134e09ee4d8708916a63b655040bccccc684c3a6fdb5c1214b63fe8"
+      },
+      {
+        "path": ".wine/drive_c/Program Files (x86)/Internet Explorer",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/Program Files (x86)/Internet Explorer/._iexplore.exe",
+        "type": "regular",
+        "bytes": 249,
+        "mode": 448,
+        "sha256": "c592de4286d22d2d578dfc67aca3297944b6ae26dc8ed4b97d7a3df652427f41"
+      },
+      {
+        "path": ".wine/drive_c/Program Files (x86)/Internet Explorer/iexplore.exe",
+        "type": "regular",
+        "bytes": 167936,
+        "mode": 448,
+        "sha256": "4251c11991f9b135a42e82dd410368d98fe020ee6a8e58ee6b960f5cc77f1c82"
+      },
+      {
+        "path": ".wine/drive_c/Program Files (x86)/Windows Media Player",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/Program Files (x86)/Windows Media Player/._wmplayer.exe",
+        "type": "regular",
+        "bytes": 249,
+        "mode": 448,
+        "sha256": "c592de4286d22d2d578dfc67aca3297944b6ae26dc8ed4b97d7a3df652427f41"
+      },
+      {
+        "path": ".wine/drive_c/Program Files (x86)/Windows Media Player/wmplayer.exe",
+        "type": "regular",
+        "bytes": 81920,
+        "mode": 448,
+        "sha256": "4ef8b770dbbfb15541a71a16aa75d3f25e745e64d62816cf5f0b88f69ca50d0d"
+      },
+      {
+        "path": ".wine/drive_c/Program Files (x86)/Windows NT",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/Program Files (x86)/Windows NT/._Accessories",
+        "type": "regular",
+        "bytes": 163,
+        "mode": 448,
+        "sha256": "eab2025664dc83bac6a67a0a2d422dcc00981daa0a37884029b6829040182468"
+      },
+      {
+        "path": ".wine/drive_c/Program Files (x86)/Windows NT/Accessories",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/Program Files (x86)/Windows NT/Accessories/._wordpad.exe",
+        "type": "regular",
+        "bytes": 249,
+        "mode": 448,
+        "sha256": "c592de4286d22d2d578dfc67aca3297944b6ae26dc8ed4b97d7a3df652427f41"
+      },
+      {
+        "path": ".wine/drive_c/Program Files (x86)/Windows NT/Accessories/wordpad.exe",
+        "type": "regular",
+        "bytes": 679936,
+        "mode": 448,
+        "sha256": "7a96a2390f62dc3bdb42950e8ea7276612a45cf40100f345be951ed27661a9bf"
+      },
+      {
+        "path": ".wine/drive_c/ProgramData",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/ProgramData/._Microsoft",
+        "type": "regular",
+        "bytes": 163,
+        "mode": 448,
+        "sha256": "eab2025664dc83bac6a67a0a2d422dcc00981daa0a37884029b6829040182468"
+      },
+      {
+        "path": ".wine/drive_c/ProgramData/Microsoft",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/ProgramData/Microsoft/._Windows",
+        "type": "regular",
+        "bytes": 163,
+        "mode": 448,
+        "sha256": "eab2025664dc83bac6a67a0a2d422dcc00981daa0a37884029b6829040182468"
+      },
+      {
+        "path": ".wine/drive_c/ProgramData/Microsoft/Windows",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/ProgramData/Microsoft/Windows/._Start Menu",
+        "type": "regular",
+        "bytes": 163,
+        "mode": 448,
+        "sha256": "eab2025664dc83bac6a67a0a2d422dcc00981daa0a37884029b6829040182468"
+      },
+      {
+        "path": ".wine/drive_c/ProgramData/Microsoft/Windows/._Templates",
+        "type": "regular",
+        "bytes": 163,
+        "mode": 448,
+        "sha256": "eab2025664dc83bac6a67a0a2d422dcc00981daa0a37884029b6829040182468"
+      },
+      {
+        "path": ".wine/drive_c/ProgramData/Microsoft/Windows/Start Menu",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/ProgramData/Microsoft/Windows/Start Menu/._Programs",
+        "type": "regular",
+        "bytes": 163,
+        "mode": 448,
+        "sha256": "eab2025664dc83bac6a67a0a2d422dcc00981daa0a37884029b6829040182468"
+      },
+      {
+        "path": ".wine/drive_c/ProgramData/Microsoft/Windows/Start Menu/Programs",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/ProgramData/Microsoft/Windows/Start Menu/Programs/._Administrative Tools",
+        "type": "regular",
+        "bytes": 163,
+        "mode": 448,
+        "sha256": "eab2025664dc83bac6a67a0a2d422dcc00981daa0a37884029b6829040182468"
+      },
+      {
+        "path": ".wine/drive_c/ProgramData/Microsoft/Windows/Start Menu/Programs/._StartUp",
+        "type": "regular",
+        "bytes": 163,
+        "mode": 448,
+        "sha256": "eab2025664dc83bac6a67a0a2d422dcc00981daa0a37884029b6829040182468"
+      },
+      {
+        "path": ".wine/drive_c/ProgramData/Microsoft/Windows/Start Menu/Programs/Administrative Tools",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/ProgramData/Microsoft/Windows/Start Menu/Programs/StartUp",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/ProgramData/Microsoft/Windows/Templates",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/users",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/users/Public",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/users/Public/Desktop",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/users/Public/Documents",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/users/Public/Music",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/users/Public/Pictures",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/users/Public/Videos",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/users/xuser",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/users/xuser/AppData",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/users/xuser/AppData/Local",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/users/xuser/AppData/Local/Microsoft",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/users/xuser/AppData/Local/Microsoft/Windows",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/users/xuser/AppData/Local/Microsoft/Windows/History",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/users/xuser/AppData/Local/Microsoft/Windows/INetCache",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/users/xuser/AppData/Local/Microsoft/Windows/INetCookies",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/users/xuser/AppData/Local/Temp",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/users/xuser/AppData/LocalLow",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/users/xuser/AppData/Roaming",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/users/xuser/AppData/Roaming/._Microsoft",
+        "type": "regular",
+        "bytes": 163,
+        "mode": 448,
+        "sha256": "eab2025664dc83bac6a67a0a2d422dcc00981daa0a37884029b6829040182468"
+      },
+      {
+        "path": ".wine/drive_c/users/xuser/AppData/Roaming/Microsoft",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/users/xuser/AppData/Roaming/Microsoft/._Windows",
+        "type": "regular",
+        "bytes": 163,
+        "mode": 448,
+        "sha256": "eab2025664dc83bac6a67a0a2d422dcc00981daa0a37884029b6829040182468"
+      },
+      {
+        "path": ".wine/drive_c/users/xuser/AppData/Roaming/Microsoft/Windows",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/users/xuser/AppData/Roaming/Microsoft/Windows/._Network Shortcuts",
+        "type": "regular",
+        "bytes": 163,
+        "mode": 448,
+        "sha256": "eab2025664dc83bac6a67a0a2d422dcc00981daa0a37884029b6829040182468"
+      },
+      {
+        "path": ".wine/drive_c/users/xuser/AppData/Roaming/Microsoft/Windows/._Printer Shortcuts",
+        "type": "regular",
+        "bytes": 163,
+        "mode": 448,
+        "sha256": "eab2025664dc83bac6a67a0a2d422dcc00981daa0a37884029b6829040182468"
+      },
+      {
+        "path": ".wine/drive_c/users/xuser/AppData/Roaming/Microsoft/Windows/._Recent",
+        "type": "regular",
+        "bytes": 163,
+        "mode": 448,
+        "sha256": "eab2025664dc83bac6a67a0a2d422dcc00981daa0a37884029b6829040182468"
+      },
+      {
+        "path": ".wine/drive_c/users/xuser/AppData/Roaming/Microsoft/Windows/._SendTo",
+        "type": "regular",
+        "bytes": 163,
+        "mode": 448,
+        "sha256": "eab2025664dc83bac6a67a0a2d422dcc00981daa0a37884029b6829040182468"
+      },
+      {
+        "path": ".wine/drive_c/users/xuser/AppData/Roaming/Microsoft/Windows/._Start Menu",
+        "type": "regular",
+        "bytes": 163,
+        "mode": 448,
+        "sha256": "eab2025664dc83bac6a67a0a2d422dcc00981daa0a37884029b6829040182468"
+      },
+      {
+        "path": ".wine/drive_c/users/xuser/AppData/Roaming/Microsoft/Windows/._Templates",
+        "type": "regular",
+        "bytes": 163,
+        "mode": 448,
+        "sha256": "eab2025664dc83bac6a67a0a2d422dcc00981daa0a37884029b6829040182468"
+      },
+      {
+        "path": ".wine/drive_c/users/xuser/AppData/Roaming/Microsoft/Windows/._Themes",
+        "type": "regular",
+        "bytes": 163,
+        "mode": 448,
+        "sha256": "eab2025664dc83bac6a67a0a2d422dcc00981daa0a37884029b6829040182468"
+      },
+      {
+        "path": ".wine/drive_c/users/xuser/AppData/Roaming/Microsoft/Windows/Network Shortcuts",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/users/xuser/AppData/Roaming/Microsoft/Windows/Printer Shortcuts",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/users/xuser/AppData/Roaming/Microsoft/Windows/Recent",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/users/xuser/AppData/Roaming/Microsoft/Windows/SendTo",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/users/xuser/AppData/Roaming/Microsoft/Windows/Start Menu",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/users/xuser/AppData/Roaming/Microsoft/Windows/Start Menu/._Programs",
+        "type": "regular",
+        "bytes": 163,
+        "mode": 448,
+        "sha256": "eab2025664dc83bac6a67a0a2d422dcc00981daa0a37884029b6829040182468"
+      },
+      {
+        "path": ".wine/drive_c/users/xuser/AppData/Roaming/Microsoft/Windows/Start Menu/Programs",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/users/xuser/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/._Administrative Tools",
+        "type": "regular",
+        "bytes": 163,
+        "mode": 448,
+        "sha256": "eab2025664dc83bac6a67a0a2d422dcc00981daa0a37884029b6829040182468"
+      },
+      {
+        "path": ".wine/drive_c/users/xuser/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/._StartUp",
+        "type": "regular",
+        "bytes": 163,
+        "mode": 448,
+        "sha256": "eab2025664dc83bac6a67a0a2d422dcc00981daa0a37884029b6829040182468"
+      },
+      {
+        "path": ".wine/drive_c/users/xuser/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Administrative Tools",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/users/xuser/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/StartUp",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/users/xuser/AppData/Roaming/Microsoft/Windows/Templates",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/users/xuser/AppData/Roaming/Microsoft/Windows/Themes",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/users/xuser/Contacts",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/users/xuser/Desktop",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/users/xuser/Documents",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/users/xuser/Documents/Downloads",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/users/xuser/Documents/Music",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/users/xuser/Documents/Pictures",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/users/xuser/Documents/Templates",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/users/xuser/Documents/Videos",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/users/xuser/Downloads",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/users/xuser/Favorites",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/users/xuser/Links",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/users/xuser/Music",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/users/xuser/Pictures",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/users/xuser/Saved Games",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/users/xuser/Searches",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/users/xuser/Temp",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/users/xuser/Videos",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/windows",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/windows/command",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/windows/command/start.exe",
+        "type": "regular",
+        "bytes": 110592,
+        "mode": 448,
+        "sha256": "e2de89f1813ee8219a545d39316450f535161ace65652a109cddd2f52af39bbf"
+      },
+      {
+        "path": ".wine/drive_c/windows/explorer.exe",
+        "type": "regular",
+        "bytes": 630784,
+        "mode": 448,
+        "sha256": "656d17c28d3e619a23b433177bab035992ce362b4178002f5a2b06e3b03f443a"
+      },
+      {
+        "path": ".wine/drive_c/windows/Fonts",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/windows/globalization",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/windows/globalization/sorting",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/windows/globalization/sorting/sortdefault.nls",
+        "type": "regular",
+        "bytes": 3379292,
+        "mode": 448,
+        "sha256": "8f92004f6d245648e98a5b6b206e8fdb3dfe6694251692590f5f9aae1552a943"
+      },
+      {
+        "path": ".wine/drive_c/windows/help",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/windows/hh.exe",
+        "type": "regular",
+        "bytes": 139264,
+        "mode": 448,
+        "sha256": "90fd09491ed6088371c3cad684ca6cb298e1da6d1693477b2cc2e514f135b986"
+      },
+      {
+        "path": ".wine/drive_c/windows/inf",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/windows/inf/input.inf",
+        "type": "regular",
+        "bytes": 231,
+        "mode": 448,
+        "sha256": "78daa0afdfe8e2e00e94f56afa217b15d877b6f96b9549f0432c9dc7b0a23b5f"
+      },
+      {
+        "path": ".wine/drive_c/windows/inf/mouhid.inf",
+        "type": "regular",
+        "bytes": 460,
+        "mode": 448,
+        "sha256": "86b81b946d44c963dbb084e904ad201b17a1266486fe3badd0ba7f2c2a596173"
+      },
+      {
+        "path": ".wine/drive_c/windows/inf/winebth.inf",
+        "type": "regular",
+        "bytes": 452,
+        "mode": 384,
+        "sha256": "97ff3d24dd3d995ef375837afa31998f701ab9ecf2dc40114c989e785277bb6d"
+      },
+      {
+        "path": ".wine/drive_c/windows/inf/winebus.inf",
+        "type": "regular",
+        "bytes": 434,
+        "mode": 448,
+        "sha256": "96a1322e7d59d90471397a919fdb68aa0d215789fdf03ea6a89b9ee8ac249e1a"
+      },
+      {
+        "path": ".wine/drive_c/windows/inf/winehid.inf",
+        "type": "regular",
+        "bytes": 448,
+        "mode": 448,
+        "sha256": "9bf1d4183b5f2f2150679751c91fdd77275088994711a9d5b1277583e56abce6"
+      },
+      {
+        "path": ".wine/drive_c/windows/inf/winexinput.inf",
+        "type": "regular",
+        "bytes": 463,
+        "mode": 448,
+        "sha256": "151d69a0beba2eb8c8f6d8d67450f8df9c95409b13907c04264018b43afdf3f8"
+      },
+      {
+        "path": ".wine/drive_c/windows/logs",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/windows/notepad.exe",
+        "type": "regular",
+        "bytes": 415232,
+        "mode": 448,
+        "sha256": "2d4c0f9e397cca1ba723f2362a0b2a5ff9658c23ea4a0276e2b4253f9559ecb6"
+      },
+      {
+        "path": ".wine/drive_c/windows/performance",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/windows/performance/winsat",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/windows/performance/winsat/datastore",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/windows/regedit.exe",
+        "type": "regular",
+        "bytes": 462848,
+        "mode": 448,
+        "sha256": "48c2af663f46d98f2bbd3420e5a7d99d10cf41efa13c587666d41873474ee40e"
+      },
+      {
+        "path": ".wine/drive_c/windows/resources",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/windows/resources/themes",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/windows/resources/themes/light",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/windows/resources/themes/light/light.msstyles",
+        "type": "regular",
+        "bytes": 7577600,
+        "mode": 448,
+        "sha256": "5079242327fb494bf12f8b5e2b459a7134aa9d630849c33e9cf256475a229164"
+      },
+      {
+        "path": ".wine/drive_c/windows/rundll.exe",
+        "type": "regular",
+        "bytes": 255,
+        "mode": 448,
+        "sha256": "6984b586f0e81722330ff6a102788c8d38058dca16bfd1f24c4ea0ebb721f458"
+      },
+      {
+        "path": ".wine/drive_c/windows/security",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/windows/system",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/windows/system/ddeml.dll",
+        "type": "regular",
+        "bytes": 1645,
+        "mode": 448,
+        "sha256": "9a45a21893e1422d63541ae0b91e2a82a735a0a06b381774216d7d7f5df4d31e"
+      },
+      {
+        "path": ".wine/drive_c/windows/system/mmsystem.dll",
+        "type": "regular",
+        "bytes": 6832,
+        "mode": 448,
+        "sha256": "15792d80b6feb5130d0e02418b1f166da4a47505cdf59216065961d4298e5789"
+      },
+      {
+        "path": ".wine/drive_c/windows/system.ini",
+        "type": "regular",
+        "bytes": 536,
+        "mode": 448,
+        "sha256": "f5dc9e93b5729d771070eba114ca91d8f21a70ee64f7d388b151b71c88310bff"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/catroot",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/c_037.nls",
+        "type": "regular",
+        "bytes": 66082,
+        "mode": 448,
+        "sha256": "b9d410d973dbb040a8a7bb23898ed92c205d7e1d249bfdb0965239b97b5cffdf"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/c_10000.nls",
+        "type": "regular",
+        "bytes": 66082,
+        "mode": 448,
+        "sha256": "20128ffdabfca32cc5a5a06d101a1b3316764ee282cc1193bf0e0cc2828931b2"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/c_10001.nls",
+        "type": "regular",
+        "bytes": 162850,
+        "mode": 448,
+        "sha256": "f21285f5ee89a6d8f5355674c9e6566a064244360637bd3999baa2f726cd60bf"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/c_10002.nls",
+        "type": "regular",
+        "bytes": 195618,
+        "mode": 448,
+        "sha256": "fd781bd60164ea47af46321d5f4a1fcf087b92882b8d3dbbc1f82cebba651874"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/c_10003.nls",
+        "type": "regular",
+        "bytes": 177698,
+        "mode": 448,
+        "sha256": "ba6f053caaee7e51d1d41e72bddd689a785d25764843f38028b71fab1cbbbdbf"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/c_10004.nls",
+        "type": "regular",
+        "bytes": 66082,
+        "mode": 448,
+        "sha256": "431c4180e16b8efc43bedd2ead895c164e0763a64ea9fd1ef3a3ae083008a2a1"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/c_10005.nls",
+        "type": "regular",
+        "bytes": 66082,
+        "mode": 448,
+        "sha256": "71908c06025486f16959abad8cf6937af02c8839cdb9e543c055ffccb2ee2e23"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/c_10006.nls",
+        "type": "regular",
+        "bytes": 66082,
+        "mode": 448,
+        "sha256": "e7d833ec0360efd24b9e397d5cd90df8eb20fb026edc4f7e094b83d344b85466"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/c_10007.nls",
+        "type": "regular",
+        "bytes": 66082,
+        "mode": 448,
+        "sha256": "a856107538c7c7f6f8e31f33cabc9a52f5ecd2a984e94a34780e676cb692a750"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/c_10008.nls",
+        "type": "regular",
+        "bytes": 173602,
+        "mode": 448,
+        "sha256": "254037ddb9f782fbb6cb8066e7539bfd69668a2fc5f889adf3b520920910190a"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/c_10010.nls",
+        "type": "regular",
+        "bytes": 66082,
+        "mode": 448,
+        "sha256": "58f88a47a96e99aae5a4d5b2ab494953630facf0c53bc0f6a958b294f8a691d1"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/c_10017.nls",
+        "type": "regular",
+        "bytes": 66082,
+        "mode": 448,
+        "sha256": "a9d08101018e60e6ef34822e7689aed54c79bbf64fec7dadc81522fd553dd974"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/c_10021.nls",
+        "type": "regular",
+        "bytes": 66082,
+        "mode": 448,
+        "sha256": "641fafbacdb8d0e6fd9be7c834bed252ff3094f79384f0ad3d1162061bbc9cff"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/c_10029.nls",
+        "type": "regular",
+        "bytes": 66082,
+        "mode": 448,
+        "sha256": "22b18b7bca17d3131f2959a8b6b3615ff868cf697c06ac1d564549fe19c3aed6"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/c_10079.nls",
+        "type": "regular",
+        "bytes": 66082,
+        "mode": 448,
+        "sha256": "3b615693f00a038e80e300497ab39bc1ae2685ee1d3a0d9ea6430c134c727269"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/c_10081.nls",
+        "type": "regular",
+        "bytes": 66082,
+        "mode": 448,
+        "sha256": "69b3dac9104ec586758ca7d0767a53dcf314b033222eb7e3759bac32fe313e2f"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/c_10082.nls",
+        "type": "regular",
+        "bytes": 66082,
+        "mode": 448,
+        "sha256": "576b82b42f226ffc93a520b79a2bce500ec092b511ff011f2d4ae1b727767f1e"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/c_1026.nls",
+        "type": "regular",
+        "bytes": 66082,
+        "mode": 448,
+        "sha256": "ea6e5ef1cb5f7ec613fd82fa8088b8055bbdc94e003ac80bc32612fcb4f65ee1"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/c_1250.nls",
+        "type": "regular",
+        "bytes": 66082,
+        "mode": 448,
+        "sha256": "99ddf78fd740d5d73871f377b003245d7e21f6df6d1fc8bd729b17cfc0533b4f"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/c_1251.nls",
+        "type": "regular",
+        "bytes": 66082,
+        "mode": 448,
+        "sha256": "0a290fd64ff2f5176ff0582b2dad396bbf6636d408e061fae7158dd89606928b"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/c_1252.nls",
+        "type": "regular",
+        "bytes": 66082,
+        "mode": 448,
+        "sha256": "e2634ee32da7977d762d2d45be2053309ee718572a7d8bb0034180dc1b0b6b76"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/c_1253.nls",
+        "type": "regular",
+        "bytes": 66082,
+        "mode": 448,
+        "sha256": "a9543da84c7fc172a0523ae1f9f6122f36cd29d60c7a5390e97c09d574774793"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/c_1254.nls",
+        "type": "regular",
+        "bytes": 66082,
+        "mode": 448,
+        "sha256": "70756e5f20fe0e095e319b3c021a92a8a311847249e13f3ee88804cecc1df747"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/c_1255.nls",
+        "type": "regular",
+        "bytes": 66082,
+        "mode": 448,
+        "sha256": "d25f2cbf67dc8932811799c003981d6ccf479b476f612382021af3cef6113a48"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/c_1256.nls",
+        "type": "regular",
+        "bytes": 66082,
+        "mode": 448,
+        "sha256": "66f87b8e30c4e72f861993f48f5f34387663545a4cd23ad3e0dd9ed146467639"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/c_1257.nls",
+        "type": "regular",
+        "bytes": 66082,
+        "mode": 448,
+        "sha256": "6ee5c098f01433e56fd92bc66d8d5530946ad1dcee96998e09e9b6df05e7d611"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/c_1258.nls",
+        "type": "regular",
+        "bytes": 66082,
+        "mode": 448,
+        "sha256": "f1966c599370dac14cea80810075b260eaa4b97689c47f6317e5a4ec30c23496"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/c_1361.nls",
+        "type": "regular",
+        "bytes": 189986,
+        "mode": 448,
+        "sha256": "b43c800d6087589c47b86a27a7c8d1d5a665c1854321db0468b0a7cec5677fbe"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/c_20127.nls",
+        "type": "regular",
+        "bytes": 66082,
+        "mode": 448,
+        "sha256": "951a19ce0d3c785d12ea94cb28ce5c2c096d302e35b3fb3e8b35248a006435ba"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/c_20866.nls",
+        "type": "regular",
+        "bytes": 66082,
+        "mode": 448,
+        "sha256": "b2c0873fc150b83fe8656cf9058e29d73bea332bb2a46977d0499eadaf8c7c7f"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/c_20932.nls",
+        "type": "regular",
+        "bytes": 180770,
+        "mode": 448,
+        "sha256": "df9370898e537bf89ebedf2a5d5e8e036c081b8cfee43e9776ed23366bec1815"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/c_20949.nls",
+        "type": "regular",
+        "bytes": 177698,
+        "mode": 448,
+        "sha256": "0e4c5d943a12c5b4ba0924e51f41fd4d9216c76c905d1b37fe5a4e0915436fbd"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/c_21866.nls",
+        "type": "regular",
+        "bytes": 66082,
+        "mode": 448,
+        "sha256": "b53104a08f5e468ec95140ba243008796d9ef7e4b8595fc75bb2541859299113"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/c_28591.nls",
+        "type": "regular",
+        "bytes": 66082,
+        "mode": 448,
+        "sha256": "aa52cf173808f65b117f0d7af574c11dde85133cccde306ccc57b5de50961b5c"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/c_28592.nls",
+        "type": "regular",
+        "bytes": 66082,
+        "mode": 448,
+        "sha256": "b2d095492bcfb35edc67329ea0a233b8f8d1b83fa72269204eb09522ae70ccc1"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/c_28593.nls",
+        "type": "regular",
+        "bytes": 66082,
+        "mode": 448,
+        "sha256": "9effe3c56b0cf721aaf55769050fb4a80c74e553819053d00363ed3b39d15451"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/c_28594.nls",
+        "type": "regular",
+        "bytes": 66082,
+        "mode": 448,
+        "sha256": "3b23903cae75b7f29f87b5ec774cb3d9095e6f1464c6421e8fb3f50335dfbce2"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/c_28595.nls",
+        "type": "regular",
+        "bytes": 66082,
+        "mode": 448,
+        "sha256": "00619caa1f9f9d1087cb5b3884eaec39f468d0a7a0056972666ff6bdbdae8faf"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/c_28596.nls",
+        "type": "regular",
+        "bytes": 66082,
+        "mode": 448,
+        "sha256": "cd1018cfaaca3ee8d5e22548360c259be7b5d6678fde1cb773ba3bdaa63857d3"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/c_28597.nls",
+        "type": "regular",
+        "bytes": 66082,
+        "mode": 448,
+        "sha256": "7c9bf3b6ccec261fa9678d3c5fe7281572562964d6cf96c7fb257ca8c25d94b9"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/c_28598.nls",
+        "type": "regular",
+        "bytes": 66082,
+        "mode": 448,
+        "sha256": "e3085f4ea2409824fe0b076798cf4581200d310aecfad0cfa97549d2c5d774f0"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/c_28599.nls",
+        "type": "regular",
+        "bytes": 66082,
+        "mode": 448,
+        "sha256": "4ac9b6f3581cc8b66287bf3dee8cca83b25d59c7bc67bc51a81ea50f6e5c5636"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/c_28603.nls",
+        "type": "regular",
+        "bytes": 66082,
+        "mode": 448,
+        "sha256": "7c79e98c1cf6e1e1747715e7e32fc5745a8c800e366dac0c0bc281db2452970a"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/c_28605.nls",
+        "type": "regular",
+        "bytes": 66082,
+        "mode": 448,
+        "sha256": "c2e9947e4a539c9cee947138d17d72c34a058c79996f0f75491fe41234eca718"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/c_437.nls",
+        "type": "regular",
+        "bytes": 66594,
+        "mode": 448,
+        "sha256": "04d741575060dfcd57d8650f70e65db154944bae95e8dfbe058fadee639e21d0"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/c_500.nls",
+        "type": "regular",
+        "bytes": 66082,
+        "mode": 448,
+        "sha256": "03d703f5762bcf9f5b4c004dfd8424db34755d269a35b713ea8cf26cc6bbe70b"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/c_708.nls",
+        "type": "regular",
+        "bytes": 66082,
+        "mode": 448,
+        "sha256": "5c2d5e62bd053152f31969bb4323a030a11b55c9ff4afa836b60f5d90ea95846"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/c_720.nls",
+        "type": "regular",
+        "bytes": 66594,
+        "mode": 448,
+        "sha256": "d9e798db57cc062d371f3c603eef419e474039d815696547fcd85308447d4f74"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/c_737.nls",
+        "type": "regular",
+        "bytes": 66594,
+        "mode": 448,
+        "sha256": "e263c7c51686a204417e8b670bb1525bae5dbf73407e678ba645b3f6f2e3e22f"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/c_775.nls",
+        "type": "regular",
+        "bytes": 66594,
+        "mode": 448,
+        "sha256": "6fd6b7909b8f1edb3afc69bdb16c69386be0030c422a78ec8be6b53a47985112"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/c_850.nls",
+        "type": "regular",
+        "bytes": 66594,
+        "mode": 448,
+        "sha256": "4fd63d67d0af5d5100b3c7d74666f260546e1a616c6bc88e76fff3bc10418d5b"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/c_852.nls",
+        "type": "regular",
+        "bytes": 66594,
+        "mode": 448,
+        "sha256": "9eb853fb35f516f5a4197f7e34a712ca5db852c974524f235576cc931cdc14e4"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/c_855.nls",
+        "type": "regular",
+        "bytes": 66594,
+        "mode": 448,
+        "sha256": "305dcd61cd4927de9c0ef31b0c264485bcf01c17f7d1be62d0da5629f49d014c"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/c_857.nls",
+        "type": "regular",
+        "bytes": 66594,
+        "mode": 448,
+        "sha256": "779387ebcde599b5ef2baddd334e14ee22c434908f3442ab48d37d4288ad0018"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/c_860.nls",
+        "type": "regular",
+        "bytes": 66594,
+        "mode": 448,
+        "sha256": "3552b06f620b97fe2d73c73545095e588a2d1c933dc05737150f68d5047df1b0"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/c_861.nls",
+        "type": "regular",
+        "bytes": 66594,
+        "mode": 448,
+        "sha256": "16e28d7abc9c3725890ac003fe89975140e7b21f6eed12b8724f9a9ff3dcf2bc"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/c_862.nls",
+        "type": "regular",
+        "bytes": 66594,
+        "mode": 448,
+        "sha256": "ef58d3c30db095356941330ed149bb64389e8c01351a0e508a3d4d381c039469"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/c_863.nls",
+        "type": "regular",
+        "bytes": 66594,
+        "mode": 448,
+        "sha256": "6ad5df3fadd63110aea28956752e82bb1cbaa0d399d19b91d9e2b3f04f1ac660"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/c_864.nls",
+        "type": "regular",
+        "bytes": 66594,
+        "mode": 448,
+        "sha256": "e284c65e736440349cfef5f682c6a2fb4efdef36355439e371f65ae92a0b8ddf"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/c_865.nls",
+        "type": "regular",
+        "bytes": 66594,
+        "mode": 448,
+        "sha256": "aaf5f50a46f3663360f36646841ffb4046334774eb132cea098a9a7388502fdc"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/c_866.nls",
+        "type": "regular",
+        "bytes": 66594,
+        "mode": 448,
+        "sha256": "cee909945319045f0258f006ac37fbc76c77ca0682e5a5197c4de3948e6eb71b"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/c_869.nls",
+        "type": "regular",
+        "bytes": 66594,
+        "mode": 448,
+        "sha256": "8d33517dd0892b4730ff8e1d32157ce7c33fba463ac52be34b261a33c5436934"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/c_874.nls",
+        "type": "regular",
+        "bytes": 66594,
+        "mode": 448,
+        "sha256": "42ec3c5825a9d59009470c1aeba338e7c3ae7ba6c59d1e9e1efa7cac73116299"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/c_875.nls",
+        "type": "regular",
+        "bytes": 66082,
+        "mode": 448,
+        "sha256": "edc40c7c4bd6684b64a288885ced286331a0577c392e2bf5e2c627106e05b13b"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/c_932.nls",
+        "type": "regular",
+        "bytes": 162850,
+        "mode": 448,
+        "sha256": "dab57ece81509bb4d9f1d8df5c39e7b2ffaffda0a2d6e1028ddf822a04315d10"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/c_936.nls",
+        "type": "regular",
+        "bytes": 196642,
+        "mode": 448,
+        "sha256": "29f6633ee0df301fb6cc659f3941be9fcc1d9f6e633c7df24864c6d5b462f5a0"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/c_949.nls",
+        "type": "regular",
+        "bytes": 196642,
+        "mode": 448,
+        "sha256": "5962daff7400af816266f0eab942b5d6c3fb5603be1055911c80325f68600b26"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/c_950.nls",
+        "type": "regular",
+        "bytes": 196642,
+        "mode": 448,
+        "sha256": "ab1f87a022ccc5e6d063520a652a7cf1d0a3ac3c3dd1faf18285490a70b9b688"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/drivers",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/drivers/cng.sys",
+        "type": "regular",
+        "bytes": 86016,
+        "mode": 448,
+        "sha256": "295181d707bc60fc9da85e3ed6ee46e63100cc98087b82e40a451e8ec3deb711"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/drivers/etc",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/drivers/etc/hosts",
+        "type": "regular",
+        "bytes": 23,
+        "mode": 448,
+        "sha256": "c09f63cdcfc4b88b967913f191cacff1a7267d1a61c6e23ac5e096fabbc7c48d"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/drivers/etc/networks",
+        "type": "regular",
+        "bytes": 16,
+        "mode": 448,
+        "sha256": "ee98c4cf62868d3f2b529464fe1fb26a826dff02fd29e98533e731d06c2ec67b"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/drivers/etc/protocol",
+        "type": "regular",
+        "bytes": 478,
+        "mode": 448,
+        "sha256": "5b4db9f0ff619a89deb22108119287c92e4ebff1399e3c57ff520477933ffe1f"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/drivers/etc/services",
+        "type": "regular",
+        "bytes": 8968,
+        "mode": 448,
+        "sha256": "6ec6e116f447da8e61228ac91a50f75e28cf7765e460587849b8ac2c33fb4806"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/drivers/fltmgr.sys",
+        "type": "regular",
+        "bytes": 253952,
+        "mode": 448,
+        "sha256": "3757406de5173645be27eee9cb11c11646cf057ddfd2975ba2ba747a831fa070"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/drivers/hidclass.sys",
+        "type": "regular",
+        "bytes": 434176,
+        "mode": 448,
+        "sha256": "8ebaa47aca6db58cb72ef4b31415311a24e03dd60d8d71eeaa23ee4cd360bcd6"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/drivers/hidparse.sys",
+        "type": "regular",
+        "bytes": 344064,
+        "mode": 448,
+        "sha256": "97cae40046e32a37cee4678ac50b98c324e03b1740285892e58f53aff647612e"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/drivers/http.sys",
+        "type": "regular",
+        "bytes": 331776,
+        "mode": 448,
+        "sha256": "c2613ca32ff36b9dfe5041a7b1fc9464d880283618e396343a36e91c5dd9f38d"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/drivers/ksecdd.sys",
+        "type": "regular",
+        "bytes": 192512,
+        "mode": 448,
+        "sha256": "9e5d649005831d9aa841882880544bc4fdbea0794542af706038c510e78c2c8a"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/drivers/mouhid.sys",
+        "type": "regular",
+        "bytes": 241664,
+        "mode": 448,
+        "sha256": "6e51c4f9189915b253abdcc5055fb5b35f83c4cd72733468f85a898a4676e914"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/drivers/mountmgr.sys",
+        "type": "regular",
+        "bytes": 573440,
+        "mode": 448,
+        "sha256": "b92786d3ed6ab47e1dcb46aa56362eee2ba33a9b5f4472ff24cde6eef2765811"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/drivers/ndis.sys",
+        "type": "regular",
+        "bytes": 294912,
+        "mode": 448,
+        "sha256": "19ae29e014db002d582f84ee8328761c7e7ae4cd8504e8dd4594485bdee4bbd7"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/drivers/netio.sys",
+        "type": "regular",
+        "bytes": 442368,
+        "mode": 448,
+        "sha256": "a91bc28c61e72e1675b7ca1f8aa2163f6a1d5d63294c7b06be8fbe83e25c2a08"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/drivers/nsiproxy.sys",
+        "type": "regular",
+        "bytes": 233472,
+        "mode": 448,
+        "sha256": "f66e7b6bb7f621903f1363b333f576c2b09e169aa95d0093c490c7bcfaf5e200"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/drivers/scsiport.sys",
+        "type": "regular",
+        "bytes": 176128,
+        "mode": 448,
+        "sha256": "62f74708c836633f350c9d59052cdb33ebb4efec3c3510e3bf70f545946c93a8"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/drivers/sharedgpures.sys",
+        "type": "regular",
+        "bytes": 180224,
+        "mode": 384,
+        "sha256": "fcde7a74539d36b33ebb701fb28235d2d2f45273219427e2917ce1f716ffdadb"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/drivers/tdi.sys",
+        "type": "regular",
+        "bytes": 176128,
+        "mode": 448,
+        "sha256": "c8713333b6b9b51b79df8765756f989e3b7e15a0984e6033b0d86436c00a5912"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/drivers/usbd.sys",
+        "type": "regular",
+        "bytes": 221184,
+        "mode": 448,
+        "sha256": "a5d6e5457c6cd48fb9d608395ba5bde778eb53eb2b2be3b9fb14f3be324fab2e"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/drivers/winebth.sys",
+        "type": "regular",
+        "bytes": 327680,
+        "mode": 384,
+        "sha256": "0c19f4e987bbca9dbdfbe07cdf3df0b77d608ba992b03abfab69d09bf8c5123b"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/drivers/winebus.sys",
+        "type": "regular",
+        "bytes": 393216,
+        "mode": 448,
+        "sha256": "77ea843451bc411b35cf9cc806c44d274ac4209771445fe7bf1b11f5461ec356"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/drivers/winehid.sys",
+        "type": "regular",
+        "bytes": 172032,
+        "mode": 448,
+        "sha256": "344ee7718f8559c6787e8f5d778a294fbd4327ecbecbd17859c63bfea40ade2d"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/drivers/winexinput.sys",
+        "type": "regular",
+        "bytes": 278528,
+        "mode": 448,
+        "sha256": "30dc461122a3d3e70c2e526cab955d819589814da33715ca37ff480a491d9ef6"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/drivers/wmilib.sys",
+        "type": "regular",
+        "bytes": 77824,
+        "mode": 384,
+        "sha256": "11a6139c03aba2a2826536a1bf8bb3d9d52bf28d7d8eddbb09939e8d21792348"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/driverstore",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/driverstore/filerepository",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/driverstore/filerepository/winebth.inf_1",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/driverstore/filerepository/winebth.inf_1/winebth.inf",
+        "type": "regular",
+        "bytes": 452,
+        "mode": 384,
+        "sha256": "97ff3d24dd3d995ef375837afa31998f701ab9ecf2dc40114c989e785277bb6d"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/driverstore/filerepository/winehid.inf_1",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/driverstore/filerepository/winehid.inf_1/winehid.inf",
+        "type": "regular",
+        "bytes": 448,
+        "mode": 384,
+        "sha256": "9bf1d4183b5f2f2150679751c91fdd77275088994711a9d5b1277583e56abce6"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/gecko",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/gecko/plugin",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/gecko/plugin/npmshtml.dll",
+        "type": "regular",
+        "bytes": 86016,
+        "mode": 448,
+        "sha256": "c4dee97b23d779bd60a122d91123f80406bbf6663fc36984bf3c2c3194b25805"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/locale.nls",
+        "type": "regular",
+        "bytes": 771670,
+        "mode": 384,
+        "sha256": "a4683e84e4d55cbc95abb0aee99876e6ded86da8a818864f28733eeac9d48025"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/l_intl.nls",
+        "type": "regular",
+        "bytes": 5582,
+        "mode": 384,
+        "sha256": "e045c89e59d1c760252178c2432ff5227b1952d16b977275a1789e2b7daa29df"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/mui",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/normidna.nls",
+        "type": "regular",
+        "bytes": 86502,
+        "mode": 384,
+        "sha256": "826e6296c85a67de3a9f761b4a7f410370398f9c56eb2dda78bb897bdd838894"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/normnfc.nls",
+        "type": "regular",
+        "bytes": 60578,
+        "mode": 384,
+        "sha256": "ab81cc1e451e99c25d5daf69cf2670f198ff7e1d56f98def6dafc994bfc2ab7d"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/normnfd.nls",
+        "type": "regular",
+        "bytes": 53630,
+        "mode": 384,
+        "sha256": "2e142b612cdf7cab5d85300287b702c857cacd2ffa5644f2942e0023cb366d06"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/normnfkc.nls",
+        "type": "regular",
+        "bytes": 83162,
+        "mode": 384,
+        "sha256": "44a5c9132fc1c71736d8c11d93563da30dc0aec08b954ebd3f7413cac4bcb9f3"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/normnfkd.nls",
+        "type": "regular",
+        "bytes": 76546,
+        "mode": 384,
+        "sha256": "7d59123a5fba75966f5794d76101e7e1b8292825af960e7554030c97355f8120"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/Speech",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/Speech/Common",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/Speech/Common/._sapi.dll",
+        "type": "regular",
+        "bytes": 249,
+        "mode": 448,
+        "sha256": "c592de4286d22d2d578dfc67aca3297944b6ae26dc8ed4b97d7a3df652427f41"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/Speech/Common/sapi.dll",
+        "type": "regular",
+        "bytes": 1953792,
+        "mode": 448,
+        "sha256": "163bb337d39777c926c991c11bb4130a2fb98d9f968e92fc69da05aaaf7dc104"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/Speech/Engines",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/Speech/Engines/TTS",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/Speech/Engines/TTS/msttsengine.dll",
+        "type": "regular",
+        "bytes": 270336,
+        "mode": 448,
+        "sha256": "842cb99c9f1db654dec04b34bfe99ae43212df7a93feedc912e7cb87e8e8679e"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/spool",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/spool/drivers",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/spool/drivers/arm64",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/spool/drivers/arm64/3",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/spool/drivers/arm64/3/wineps.drv",
+        "type": "regular",
+        "bytes": 3174400,
+        "mode": 448,
+        "sha256": "ef75f401892506744223c9bc2d48e1af13f37e1369099d495ac2c1602687a1bc"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/spool/drivers/color",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/spool/drivers/color/srgb color space profile.icm",
+        "type": "regular",
+        "bytes": 3024,
+        "mode": 448,
+        "sha256": "384b832de3412066743b52a75ee906b6fb9fb8d9e09e936fc2c43223815c6e0a"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/spool/drivers/w32x86",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/spool/drivers/w32x86/3",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/spool/drivers/w32x86/3/wineps.drv",
+        "type": "regular",
+        "bytes": 1261568,
+        "mode": 448,
+        "sha256": "64adb0433ababe5c0c83c0d8880ed2a4bdaf4feba491e51b2d9db83b79855899"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/spool/drivers/win40",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/spool/drivers/win40/0",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/spool/drivers/win40/0/wineps16.drv",
+        "type": "regular",
+        "bytes": 482,
+        "mode": 448,
+        "sha256": "9f68b52b8a7ce6f3621f0d50158ce3303c7a8e423ec2836d1dde774e85f99d1d"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/spool/printers",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/spool/prtprocs",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/spool/prtprocs/arm64",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/spool/prtprocs/arm64/wineps.drv",
+        "type": "regular",
+        "bytes": 3174400,
+        "mode": 448,
+        "sha256": "ef75f401892506744223c9bc2d48e1af13f37e1369099d495ac2c1602687a1bc"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/spool/prtprocs/arm64/winprint.dll",
+        "type": "regular",
+        "bytes": 151552,
+        "mode": 448,
+        "sha256": "a1aa83a4b58250ead64f8f5a2572505db37cec43284628e9d5441a7b9cda63c7"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/spool/prtprocs/w32x86",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/spool/prtprocs/w32x86/wineps.drv",
+        "type": "regular",
+        "bytes": 1261568,
+        "mode": 448,
+        "sha256": "64adb0433ababe5c0c83c0d8880ed2a4bdaf4feba491e51b2d9db83b79855899"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/spool/prtprocs/w32x86/winprint.dll",
+        "type": "regular",
+        "bytes": 77824,
+        "mode": 448,
+        "sha256": "5f388dceffc84902028517c43f951352312134b0ba6f3c6fb8e61f5abfee7f9f"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/tasks",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/wbem",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/wbem/mofcomp.exe",
+        "type": "regular",
+        "bytes": 81920,
+        "mode": 448,
+        "sha256": "88f527fdfc82421bf5237f1b6bc7d6c3681b755ff96c46544f1374d9a506fb55"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/wbem/wbemdisp.dll",
+        "type": "regular",
+        "bytes": 892928,
+        "mode": 448,
+        "sha256": "e7d286ee6d06b189ae8aeacf986536602f5d568650859ba2ce5a586c8b1c6615"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/wbem/wbemprox.dll",
+        "type": "regular",
+        "bytes": 2433024,
+        "mode": 448,
+        "sha256": "8171255edaf6c97164e2fc2693e4ebda1183349d5916e6f0d5181e4734ba1da1"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/wbem/wmic.exe",
+        "type": "regular",
+        "bytes": 147456,
+        "mode": 448,
+        "sha256": "cddd7ba225f2e3492233b7c0ac393985081475580a8791cc851d0aa1c030f15f"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/wbem/wmiutils.dll",
+        "type": "regular",
+        "bytes": 405504,
+        "mode": 448,
+        "sha256": "7fe2345092fe4274f307a7b555592fb03011936f9aed6f913b8fe44b6b25ac88"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/WindowsPowerShell",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/WindowsPowerShell/v1.0",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/WindowsPowerShell/v1.0/powershell.exe",
+        "type": "regular",
+        "bytes": 98304,
+        "mode": 448,
+        "sha256": "4f17252c9e34a1338539f93004d77ef7b95618e33585104490e6ace40e75afbb"
+      },
+      {
+        "path": ".wine/drive_c/windows/system32/winevulkan.json",
+        "type": "regular",
+        "bytes": 137,
+        "mode": 384,
+        "sha256": "1dcd498dd8163aac3b49d3e90f35d2d722903df14aabb74b310b198e92c15878"
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/c_037.nls",
+        "type": "regular",
+        "bytes": 66082,
+        "mode": 448,
+        "sha256": "b9d410d973dbb040a8a7bb23898ed92c205d7e1d249bfdb0965239b97b5cffdf"
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/c_10000.nls",
+        "type": "regular",
+        "bytes": 66082,
+        "mode": 448,
+        "sha256": "20128ffdabfca32cc5a5a06d101a1b3316764ee282cc1193bf0e0cc2828931b2"
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/c_10001.nls",
+        "type": "regular",
+        "bytes": 162850,
+        "mode": 448,
+        "sha256": "f21285f5ee89a6d8f5355674c9e6566a064244360637bd3999baa2f726cd60bf"
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/c_10002.nls",
+        "type": "regular",
+        "bytes": 195618,
+        "mode": 448,
+        "sha256": "fd781bd60164ea47af46321d5f4a1fcf087b92882b8d3dbbc1f82cebba651874"
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/c_10003.nls",
+        "type": "regular",
+        "bytes": 177698,
+        "mode": 448,
+        "sha256": "ba6f053caaee7e51d1d41e72bddd689a785d25764843f38028b71fab1cbbbdbf"
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/c_10004.nls",
+        "type": "regular",
+        "bytes": 66082,
+        "mode": 448,
+        "sha256": "431c4180e16b8efc43bedd2ead895c164e0763a64ea9fd1ef3a3ae083008a2a1"
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/c_10005.nls",
+        "type": "regular",
+        "bytes": 66082,
+        "mode": 448,
+        "sha256": "71908c06025486f16959abad8cf6937af02c8839cdb9e543c055ffccb2ee2e23"
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/c_10006.nls",
+        "type": "regular",
+        "bytes": 66082,
+        "mode": 448,
+        "sha256": "e7d833ec0360efd24b9e397d5cd90df8eb20fb026edc4f7e094b83d344b85466"
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/c_10007.nls",
+        "type": "regular",
+        "bytes": 66082,
+        "mode": 448,
+        "sha256": "a856107538c7c7f6f8e31f33cabc9a52f5ecd2a984e94a34780e676cb692a750"
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/c_10008.nls",
+        "type": "regular",
+        "bytes": 173602,
+        "mode": 448,
+        "sha256": "254037ddb9f782fbb6cb8066e7539bfd69668a2fc5f889adf3b520920910190a"
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/c_10010.nls",
+        "type": "regular",
+        "bytes": 66082,
+        "mode": 448,
+        "sha256": "58f88a47a96e99aae5a4d5b2ab494953630facf0c53bc0f6a958b294f8a691d1"
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/c_10017.nls",
+        "type": "regular",
+        "bytes": 66082,
+        "mode": 448,
+        "sha256": "a9d08101018e60e6ef34822e7689aed54c79bbf64fec7dadc81522fd553dd974"
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/c_10021.nls",
+        "type": "regular",
+        "bytes": 66082,
+        "mode": 448,
+        "sha256": "641fafbacdb8d0e6fd9be7c834bed252ff3094f79384f0ad3d1162061bbc9cff"
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/c_10029.nls",
+        "type": "regular",
+        "bytes": 66082,
+        "mode": 448,
+        "sha256": "22b18b7bca17d3131f2959a8b6b3615ff868cf697c06ac1d564549fe19c3aed6"
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/c_10079.nls",
+        "type": "regular",
+        "bytes": 66082,
+        "mode": 448,
+        "sha256": "3b615693f00a038e80e300497ab39bc1ae2685ee1d3a0d9ea6430c134c727269"
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/c_10081.nls",
+        "type": "regular",
+        "bytes": 66082,
+        "mode": 448,
+        "sha256": "69b3dac9104ec586758ca7d0767a53dcf314b033222eb7e3759bac32fe313e2f"
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/c_10082.nls",
+        "type": "regular",
+        "bytes": 66082,
+        "mode": 448,
+        "sha256": "576b82b42f226ffc93a520b79a2bce500ec092b511ff011f2d4ae1b727767f1e"
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/c_1026.nls",
+        "type": "regular",
+        "bytes": 66082,
+        "mode": 448,
+        "sha256": "ea6e5ef1cb5f7ec613fd82fa8088b8055bbdc94e003ac80bc32612fcb4f65ee1"
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/c_1250.nls",
+        "type": "regular",
+        "bytes": 66082,
+        "mode": 448,
+        "sha256": "99ddf78fd740d5d73871f377b003245d7e21f6df6d1fc8bd729b17cfc0533b4f"
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/c_1251.nls",
+        "type": "regular",
+        "bytes": 66082,
+        "mode": 448,
+        "sha256": "0a290fd64ff2f5176ff0582b2dad396bbf6636d408e061fae7158dd89606928b"
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/c_1252.nls",
+        "type": "regular",
+        "bytes": 66082,
+        "mode": 448,
+        "sha256": "e2634ee32da7977d762d2d45be2053309ee718572a7d8bb0034180dc1b0b6b76"
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/c_1253.nls",
+        "type": "regular",
+        "bytes": 66082,
+        "mode": 448,
+        "sha256": "a9543da84c7fc172a0523ae1f9f6122f36cd29d60c7a5390e97c09d574774793"
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/c_1254.nls",
+        "type": "regular",
+        "bytes": 66082,
+        "mode": 448,
+        "sha256": "70756e5f20fe0e095e319b3c021a92a8a311847249e13f3ee88804cecc1df747"
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/c_1255.nls",
+        "type": "regular",
+        "bytes": 66082,
+        "mode": 448,
+        "sha256": "d25f2cbf67dc8932811799c003981d6ccf479b476f612382021af3cef6113a48"
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/c_1256.nls",
+        "type": "regular",
+        "bytes": 66082,
+        "mode": 448,
+        "sha256": "66f87b8e30c4e72f861993f48f5f34387663545a4cd23ad3e0dd9ed146467639"
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/c_1257.nls",
+        "type": "regular",
+        "bytes": 66082,
+        "mode": 448,
+        "sha256": "6ee5c098f01433e56fd92bc66d8d5530946ad1dcee96998e09e9b6df05e7d611"
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/c_1258.nls",
+        "type": "regular",
+        "bytes": 66082,
+        "mode": 448,
+        "sha256": "f1966c599370dac14cea80810075b260eaa4b97689c47f6317e5a4ec30c23496"
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/c_1361.nls",
+        "type": "regular",
+        "bytes": 189986,
+        "mode": 448,
+        "sha256": "b43c800d6087589c47b86a27a7c8d1d5a665c1854321db0468b0a7cec5677fbe"
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/c_20127.nls",
+        "type": "regular",
+        "bytes": 66082,
+        "mode": 448,
+        "sha256": "951a19ce0d3c785d12ea94cb28ce5c2c096d302e35b3fb3e8b35248a006435ba"
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/c_20866.nls",
+        "type": "regular",
+        "bytes": 66082,
+        "mode": 448,
+        "sha256": "b2c0873fc150b83fe8656cf9058e29d73bea332bb2a46977d0499eadaf8c7c7f"
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/c_20932.nls",
+        "type": "regular",
+        "bytes": 180770,
+        "mode": 448,
+        "sha256": "df9370898e537bf89ebedf2a5d5e8e036c081b8cfee43e9776ed23366bec1815"
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/c_20949.nls",
+        "type": "regular",
+        "bytes": 177698,
+        "mode": 448,
+        "sha256": "0e4c5d943a12c5b4ba0924e51f41fd4d9216c76c905d1b37fe5a4e0915436fbd"
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/c_21866.nls",
+        "type": "regular",
+        "bytes": 66082,
+        "mode": 448,
+        "sha256": "b53104a08f5e468ec95140ba243008796d9ef7e4b8595fc75bb2541859299113"
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/c_28591.nls",
+        "type": "regular",
+        "bytes": 66082,
+        "mode": 448,
+        "sha256": "aa52cf173808f65b117f0d7af574c11dde85133cccde306ccc57b5de50961b5c"
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/c_28592.nls",
+        "type": "regular",
+        "bytes": 66082,
+        "mode": 448,
+        "sha256": "b2d095492bcfb35edc67329ea0a233b8f8d1b83fa72269204eb09522ae70ccc1"
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/c_28593.nls",
+        "type": "regular",
+        "bytes": 66082,
+        "mode": 448,
+        "sha256": "9effe3c56b0cf721aaf55769050fb4a80c74e553819053d00363ed3b39d15451"
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/c_28594.nls",
+        "type": "regular",
+        "bytes": 66082,
+        "mode": 448,
+        "sha256": "3b23903cae75b7f29f87b5ec774cb3d9095e6f1464c6421e8fb3f50335dfbce2"
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/c_28595.nls",
+        "type": "regular",
+        "bytes": 66082,
+        "mode": 448,
+        "sha256": "00619caa1f9f9d1087cb5b3884eaec39f468d0a7a0056972666ff6bdbdae8faf"
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/c_28596.nls",
+        "type": "regular",
+        "bytes": 66082,
+        "mode": 448,
+        "sha256": "cd1018cfaaca3ee8d5e22548360c259be7b5d6678fde1cb773ba3bdaa63857d3"
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/c_28597.nls",
+        "type": "regular",
+        "bytes": 66082,
+        "mode": 448,
+        "sha256": "7c9bf3b6ccec261fa9678d3c5fe7281572562964d6cf96c7fb257ca8c25d94b9"
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/c_28598.nls",
+        "type": "regular",
+        "bytes": 66082,
+        "mode": 448,
+        "sha256": "e3085f4ea2409824fe0b076798cf4581200d310aecfad0cfa97549d2c5d774f0"
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/c_28599.nls",
+        "type": "regular",
+        "bytes": 66082,
+        "mode": 448,
+        "sha256": "4ac9b6f3581cc8b66287bf3dee8cca83b25d59c7bc67bc51a81ea50f6e5c5636"
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/c_28603.nls",
+        "type": "regular",
+        "bytes": 66082,
+        "mode": 448,
+        "sha256": "7c79e98c1cf6e1e1747715e7e32fc5745a8c800e366dac0c0bc281db2452970a"
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/c_28605.nls",
+        "type": "regular",
+        "bytes": 66082,
+        "mode": 448,
+        "sha256": "c2e9947e4a539c9cee947138d17d72c34a058c79996f0f75491fe41234eca718"
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/c_437.nls",
+        "type": "regular",
+        "bytes": 66594,
+        "mode": 448,
+        "sha256": "04d741575060dfcd57d8650f70e65db154944bae95e8dfbe058fadee639e21d0"
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/c_500.nls",
+        "type": "regular",
+        "bytes": 66082,
+        "mode": 448,
+        "sha256": "03d703f5762bcf9f5b4c004dfd8424db34755d269a35b713ea8cf26cc6bbe70b"
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/c_708.nls",
+        "type": "regular",
+        "bytes": 66082,
+        "mode": 448,
+        "sha256": "5c2d5e62bd053152f31969bb4323a030a11b55c9ff4afa836b60f5d90ea95846"
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/c_720.nls",
+        "type": "regular",
+        "bytes": 66594,
+        "mode": 448,
+        "sha256": "d9e798db57cc062d371f3c603eef419e474039d815696547fcd85308447d4f74"
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/c_737.nls",
+        "type": "regular",
+        "bytes": 66594,
+        "mode": 448,
+        "sha256": "e263c7c51686a204417e8b670bb1525bae5dbf73407e678ba645b3f6f2e3e22f"
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/c_775.nls",
+        "type": "regular",
+        "bytes": 66594,
+        "mode": 448,
+        "sha256": "6fd6b7909b8f1edb3afc69bdb16c69386be0030c422a78ec8be6b53a47985112"
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/c_850.nls",
+        "type": "regular",
+        "bytes": 66594,
+        "mode": 448,
+        "sha256": "4fd63d67d0af5d5100b3c7d74666f260546e1a616c6bc88e76fff3bc10418d5b"
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/c_852.nls",
+        "type": "regular",
+        "bytes": 66594,
+        "mode": 448,
+        "sha256": "9eb853fb35f516f5a4197f7e34a712ca5db852c974524f235576cc931cdc14e4"
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/c_855.nls",
+        "type": "regular",
+        "bytes": 66594,
+        "mode": 448,
+        "sha256": "305dcd61cd4927de9c0ef31b0c264485bcf01c17f7d1be62d0da5629f49d014c"
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/c_857.nls",
+        "type": "regular",
+        "bytes": 66594,
+        "mode": 448,
+        "sha256": "779387ebcde599b5ef2baddd334e14ee22c434908f3442ab48d37d4288ad0018"
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/c_860.nls",
+        "type": "regular",
+        "bytes": 66594,
+        "mode": 448,
+        "sha256": "3552b06f620b97fe2d73c73545095e588a2d1c933dc05737150f68d5047df1b0"
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/c_861.nls",
+        "type": "regular",
+        "bytes": 66594,
+        "mode": 448,
+        "sha256": "16e28d7abc9c3725890ac003fe89975140e7b21f6eed12b8724f9a9ff3dcf2bc"
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/c_862.nls",
+        "type": "regular",
+        "bytes": 66594,
+        "mode": 448,
+        "sha256": "ef58d3c30db095356941330ed149bb64389e8c01351a0e508a3d4d381c039469"
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/c_863.nls",
+        "type": "regular",
+        "bytes": 66594,
+        "mode": 448,
+        "sha256": "6ad5df3fadd63110aea28956752e82bb1cbaa0d399d19b91d9e2b3f04f1ac660"
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/c_864.nls",
+        "type": "regular",
+        "bytes": 66594,
+        "mode": 448,
+        "sha256": "e284c65e736440349cfef5f682c6a2fb4efdef36355439e371f65ae92a0b8ddf"
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/c_865.nls",
+        "type": "regular",
+        "bytes": 66594,
+        "mode": 448,
+        "sha256": "aaf5f50a46f3663360f36646841ffb4046334774eb132cea098a9a7388502fdc"
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/c_866.nls",
+        "type": "regular",
+        "bytes": 66594,
+        "mode": 448,
+        "sha256": "cee909945319045f0258f006ac37fbc76c77ca0682e5a5197c4de3948e6eb71b"
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/c_869.nls",
+        "type": "regular",
+        "bytes": 66594,
+        "mode": 448,
+        "sha256": "8d33517dd0892b4730ff8e1d32157ce7c33fba463ac52be34b261a33c5436934"
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/c_874.nls",
+        "type": "regular",
+        "bytes": 66594,
+        "mode": 448,
+        "sha256": "42ec3c5825a9d59009470c1aeba338e7c3ae7ba6c59d1e9e1efa7cac73116299"
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/c_875.nls",
+        "type": "regular",
+        "bytes": 66082,
+        "mode": 448,
+        "sha256": "edc40c7c4bd6684b64a288885ced286331a0577c392e2bf5e2c627106e05b13b"
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/c_932.nls",
+        "type": "regular",
+        "bytes": 162850,
+        "mode": 448,
+        "sha256": "dab57ece81509bb4d9f1d8df5c39e7b2ffaffda0a2d6e1028ddf822a04315d10"
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/c_936.nls",
+        "type": "regular",
+        "bytes": 196642,
+        "mode": 448,
+        "sha256": "29f6633ee0df301fb6cc659f3941be9fcc1d9f6e633c7df24864c6d5b462f5a0"
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/c_949.nls",
+        "type": "regular",
+        "bytes": 196642,
+        "mode": 448,
+        "sha256": "5962daff7400af816266f0eab942b5d6c3fb5603be1055911c80325f68600b26"
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/c_950.nls",
+        "type": "regular",
+        "bytes": 196642,
+        "mode": 448,
+        "sha256": "ab1f87a022ccc5e6d063520a652a7cf1d0a3ac3c3dd1faf18285490a70b9b688"
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/dsound.vxd",
+        "type": "regular",
+        "bytes": 1032,
+        "mode": 384,
+        "sha256": "db51e6e7b76795c95f8fe77732b1367e22a33c6b499305af135a568823a4c607"
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/gecko",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/gecko/plugin",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/gecko/plugin/npmshtml.dll",
+        "type": "regular",
+        "bytes": 57344,
+        "mode": 448,
+        "sha256": "66b1835830aa13c86e3a62a132968b016305d894b843cac43499819f72186217"
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/ifsmgr.vxd",
+        "type": "regular",
+        "bytes": 65536,
+        "mode": 384,
+        "sha256": "5dcf32f520b96d49b53cd2ded4e3867ee66a7cca7f7d60e46d0a4872991f8c20"
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/locale.nls",
+        "type": "regular",
+        "bytes": 771670,
+        "mode": 448,
+        "sha256": "a4683e84e4d55cbc95abb0aee99876e6ded86da8a818864f28733eeac9d48025"
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/l_intl.nls",
+        "type": "regular",
+        "bytes": 5582,
+        "mode": 448,
+        "sha256": "e045c89e59d1c760252178c2432ff5227b1952d16b977275a1789e2b7daa29df"
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/mmdevldr.vxd",
+        "type": "regular",
+        "bytes": 61440,
+        "mode": 384,
+        "sha256": "f9a09db24e77ffce5b214028eb9ccd7f8604bc9f14cb0652e11cae2a13f43f6b"
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/monodebg.vxd",
+        "type": "regular",
+        "bytes": 65536,
+        "mode": 384,
+        "sha256": "053e80ccb024de86b395f61dc44cf9da5366603673686dc3cc3d8304da81357d"
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/mui",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/normidna.nls",
+        "type": "regular",
+        "bytes": 86502,
+        "mode": 384,
+        "sha256": "826e6296c85a67de3a9f761b4a7f410370398f9c56eb2dda78bb897bdd838894"
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/normnfc.nls",
+        "type": "regular",
+        "bytes": 60578,
+        "mode": 384,
+        "sha256": "ab81cc1e451e99c25d5daf69cf2670f198ff7e1d56f98def6dafc994bfc2ab7d"
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/normnfd.nls",
+        "type": "regular",
+        "bytes": 53630,
+        "mode": 384,
+        "sha256": "2e142b612cdf7cab5d85300287b702c857cacd2ffa5644f2942e0023cb366d06"
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/normnfkc.nls",
+        "type": "regular",
+        "bytes": 83162,
+        "mode": 384,
+        "sha256": "44a5c9132fc1c71736d8c11d93563da30dc0aec08b954ebd3f7413cac4bcb9f3"
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/normnfkd.nls",
+        "type": "regular",
+        "bytes": 76546,
+        "mode": 384,
+        "sha256": "7d59123a5fba75966f5794d76101e7e1b8292825af960e7554030c97355f8120"
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/Speech",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/Speech/Common",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/Speech/Common/sapi.dll",
+        "type": "regular",
+        "bytes": 929792,
+        "mode": 448,
+        "sha256": "2ddcbdd666f4114a75e2ab1609b7b5ac98edea3d9e7a3c27b1c19944b6a84561"
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/Speech/Engines",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/Speech/Engines/TTS",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/Speech/Engines/TTS/msttsengine.dll",
+        "type": "regular",
+        "bytes": 131072,
+        "mode": 448,
+        "sha256": "161356d5b229bb2f9f5ffb6d5480061d301b124762d2e5e3d2b63432e692fad4"
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/vdhcp.vxd",
+        "type": "regular",
+        "bytes": 61440,
+        "mode": 384,
+        "sha256": "1fcdf57794121aeb797d4d42ce94af19438baa6966b56fb5c68bb4b0725996f9"
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/vmm.vxd",
+        "type": "regular",
+        "bytes": 81920,
+        "mode": 384,
+        "sha256": "a1cdf01a3331d32d8f843415183ce719370727951a3422653ee069af498f92ad"
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/vnbt.vxd",
+        "type": "regular",
+        "bytes": 61440,
+        "mode": 384,
+        "sha256": "d170deb86bdbddbf79bfc82f67a935aa460847450136f780a8e902c05f19e45b"
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/vnetbios.vxd",
+        "type": "regular",
+        "bytes": 61440,
+        "mode": 384,
+        "sha256": "59cec89c905cdac1c910c90a6677cb290d335259658a129362439d2c9acb35a2"
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/vtdapi.vxd",
+        "type": "regular",
+        "bytes": 61440,
+        "mode": 384,
+        "sha256": "9cfc407df6edb493cc25917d8c831fa28fec39f24760b3def4dc1880a97f1ed5"
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/vwin32.vxd",
+        "type": "regular",
+        "bytes": 65536,
+        "mode": 384,
+        "sha256": "ff914b7fbba964695a820bac24f461d826e8c255f5194f78abdc239a3a33db71"
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/wbem",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/wbem/mofcomp.exe",
+        "type": "regular",
+        "bytes": 69632,
+        "mode": 448,
+        "sha256": "4cee8c202f72ba22aa3af8ba8a6186de4525857ecf149d32ae86b38a9eba16af"
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/wbem/wbemdisp.dll",
+        "type": "regular",
+        "bytes": 397312,
+        "mode": 448,
+        "sha256": "835dc2873f3933f0fe07bce9673829912fea076d2cee2a33566ec6789c1495bf"
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/wbem/wbemprox.dll",
+        "type": "regular",
+        "bytes": 1011712,
+        "mode": 448,
+        "sha256": "a4c81e671c7dd517b3a38bac45bf7e4c5bf3391535301c83073bce0143460223"
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/wbem/wmic.exe",
+        "type": "regular",
+        "bytes": 126976,
+        "mode": 448,
+        "sha256": "7e8f39b8ed6aa2719d1256b29300bfe8ea97caac5c8bf6c27a0bd9986a033a51"
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/wbem/wmiutils.dll",
+        "type": "regular",
+        "bytes": 192512,
+        "mode": 448,
+        "sha256": "eca966ef7204ef35d26373c7c4b908c484dc5f20fb06558cbb92a212b6bafa47"
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/WindowsPowerShell",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/WindowsPowerShell/v1.0",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/WindowsPowerShell/v1.0/powershell.exe",
+        "type": "regular",
+        "bytes": 81920,
+        "mode": 448,
+        "sha256": "f0de0913c64114638c94df24051e19c958e2f201b33631632b3bea8dca5e9b39"
+      },
+      {
+        "path": ".wine/drive_c/windows/syswow64/winevulkan.json",
+        "type": "regular",
+        "bytes": 137,
+        "mode": 384,
+        "sha256": "1dcd498dd8163aac3b49d3e90f35d2d722903df14aabb74b310b198e92c15878"
+      },
+      {
+        "path": ".wine/drive_c/windows/tasks",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/windows/temp",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/windows/twain.dll",
+        "type": "regular",
+        "bytes": 417,
+        "mode": 448,
+        "sha256": "ee38d8ef299a678872d7af952e32f6bcb54f35e882e69d553846f0e87fa649ed"
+      },
+      {
+        "path": ".wine/drive_c/windows/twain_32",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/windows/twain_32/gphoto2.ds",
+        "type": "regular",
+        "bytes": 1032,
+        "mode": 448,
+        "sha256": "db51e6e7b76795c95f8fe77732b1367e22a33c6b499305af135a568823a4c607"
+      },
+      {
+        "path": ".wine/drive_c/windows/twain_32/sane.ds",
+        "type": "regular",
+        "bytes": 1032,
+        "mode": 448,
+        "sha256": "db51e6e7b76795c95f8fe77732b1367e22a33c6b499305af135a568823a4c607"
+      },
+      {
+        "path": ".wine/drive_c/windows/twain_32.dll",
+        "type": "regular",
+        "bytes": 102400,
+        "mode": 448,
+        "sha256": "861ad82cef2b2378960077b8ad4b4eb992243a0e29f78e4035153282dc317b97"
+      },
+      {
+        "path": ".wine/drive_c/windows/twain_64",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/windows/twain_64/gphoto2.ds",
+        "type": "regular",
+        "bytes": 1032,
+        "mode": 448,
+        "sha256": "1ff649a2e58bc679e81848fe3960eaedbf785190ad05c46c4305931e65cf1cb4"
+      },
+      {
+        "path": ".wine/drive_c/windows/twain_64/sane.ds",
+        "type": "regular",
+        "bytes": 1032,
+        "mode": 448,
+        "sha256": "1ff649a2e58bc679e81848fe3960eaedbf785190ad05c46c4305931e65cf1cb4"
+      },
+      {
+        "path": ".wine/drive_c/windows/win.ini",
+        "type": "regular",
+        "bytes": 928,
+        "mode": 448,
+        "sha256": "6bf40a9dbc260663b8f139cb3c5e18d85bdc451469aea1e59f3e2d31fa5bee07"
+      },
+      {
+        "path": ".wine/drive_c/windows/winhelp.exe",
+        "type": "regular",
+        "bytes": 257,
+        "mode": 448,
+        "sha256": "c42e91409c86a6e7e8412f4f2e14fefa937096d366ab13b19e571f08b855d095"
+      },
+      {
+        "path": ".wine/drive_c/windows/winhlp32.exe",
+        "type": "regular",
+        "bytes": 491520,
+        "mode": 448,
+        "sha256": "b88d342e2702c9e23bbe26e206bdb2de7bd118a0b929ac86277ba0491c6fbdbc"
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/arm64_microsoft-windows-msxml30_31bf3856ad364e35_6.0.6000.16386_none_deadbeef",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/arm64_microsoft-windows-msxml30_31bf3856ad364e35_6.0.6000.16386_none_deadbeef/._msxml3.dll",
+        "type": "regular",
+        "bytes": 249,
+        "mode": 448,
+        "sha256": "c592de4286d22d2d578dfc67aca3297944b6ae26dc8ed4b97d7a3df652427f41"
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/arm64_microsoft-windows-msxml30_31bf3856ad364e35_6.0.6000.16386_none_deadbeef/msxml3.dll",
+        "type": "regular",
+        "bytes": 20643840,
+        "mode": 448,
+        "sha256": "aef1c9afaf5413db45ed7beca25ce53c9bf2f6b7d6b36d5551a81f51baaf77f2"
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/arm64_microsoft-windows-msxml60_31bf3856ad364e35_6.0.6000.16386_none_deadbeef",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/arm64_microsoft-windows-msxml60_31bf3856ad364e35_6.0.6000.16386_none_deadbeef/._msxml6.dll",
+        "type": "regular",
+        "bytes": 249,
+        "mode": 448,
+        "sha256": "c592de4286d22d2d578dfc67aca3297944b6ae26dc8ed4b97d7a3df652427f41"
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/arm64_microsoft-windows-msxml60_31bf3856ad364e35_6.0.6000.16386_none_deadbeef/msxml6.dll",
+        "type": "regular",
+        "bytes": 196608,
+        "mode": 448,
+        "sha256": "45f23fa7861bb0ff1947b24fb7ead9104d162f9c0e0ced27190302c8cf5d5580"
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/arm64_microsoft.msxml2_6bd6b9abf345378f_4.1.0.0_none_deadbeef",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/arm64_microsoft.msxml2_6bd6b9abf345378f_4.1.0.0_none_deadbeef/._msxml4.dll",
+        "type": "regular",
+        "bytes": 249,
+        "mode": 448,
+        "sha256": "c592de4286d22d2d578dfc67aca3297944b6ae26dc8ed4b97d7a3df652427f41"
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/arm64_microsoft.msxml2_6bd6b9abf345378f_4.1.0.0_none_deadbeef/msxml4.dll",
+        "type": "regular",
+        "bytes": 196608,
+        "mode": 448,
+        "sha256": "87dc34f90b217a9c171490f61120a1e8822ba955bc000ff97de5557213eb3b52"
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/arm64_microsoft.vc80.atl_1fc8b3b9a1e18e3b_8.0.50727.4053_none_deadbeef",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/arm64_microsoft.vc80.atl_1fc8b3b9a1e18e3b_8.0.50727.4053_none_deadbeef/._atl80.dll",
+        "type": "regular",
+        "bytes": 249,
+        "mode": 448,
+        "sha256": "c592de4286d22d2d578dfc67aca3297944b6ae26dc8ed4b97d7a3df652427f41"
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/arm64_microsoft.vc80.atl_1fc8b3b9a1e18e3b_8.0.50727.4053_none_deadbeef/atl80.dll",
+        "type": "regular",
+        "bytes": 1306624,
+        "mode": 448,
+        "sha256": "de56093a4e4007ac2a65f25b03707703640bb28c80c45ece7aadf5164e083c82"
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/arm64_microsoft.vc80.crt_1fc8b3b9a1e18e3b_8.0.50727.9672_none_deadbeef",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/arm64_microsoft.vc80.crt_1fc8b3b9a1e18e3b_8.0.50727.9672_none_deadbeef/._msvcm80.dll",
+        "type": "regular",
+        "bytes": 249,
+        "mode": 448,
+        "sha256": "c592de4286d22d2d578dfc67aca3297944b6ae26dc8ed4b97d7a3df652427f41"
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/arm64_microsoft.vc80.crt_1fc8b3b9a1e18e3b_8.0.50727.9672_none_deadbeef/._msvcp80.dll",
+        "type": "regular",
+        "bytes": 249,
+        "mode": 448,
+        "sha256": "c592de4286d22d2d578dfc67aca3297944b6ae26dc8ed4b97d7a3df652427f41"
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/arm64_microsoft.vc80.crt_1fc8b3b9a1e18e3b_8.0.50727.9672_none_deadbeef/._msvcr80.dll",
+        "type": "regular",
+        "bytes": 249,
+        "mode": 448,
+        "sha256": "c592de4286d22d2d578dfc67aca3297944b6ae26dc8ed4b97d7a3df652427f41"
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/arm64_microsoft.vc80.crt_1fc8b3b9a1e18e3b_8.0.50727.9672_none_deadbeef/msvcm80.dll",
+        "type": "regular",
+        "bytes": 180224,
+        "mode": 448,
+        "sha256": "7d1f303effa5511903278364bfb1f1863b92e6c5b75c12e4c87dd52962e625e5"
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/arm64_microsoft.vc80.crt_1fc8b3b9a1e18e3b_8.0.50727.9672_none_deadbeef/msvcp80.dll",
+        "type": "regular",
+        "bytes": 6623232,
+        "mode": 448,
+        "sha256": "ea3fb67e15001509d1d15a903f665911095238e8ed10ab3a137fdf10417c7bb5"
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/arm64_microsoft.vc80.crt_1fc8b3b9a1e18e3b_8.0.50727.9672_none_deadbeef/msvcr80.dll",
+        "type": "regular",
+        "bytes": 5767168,
+        "mode": 448,
+        "sha256": "cfbf801071ae643bcdf442940954b5f8931116331b4282fcd8faeb00f995b87e"
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/arm64_microsoft.vc90.atl_1fc8b3b9a1e18e3b_9.0.30729.6161_none_deadbeef",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/arm64_microsoft.vc90.atl_1fc8b3b9a1e18e3b_9.0.30729.6161_none_deadbeef/._atl90.dll",
+        "type": "regular",
+        "bytes": 249,
+        "mode": 448,
+        "sha256": "c592de4286d22d2d578dfc67aca3297944b6ae26dc8ed4b97d7a3df652427f41"
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/arm64_microsoft.vc90.atl_1fc8b3b9a1e18e3b_9.0.30729.6161_none_deadbeef/atl90.dll",
+        "type": "regular",
+        "bytes": 1286144,
+        "mode": 448,
+        "sha256": "3bc92f4b73b2d80468c67273ebd33af5240b71980ee308be2e05fd99f14ad8ef"
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/arm64_microsoft.vc90.crt_1fc8b3b9a1e18e3b_9.0.30729.6161_none_deadbeef",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/arm64_microsoft.vc90.crt_1fc8b3b9a1e18e3b_9.0.30729.6161_none_deadbeef/._msvcm90.dll",
+        "type": "regular",
+        "bytes": 249,
+        "mode": 448,
+        "sha256": "c592de4286d22d2d578dfc67aca3297944b6ae26dc8ed4b97d7a3df652427f41"
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/arm64_microsoft.vc90.crt_1fc8b3b9a1e18e3b_9.0.30729.6161_none_deadbeef/._msvcp90.dll",
+        "type": "regular",
+        "bytes": 249,
+        "mode": 448,
+        "sha256": "c592de4286d22d2d578dfc67aca3297944b6ae26dc8ed4b97d7a3df652427f41"
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/arm64_microsoft.vc90.crt_1fc8b3b9a1e18e3b_9.0.30729.6161_none_deadbeef/._msvcr90.dll",
+        "type": "regular",
+        "bytes": 249,
+        "mode": 448,
+        "sha256": "c592de4286d22d2d578dfc67aca3297944b6ae26dc8ed4b97d7a3df652427f41"
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/arm64_microsoft.vc90.crt_1fc8b3b9a1e18e3b_9.0.30729.6161_none_deadbeef/msvcm90.dll",
+        "type": "regular",
+        "bytes": 159744,
+        "mode": 448,
+        "sha256": "03bf5e499907a1ef81b3dac005057f12059df9611441ff3d9e70bb23940ce6ba"
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/arm64_microsoft.vc90.crt_1fc8b3b9a1e18e3b_9.0.30729.6161_none_deadbeef/msvcp90.dll",
+        "type": "regular",
+        "bytes": 6615040,
+        "mode": 448,
+        "sha256": "8f88c2564b4c03d64ff095cb5d2473aac8b972639fb57b01d95c3f91abacdba0"
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/arm64_microsoft.vc90.crt_1fc8b3b9a1e18e3b_9.0.30729.6161_none_deadbeef/msvcr90.dll",
+        "type": "regular",
+        "bytes": 5767168,
+        "mode": 448,
+        "sha256": "d9c076b3dd7b511891fb05ab08521a1a54211be4c33d4a1058cbb6f725af26d7"
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/arm64_microsoft.windows.common-controls_6595b64144ccf1df_6.0.2600.2982_none_deadbeef",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 511
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/arm64_microsoft.windows.common-controls_6595b64144ccf1df_6.0.2600.2982_none_deadbeef/comctl32.dll",
+        "type": "regular",
+        "bytes": 8847360,
+        "mode": 511,
+        "sha256": "f17b3994eb77b2b54d1943df73490a2b8b2c08349492fc8f8bfe4521c9287666"
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/arm64_microsoft.windows.gdiplus_6595b64144ccf1df_1.0.6000.16386_none_deadbeef",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/arm64_microsoft.windows.gdiplus_6595b64144ccf1df_1.0.6000.16386_none_deadbeef/._gdiplus.dll",
+        "type": "regular",
+        "bytes": 249,
+        "mode": 448,
+        "sha256": "c592de4286d22d2d578dfc67aca3297944b6ae26dc8ed4b97d7a3df652427f41"
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/arm64_microsoft.windows.gdiplus_6595b64144ccf1df_1.0.6000.16386_none_deadbeef/gdiplus.dll",
+        "type": "regular",
+        "bytes": 4718592,
+        "mode": 448,
+        "sha256": "6e801bdbbcae1ba7aa39c64b717e9e5803ae71184f87ccd2797d4d64cdf57d2b"
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/arm64_microsoft.windows.gdiplus_6595b64144ccf1df_1.1.7601.23038_none_deadbeef",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/arm64_microsoft.windows.gdiplus_6595b64144ccf1df_1.1.7601.23038_none_deadbeef/._gdiplus.dll",
+        "type": "regular",
+        "bytes": 249,
+        "mode": 448,
+        "sha256": "c592de4286d22d2d578dfc67aca3297944b6ae26dc8ed4b97d7a3df652427f41"
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/arm64_microsoft.windows.gdiplus_6595b64144ccf1df_1.1.7601.23038_none_deadbeef/gdiplus.dll",
+        "type": "regular",
+        "bytes": 4718592,
+        "mode": 448,
+        "sha256": "6e801bdbbcae1ba7aa39c64b717e9e5803ae71184f87ccd2797d4d64cdf57d2b"
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/manifests",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/manifests/._arm64_microsoft-windows-msxml30_31bf3856ad364e35_6.0.6000.16386_none_deadbeef.manifest",
+        "type": "regular",
+        "bytes": 249,
+        "mode": 448,
+        "sha256": "c592de4286d22d2d578dfc67aca3297944b6ae26dc8ed4b97d7a3df652427f41"
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/manifests/._arm64_microsoft-windows-msxml60_31bf3856ad364e35_6.0.6000.16386_none_deadbeef.manifest",
+        "type": "regular",
+        "bytes": 249,
+        "mode": 448,
+        "sha256": "c592de4286d22d2d578dfc67aca3297944b6ae26dc8ed4b97d7a3df652427f41"
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/manifests/._arm64_microsoft.msxml2_6bd6b9abf345378f_4.1.0.0_none_deadbeef.manifest",
+        "type": "regular",
+        "bytes": 249,
+        "mode": 448,
+        "sha256": "c592de4286d22d2d578dfc67aca3297944b6ae26dc8ed4b97d7a3df652427f41"
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/manifests/._arm64_microsoft.vc80.atl_1fc8b3b9a1e18e3b_8.0.50727.4053_none_deadbeef.manifest",
+        "type": "regular",
+        "bytes": 249,
+        "mode": 448,
+        "sha256": "c592de4286d22d2d578dfc67aca3297944b6ae26dc8ed4b97d7a3df652427f41"
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/manifests/._arm64_microsoft.vc80.crt_1fc8b3b9a1e18e3b_8.0.50727.9672_none_deadbeef.manifest",
+        "type": "regular",
+        "bytes": 249,
+        "mode": 448,
+        "sha256": "c592de4286d22d2d578dfc67aca3297944b6ae26dc8ed4b97d7a3df652427f41"
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/manifests/._arm64_microsoft.vc90.atl_1fc8b3b9a1e18e3b_9.0.30729.6161_none_deadbeef.manifest",
+        "type": "regular",
+        "bytes": 249,
+        "mode": 448,
+        "sha256": "c592de4286d22d2d578dfc67aca3297944b6ae26dc8ed4b97d7a3df652427f41"
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/manifests/._arm64_microsoft.vc90.crt_1fc8b3b9a1e18e3b_9.0.30729.6161_none_deadbeef.manifest",
+        "type": "regular",
+        "bytes": 249,
+        "mode": 448,
+        "sha256": "c592de4286d22d2d578dfc67aca3297944b6ae26dc8ed4b97d7a3df652427f41"
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/manifests/._arm64_microsoft.windows.common-controls_6595b64144ccf1df_6.0.2600.2982_none_deadbeef.manifest",
+        "type": "regular",
+        "bytes": 249,
+        "mode": 448,
+        "sha256": "c592de4286d22d2d578dfc67aca3297944b6ae26dc8ed4b97d7a3df652427f41"
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/manifests/._arm64_microsoft.windows.gdiplus_6595b64144ccf1df_1.0.6000.16386_none_deadbeef.manifest",
+        "type": "regular",
+        "bytes": 249,
+        "mode": 448,
+        "sha256": "c592de4286d22d2d578dfc67aca3297944b6ae26dc8ed4b97d7a3df652427f41"
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/manifests/._arm64_microsoft.windows.gdiplus_6595b64144ccf1df_1.1.7601.23038_none_deadbeef.manifest",
+        "type": "regular",
+        "bytes": 249,
+        "mode": 448,
+        "sha256": "c592de4286d22d2d578dfc67aca3297944b6ae26dc8ed4b97d7a3df652427f41"
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/manifests/._x86_microsoft-windows-msxml30_31bf3856ad364e35_6.0.6000.16386_none_deadbeef.manifest",
+        "type": "regular",
+        "bytes": 249,
+        "mode": 448,
+        "sha256": "c592de4286d22d2d578dfc67aca3297944b6ae26dc8ed4b97d7a3df652427f41"
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/manifests/._x86_microsoft-windows-msxml60_31bf3856ad364e35_6.0.6000.16386_none_deadbeef.manifest",
+        "type": "regular",
+        "bytes": 249,
+        "mode": 448,
+        "sha256": "c592de4286d22d2d578dfc67aca3297944b6ae26dc8ed4b97d7a3df652427f41"
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/manifests/._x86_microsoft.msxml2_6bd6b9abf345378f_4.1.0.0_none_deadbeef.manifest",
+        "type": "regular",
+        "bytes": 249,
+        "mode": 448,
+        "sha256": "c592de4286d22d2d578dfc67aca3297944b6ae26dc8ed4b97d7a3df652427f41"
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/manifests/._x86_microsoft.vc80.atl_1fc8b3b9a1e18e3b_8.0.50727.4053_none_deadbeef.manifest",
+        "type": "regular",
+        "bytes": 249,
+        "mode": 448,
+        "sha256": "c592de4286d22d2d578dfc67aca3297944b6ae26dc8ed4b97d7a3df652427f41"
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/manifests/._x86_microsoft.vc80.crt_1fc8b3b9a1e18e3b_8.0.50727.9672_none_deadbeef.manifest",
+        "type": "regular",
+        "bytes": 249,
+        "mode": 448,
+        "sha256": "c592de4286d22d2d578dfc67aca3297944b6ae26dc8ed4b97d7a3df652427f41"
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/manifests/._x86_microsoft.vc90.atl_1fc8b3b9a1e18e3b_9.0.30729.6161_none_deadbeef.manifest",
+        "type": "regular",
+        "bytes": 249,
+        "mode": 448,
+        "sha256": "c592de4286d22d2d578dfc67aca3297944b6ae26dc8ed4b97d7a3df652427f41"
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/manifests/._x86_microsoft.vc90.crt_1fc8b3b9a1e18e3b_9.0.30729.6161_none_deadbeef.manifest",
+        "type": "regular",
+        "bytes": 249,
+        "mode": 448,
+        "sha256": "c592de4286d22d2d578dfc67aca3297944b6ae26dc8ed4b97d7a3df652427f41"
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/manifests/._x86_microsoft.windows.common-controls_6595b64144ccf1df_6.0.2600.2982_none_deadbeef.manifest",
+        "type": "regular",
+        "bytes": 249,
+        "mode": 448,
+        "sha256": "c592de4286d22d2d578dfc67aca3297944b6ae26dc8ed4b97d7a3df652427f41"
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/manifests/._x86_microsoft.windows.gdiplus_6595b64144ccf1df_1.0.6000.16386_none_deadbeef.manifest",
+        "type": "regular",
+        "bytes": 249,
+        "mode": 448,
+        "sha256": "c592de4286d22d2d578dfc67aca3297944b6ae26dc8ed4b97d7a3df652427f41"
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/manifests/._x86_microsoft.windows.gdiplus_6595b64144ccf1df_1.1.7601.23038_none_deadbeef.manifest",
+        "type": "regular",
+        "bytes": 249,
+        "mode": 448,
+        "sha256": "c592de4286d22d2d578dfc67aca3297944b6ae26dc8ed4b97d7a3df652427f41"
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/manifests/arm64_microsoft-windows-msxml30_31bf3856ad364e35_6.0.6000.16386_none_deadbeef.manifest",
+        "type": "regular",
+        "bytes": 327,
+        "mode": 448,
+        "sha256": "5e2f72b92611ea7fce578fb0f62161a49e3898f11cf99db7b444ab6d47c304b3"
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/manifests/arm64_microsoft-windows-msxml60_31bf3856ad364e35_6.0.6000.16386_none_deadbeef.manifest",
+        "type": "regular",
+        "bytes": 327,
+        "mode": 448,
+        "sha256": "8f6c255384b8283a43fa74acd138bd099c17aad3b1ff49142e38da2b6f21f2c3"
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/manifests/arm64_microsoft.msxml2_6bd6b9abf345378f_4.1.0.0_none_deadbeef.manifest",
+        "type": "regular",
+        "bytes": 311,
+        "mode": 448,
+        "sha256": "1ec8c9827c2b1392774c75359aa93a5326d994788b5a5be0f9454cc4131bae77"
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/manifests/arm64_microsoft.vc80.atl_1fc8b3b9a1e18e3b_8.0.50727.4053_none_deadbeef.manifest",
+        "type": "regular",
+        "bytes": 319,
+        "mode": 448,
+        "sha256": "6eb289e5620a0da083dfa0773a6a1fee8adfebe301d2c3e6a162925c8736d320"
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/manifests/arm64_microsoft.vc80.crt_1fc8b3b9a1e18e3b_8.0.50727.9672_none_deadbeef.manifest",
+        "type": "regular",
+        "bytes": 379,
+        "mode": 448,
+        "sha256": "02ea6d34ad52a371f8bf2baff395ba6a7095af92a9df2acefdb0bcec813c90c8"
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/manifests/arm64_microsoft.vc90.atl_1fc8b3b9a1e18e3b_9.0.30729.6161_none_deadbeef.manifest",
+        "type": "regular",
+        "bytes": 319,
+        "mode": 448,
+        "sha256": "fe85a340de9aa492b8fa82264c6341f61ffc0c0e7c37ced66be70e8404062c35"
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/manifests/arm64_microsoft.vc90.crt_1fc8b3b9a1e18e3b_9.0.30729.6161_none_deadbeef.manifest",
+        "type": "regular",
+        "bytes": 379,
+        "mode": 448,
+        "sha256": "82d4d93f4bbc2d0d5dae60b24fe145bab2a4abdc60e9a392418dd61329e8422b"
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/manifests/arm64_microsoft.windows.common-controls_6595b64144ccf1df_6.0.2600.2982_none_deadbeef.manifest",
+        "type": "regular",
+        "bytes": 1577,
+        "mode": 448,
+        "sha256": "f93536c73bfe4dfc59b998619096d091fe4c9694d5cc2bd40811dedafcc4f975"
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/manifests/arm64_microsoft.windows.gdiplus_6595b64144ccf1df_1.0.6000.16386_none_deadbeef.manifest",
+        "type": "regular",
+        "bytes": 328,
+        "mode": 448,
+        "sha256": "3b7f8bd562943afb42e9dc9e8223cd771d24227d0d175134a0b6c40eee74a174"
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/manifests/arm64_microsoft.windows.gdiplus_6595b64144ccf1df_1.1.7601.23038_none_deadbeef.manifest",
+        "type": "regular",
+        "bytes": 311,
+        "mode": 448,
+        "sha256": "c7ff39fbbbe4b7cba8956a8d044f4317d12b255114909d4698f388a3323df66f"
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/manifests/x86_microsoft-windows-msxml30_31bf3856ad364e35_6.0.6000.16386_none_deadbeef.manifest",
+        "type": "regular",
+        "bytes": 325,
+        "mode": 448,
+        "sha256": "15ba18bba19d5cd2457b84cd51e46cc734deec26107cb09a40e5e76a62141b31"
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/manifests/x86_microsoft-windows-msxml60_31bf3856ad364e35_6.0.6000.16386_none_deadbeef.manifest",
+        "type": "regular",
+        "bytes": 325,
+        "mode": 448,
+        "sha256": "443a8a3d4b27cd49decee22e7496d31c0cdde3216ab3a8aa5e3faa148f767112"
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/manifests/x86_microsoft.msxml2_6bd6b9abf345378f_4.1.0.0_none_deadbeef.manifest",
+        "type": "regular",
+        "bytes": 309,
+        "mode": 448,
+        "sha256": "9486303926e4ef75ff3fe6012962d3568eefb264c980bda6bd7ce0692ff8e311"
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/manifests/x86_microsoft.vc80.atl_1fc8b3b9a1e18e3b_8.0.50727.4053_none_deadbeef.manifest",
+        "type": "regular",
+        "bytes": 317,
+        "mode": 448,
+        "sha256": "f0d3d2e30a4d10a0ed35c3185d1e6c33da0da9c2c0e3b4ccbc43a25a0afb13e4"
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/manifests/x86_microsoft.vc80.crt_1fc8b3b9a1e18e3b_8.0.50727.9672_none_deadbeef.manifest",
+        "type": "regular",
+        "bytes": 377,
+        "mode": 448,
+        "sha256": "5ea33b1803758d8cf0e7d90ba60544063cdd9b1be838657c8df1a2d34b110561"
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/manifests/x86_microsoft.vc90.atl_1fc8b3b9a1e18e3b_9.0.30729.6161_none_deadbeef.manifest",
+        "type": "regular",
+        "bytes": 317,
+        "mode": 448,
+        "sha256": "d7bad89e467ad85fc6956373a48cf95e7123595656b6087322ee3d0cab68a5b2"
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/manifests/x86_microsoft.vc90.crt_1fc8b3b9a1e18e3b_9.0.30729.6161_none_deadbeef.manifest",
+        "type": "regular",
+        "bytes": 377,
+        "mode": 448,
+        "sha256": "1a53a44a82c44105e1054cad728add6c6855de21249b9a377cbb9282687c0aad"
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/manifests/x86_microsoft.windows.common-controls_6595b64144ccf1df_6.0.2600.2982_none_deadbeef.manifest",
+        "type": "regular",
+        "bytes": 1575,
+        "mode": 448,
+        "sha256": "355f4380a3ff8777bf9c899a7f1d85e1bc3cfec5a36d6f8654ab9b980c5e2bbe"
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/manifests/x86_microsoft.windows.gdiplus_6595b64144ccf1df_1.0.6000.16386_none_deadbeef.manifest",
+        "type": "regular",
+        "bytes": 326,
+        "mode": 448,
+        "sha256": "c3a412d0034076444a33b2034bd4b0242f01f850ab2914854afd6baa1c5fc6ba"
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/manifests/x86_microsoft.windows.gdiplus_6595b64144ccf1df_1.1.7601.23038_none_deadbeef.manifest",
+        "type": "regular",
+        "bytes": 309,
+        "mode": 448,
+        "sha256": "24a1c8fd722ea34f7a9b2c3cb61f0edfd256f6c77982736c0502365aa5c2d8ef"
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/x86_microsoft-windows-msxml30_31bf3856ad364e35_6.0.6000.16386_none_deadbeef",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/x86_microsoft-windows-msxml30_31bf3856ad364e35_6.0.6000.16386_none_deadbeef/._msxml3.dll",
+        "type": "regular",
+        "bytes": 249,
+        "mode": 448,
+        "sha256": "c592de4286d22d2d578dfc67aca3297944b6ae26dc8ed4b97d7a3df652427f41"
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/x86_microsoft-windows-msxml30_31bf3856ad364e35_6.0.6000.16386_none_deadbeef/msxml3.dll",
+        "type": "regular",
+        "bytes": 8323072,
+        "mode": 448,
+        "sha256": "43bc1ae86c40cbf574e977ec3122358cfdce697c868052f7b2595695a6a9d428"
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/x86_microsoft-windows-msxml60_31bf3856ad364e35_6.0.6000.16386_none_deadbeef",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/x86_microsoft-windows-msxml60_31bf3856ad364e35_6.0.6000.16386_none_deadbeef/._msxml6.dll",
+        "type": "regular",
+        "bytes": 249,
+        "mode": 448,
+        "sha256": "c592de4286d22d2d578dfc67aca3297944b6ae26dc8ed4b97d7a3df652427f41"
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/x86_microsoft-windows-msxml60_31bf3856ad364e35_6.0.6000.16386_none_deadbeef/msxml6.dll",
+        "type": "regular",
+        "bytes": 159744,
+        "mode": 448,
+        "sha256": "0d7706f15b616cc060f134ce7ae15948071cde4d357fd31e3131f42451fc5891"
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/x86_microsoft.msxml2_6bd6b9abf345378f_4.1.0.0_none_deadbeef",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/x86_microsoft.msxml2_6bd6b9abf345378f_4.1.0.0_none_deadbeef/._msxml4.dll",
+        "type": "regular",
+        "bytes": 249,
+        "mode": 448,
+        "sha256": "c592de4286d22d2d578dfc67aca3297944b6ae26dc8ed4b97d7a3df652427f41"
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/x86_microsoft.msxml2_6bd6b9abf345378f_4.1.0.0_none_deadbeef/msxml4.dll",
+        "type": "regular",
+        "bytes": 159744,
+        "mode": 448,
+        "sha256": "74d02f37f847063fdb6441cc348e80ea0929f2a9ff9e37ce14c9781c6d745761"
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/x86_microsoft.vc80.atl_1fc8b3b9a1e18e3b_8.0.50727.4053_none_deadbeef",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/x86_microsoft.vc80.atl_1fc8b3b9a1e18e3b_8.0.50727.4053_none_deadbeef/._atl80.dll",
+        "type": "regular",
+        "bytes": 249,
+        "mode": 448,
+        "sha256": "c592de4286d22d2d578dfc67aca3297944b6ae26dc8ed4b97d7a3df652427f41"
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/x86_microsoft.vc80.atl_1fc8b3b9a1e18e3b_8.0.50727.4053_none_deadbeef/atl80.dll",
+        "type": "regular",
+        "bytes": 593920,
+        "mode": 448,
+        "sha256": "cca012edbac4979f1aa36fb2287591cec277a7215b5ce93b62f8febf4947515e"
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/x86_microsoft.vc80.crt_1fc8b3b9a1e18e3b_8.0.50727.9672_none_deadbeef",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/x86_microsoft.vc80.crt_1fc8b3b9a1e18e3b_8.0.50727.9672_none_deadbeef/._msvcm80.dll",
+        "type": "regular",
+        "bytes": 249,
+        "mode": 448,
+        "sha256": "c592de4286d22d2d578dfc67aca3297944b6ae26dc8ed4b97d7a3df652427f41"
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/x86_microsoft.vc80.crt_1fc8b3b9a1e18e3b_8.0.50727.9672_none_deadbeef/._msvcp80.dll",
+        "type": "regular",
+        "bytes": 249,
+        "mode": 448,
+        "sha256": "c592de4286d22d2d578dfc67aca3297944b6ae26dc8ed4b97d7a3df652427f41"
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/x86_microsoft.vc80.crt_1fc8b3b9a1e18e3b_8.0.50727.9672_none_deadbeef/._msvcr80.dll",
+        "type": "regular",
+        "bytes": 249,
+        "mode": 448,
+        "sha256": "c592de4286d22d2d578dfc67aca3297944b6ae26dc8ed4b97d7a3df652427f41"
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/x86_microsoft.vc80.crt_1fc8b3b9a1e18e3b_8.0.50727.9672_none_deadbeef/msvcm80.dll",
+        "type": "regular",
+        "bytes": 102400,
+        "mode": 448,
+        "sha256": "42e72d1de3e24e05d060684912beb3c3ab8560278a55c4392e39b69ba3c68936"
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/x86_microsoft.vc80.crt_1fc8b3b9a1e18e3b_8.0.50727.9672_none_deadbeef/msvcp80.dll",
+        "type": "regular",
+        "bytes": 2568192,
+        "mode": 448,
+        "sha256": "2974fb27721a91bebeea37f1ae82f838d6152a476d4e2f76a625400724f64988"
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/x86_microsoft.vc80.crt_1fc8b3b9a1e18e3b_8.0.50727.9672_none_deadbeef/msvcr80.dll",
+        "type": "regular",
+        "bytes": 2265088,
+        "mode": 448,
+        "sha256": "379e9bd81817edff21b28b3b1b6ffc1e2cbe7e1012a90a7d57682e9e92bc783b"
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/x86_microsoft.vc90.atl_1fc8b3b9a1e18e3b_9.0.30729.6161_none_deadbeef",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/x86_microsoft.vc90.atl_1fc8b3b9a1e18e3b_9.0.30729.6161_none_deadbeef/._atl90.dll",
+        "type": "regular",
+        "bytes": 249,
+        "mode": 448,
+        "sha256": "c592de4286d22d2d578dfc67aca3297944b6ae26dc8ed4b97d7a3df652427f41"
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/x86_microsoft.vc90.atl_1fc8b3b9a1e18e3b_9.0.30729.6161_none_deadbeef/atl90.dll",
+        "type": "regular",
+        "bytes": 589824,
+        "mode": 448,
+        "sha256": "2e90be473cd141daf038738553c2c4652b0e31a35d751637f5ad68d881a5fe58"
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/x86_microsoft.vc90.crt_1fc8b3b9a1e18e3b_9.0.30729.6161_none_deadbeef",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/x86_microsoft.vc90.crt_1fc8b3b9a1e18e3b_9.0.30729.6161_none_deadbeef/._msvcm90.dll",
+        "type": "regular",
+        "bytes": 249,
+        "mode": 448,
+        "sha256": "c592de4286d22d2d578dfc67aca3297944b6ae26dc8ed4b97d7a3df652427f41"
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/x86_microsoft.vc90.crt_1fc8b3b9a1e18e3b_9.0.30729.6161_none_deadbeef/._msvcp90.dll",
+        "type": "regular",
+        "bytes": 249,
+        "mode": 448,
+        "sha256": "c592de4286d22d2d578dfc67aca3297944b6ae26dc8ed4b97d7a3df652427f41"
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/x86_microsoft.vc90.crt_1fc8b3b9a1e18e3b_9.0.30729.6161_none_deadbeef/._msvcr90.dll",
+        "type": "regular",
+        "bytes": 249,
+        "mode": 448,
+        "sha256": "c592de4286d22d2d578dfc67aca3297944b6ae26dc8ed4b97d7a3df652427f41"
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/x86_microsoft.vc90.crt_1fc8b3b9a1e18e3b_9.0.30729.6161_none_deadbeef/msvcm90.dll",
+        "type": "regular",
+        "bytes": 86016,
+        "mode": 448,
+        "sha256": "c021a9b0f9c3e7f8564ba52941edb9b6a8e582fa2409b041f01c8acb4dd8c20b"
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/x86_microsoft.vc90.crt_1fc8b3b9a1e18e3b_9.0.30729.6161_none_deadbeef/msvcp90.dll",
+        "type": "regular",
+        "bytes": 2572288,
+        "mode": 448,
+        "sha256": "fb0b9e20c065a194098ecdbbe447894713983720b0ea776173b2766f7916e97b"
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/x86_microsoft.vc90.crt_1fc8b3b9a1e18e3b_9.0.30729.6161_none_deadbeef/msvcr90.dll",
+        "type": "regular",
+        "bytes": 2260992,
+        "mode": 448,
+        "sha256": "fabf8b8df5e4014dff55eef64249ae6c79e757f7da01616cf619b2b83cb16153"
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/x86_microsoft.windows.common-controls_6595b64144ccf1df_6.0.2600.2982_none_deadbeef",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/x86_microsoft.windows.common-controls_6595b64144ccf1df_6.0.2600.2982_none_deadbeef/._comctl32.dll",
+        "type": "regular",
+        "bytes": 249,
+        "mode": 448,
+        "sha256": "c592de4286d22d2d578dfc67aca3297944b6ae26dc8ed4b97d7a3df652427f41"
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/x86_microsoft.windows.common-controls_6595b64144ccf1df_6.0.2600.2982_none_deadbeef/comctl32.dll",
+        "type": "regular",
+        "bytes": 3522560,
+        "mode": 511,
+        "sha256": "44a98e44ea3fff7644cda51a379b0a8bd87ca25c2c10aaf8984c5a8aeeea30fc"
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/x86_microsoft.windows.gdiplus_6595b64144ccf1df_1.0.6000.16386_none_deadbeef",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/x86_microsoft.windows.gdiplus_6595b64144ccf1df_1.0.6000.16386_none_deadbeef/._gdiplus.dll",
+        "type": "regular",
+        "bytes": 249,
+        "mode": 448,
+        "sha256": "c592de4286d22d2d578dfc67aca3297944b6ae26dc8ed4b97d7a3df652427f41"
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/x86_microsoft.windows.gdiplus_6595b64144ccf1df_1.0.6000.16386_none_deadbeef/gdiplus.dll",
+        "type": "regular",
+        "bytes": 1863680,
+        "mode": 448,
+        "sha256": "c360909ba10539b082c8385cf27a84aaac4e8deced85f753ef347300ee835424"
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/x86_microsoft.windows.gdiplus_6595b64144ccf1df_1.1.7601.23038_none_deadbeef",
+        "type": "directory",
+        "bytes": 0,
+        "mode": 448
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/x86_microsoft.windows.gdiplus_6595b64144ccf1df_1.1.7601.23038_none_deadbeef/._gdiplus.dll",
+        "type": "regular",
+        "bytes": 249,
+        "mode": 448,
+        "sha256": "c592de4286d22d2d578dfc67aca3297944b6ae26dc8ed4b97d7a3df652427f41"
+      },
+      {
+        "path": ".wine/drive_c/windows/winsxs/x86_microsoft.windows.gdiplus_6595b64144ccf1df_1.1.7601.23038_none_deadbeef/gdiplus.dll",
+        "type": "regular",
+        "bytes": 1863680,
+        "mode": 448,
+        "sha256": "c360909ba10539b082c8385cf27a84aaac4e8deced85f753ef347300ee835424"
+      },
+      {
+        "path": ".wine/system.reg",
+        "type": "regular",
+        "bytes": 3779965,
+        "mode": 384,
+        "sha256": "dcdbd01b95a592c455b41f13d6b3e9693270f1054365d9097b8ce42ea7d3879e"
+      },
+      {
+        "path": ".wine/user.reg",
+        "type": "regular",
+        "bytes": 50198,
+        "mode": 384,
+        "sha256": "35705c3988763b727ce78c38dc39d7dbf6cc65be5c2ec3b58f450fdf60ee4560"
+      },
+      {
+        "path": ".wine/userdef.reg",
+        "type": "regular",
+        "bytes": 4086,
+        "mode": 384,
+        "sha256": "9e8f914cb3602bd2c91462429a2e464ad7852dbba8d73b286770a0ad5cdc69dc"
+      }
+    ]
+  },
+  "reconstruction": {
+    "archive_links_omitted_from_materialization": [
+      ".wine/dosdevices/c:",
+      ".wine/dosdevices/d:",
+      ".wine/dosdevices/e:",
+      ".wine/dosdevices/z:"
+    ],
+    "links": [
+      {
+        "path": ".wine/dosdevices/a:",
+        "target": "<probe_root>",
+        "target_kind": "explicit_root"
+      },
+      {
+        "path": ".wine/dosdevices/c:",
+        "target": "../drive_c",
+        "target_kind": "relative"
+      },
+      {
+        "path": ".wine/dosdevices/z:",
+        "target": "<imagefs_root>",
+        "target_kind": "explicit_root"
+      }
+    ],
+    "forbidden_archive_links": [
+      ".wine/dosdevices/d:",
+      ".wine/dosdevices/e:"
+    ]
+  },
+  "preserved_registries": [
+    {
+      "path": ".wine/system.reg",
+      "bytes": 3779965,
+      "mode": 384,
+      "sha256": "dcdbd01b95a592c455b41f13d6b3e9693270f1054365d9097b8ce42ea7d3879e"
+    },
+    {
+      "path": ".wine/user.reg",
+      "bytes": 50198,
+      "mode": 384,
+      "sha256": "35705c3988763b727ce78c38dc39d7dbf6cc65be5c2ec3b58f450fdf60ee4560"
+    },
+    {
+      "path": ".wine/userdef.reg",
+      "bytes": 4086,
+      "mode": 384,
+      "sha256": "9e8f914cb3602bd2c91462429a2e464ad7852dbba8d73b286770a0ad5cdc69dc"
+    }
+  ],
+  "replacements": [
+    {
+      "path": ".wine/drive_c/windows/system32/d3dcompiler_47.dll",
+      "source": "compiler",
+      "bytes": 1114112,
+      "mode": 420,
+      "sha256": "c374b107fd14890e4b602921c82198bd7c3773f7f1d27f0712be92cb52ed3add"
+    },
+    {
+      "path": ".wine/drive_c/windows/system32/dxgi.dll",
+      "source": "dxgi",
+      "bytes": 3059712,
+      "mode": 493,
+      "sha256": "136a8703e9f6aede96ae671ba16f88de1191e79d59e18a617bbbe85fad0c74fc"
+    },
+    {
+      "path": ".wine/drive_c/windows/system32/d3d11.dll",
+      "source": "d3d11",
+      "bytes": 4907008,
+      "mode": 493,
+      "sha256": "5e2167882c88e8e4013e5d5aa1ba221ce9a3ddb847ed901c06b652ce97a07c0f"
+    }
+  ],
+  "materialization": {
+    "archive_regulars_written": 408,
+    "archive_directories_written": 163,
+    "archive_symlinks_written": 0,
+    "reconstructed_symlinks": 3,
+    "final_regular_files": 411,
+    "final_symlinks": 3
+  }
+}

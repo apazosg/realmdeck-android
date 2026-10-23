@@ -1,0 +1,43 @@
+{
+  "schema": 1,
+  "kind": "EXACT_HISTORICAL_PRELAUNCH_AUTHORIZATION",
+  "variant": "native-run-supervisor-v2",
+  "runId": "NS-b0a3fe48f925d7d656f597f740b4b413",
+  "nonce": "83ebf2726bda3c43258cd9523c465f59",
+  "priorStatus": "UNKNOWN",
+  "nativeExit": null,
+  "echild": false,
+  "reason": "access failed: EACCES (Permission denied)",
+  "attemptBootId": "66f3530d-a8e6-4a94-9b62-44393cdc75c0",
+  "apk57": {
+    "bytes": 370931339,
+    "sha256": "8d0c0a86b1ca1571736e399d08f9ae7e36b9b7ec2f6b73075867c0a5fb747572",
+    "provenanceSha256": "5630f86fe7265fcd42d45023153aec9acac21f8f27df4b6b92b2f82ded3ec5c4",
+    "controllerSha256": "c445ee04bc76ad0f9fcdea19a66bcd9897d950dd5111b8cdf98cc73820c75ba9",
+    "policySha256": "1d4c59fdeed66452f77baf97ce72592db5b6eccf5479aad090659f67b7432d79",
+    "storeSha256": "ce858104d6d6f97ee71db630f72cf388090b5f459493d24acef3a7ef545b6ea7"
+  },
+  "current": {"bytes": 380, "sha256": "73428e2c77bdeafc5687a5860821b67b7f1489966f1cae62d04a12318c57244d"},
+  "runFiles": {
+    "run.json": {"bytes": 380, "sha256": "73428e2c77bdeafc5687a5860821b67b7f1489966f1cae62d04a12318c57244d"},
+    "events.jsonl": {"bytes": 51, "sha256": "e81a47a4da7aa10ec844f14d821e6109b4584495c381459a49a96d5ceaaa4693"},
+    "stdout": {"bytes": 0, "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "devicePresence": "missing"},
+    "stderr": {"bytes": 0, "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "devicePresence": "missing"},
+    "witness-stdout": {"bytes": 0, "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "devicePresence": "missing"},
+    "witness-stderr": {"bytes": 0, "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "devicePresence": "missing"}
+  },
+  "evidence": {
+    "sealSha256": "f426bbd4ff2fd836efd9e0086e7ac742b134fc1fdffed27442426620126c23c2",
+    "closureSealSha256": "0d297fb669a4a6233b81870ec3266f10b8450c3e4dd05c27db2f7543aae26bb0",
+    "provenanceSha256": "4b9ab321c7aca6dae9f676ea5887a2c44ad1f064d5c3476046dca97b18fb9e72",
+    "collectorSha256": "ee920762b57af16418a6b7d8c4a7f22c9e914f619874ae50eb1a67813dd89b00"
+  },
+  "legacy56CurrentSha256": "c9c899f579314d193a91a7bd935be5df16d6dcc1ece39d42863a9ab15064685c",
+  "receiptFiles": {
+    "archive": "current-before-disposition.json",
+    "disposition": "prelaunch-disposition.json",
+    "consumption": "prelaunch-consumption.json"
+  },
+  "processCreateMarker": {"kind": "process_create_intent", "roles": ["supervisor", "witness"]},
+  "boundary": "Explicit historical authorization, NOT runtime cleanup or ECHILD proof. No generic UNKNOWN recovery."
+}

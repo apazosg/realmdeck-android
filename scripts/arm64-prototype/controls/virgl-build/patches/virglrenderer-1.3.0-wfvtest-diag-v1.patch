@@ -1,0 +1,176 @@
+diff --git a/src/vrend/vrend_winsys_egl.c b/src/vrend/vrend_winsys_egl.c
+--- a/src/vrend/vrend_winsys_egl.c
++++ b/src/vrend/vrend_winsys_egl.c
+@@ -38,6 +38,9 @@
+ #else
+ #include <poll.h>
+ #endif
++#ifdef WFVTEST_DIAG
++#include <stdio.h>
++#endif
+ #include <stdbool.h>
+ #include <unistd.h>
+ 
+@@ -87,7 +90,30 @@
+    { EGL_EXT_DEVICE_QUERY, "EGL_EXT_device_query" },
+    { EGL_EXT_PLATFORM_DEVICE, "EGL_EXT_platform_device" },
+ };
++
++#ifdef WFVTEST_DIAG
++static void wfvtest_diag_result(const char *stage, EGLBoolean result)
++{
++   /* Keep the source result/check unchanged; consume EGL error only on failure. */
++   EGLint error = result ? EGL_SUCCESS : eglGetError();
++   fprintf(stderr, "WFVTEST_DIAG stage=%s result=%d egl_error=0x%04x\n",
++           stage, result ? 1 : 0, error);
++   fflush(stderr);
++}
++
++static void wfvtest_diag_value(const char *stage, int value)
++{
++   fprintf(stderr, "WFVTEST_DIAG stage=%s value=%d\n", stage, value);
++   fflush(stderr);
++}
++
++#ifdef ENABLE_GBM
++#define WFVTEST_DIAG_COMPILED_GBM 1
++#else
++#define WFVTEST_DIAG_COMPILED_GBM 0
++#endif
++#endif
+ 
+ struct egl_funcs {
+    PFNEGLGETPLATFORMDISPLAYEXTPROC eglGetPlatformDisplay;
+    PFNEGLQUERYDEVICESEXTPROC eglQueryDevices;
+@@ -325,6 +351,12 @@
+ 
+    const char *client_extensions = eglQueryString (NULL, EGL_EXTENSIONS);
+    bool has_egl_base = virgl_egl_has_extension_in_string(client_extensions, "EGL_EXT_platform_base");
++#ifdef WFVTEST_DIAG
++   wfvtest_diag_value("compile.gbm", WFVTEST_DIAG_COMPILED_GBM);
++   wfvtest_diag_value("input.surfaceless", surfaceless ? 1 : 0);
++   wfvtest_diag_value("input.gles", gles ? 1 : 0);
++   wfvtest_diag_value("client.has_platform_base", has_egl_base ? 1 : 0);
++#endif
+ 
+    egl = calloc(1, sizeof(struct virgl_egl));
+    if (!egl)
+@@ -336,8 +368,12 @@
+    if (surfaceless)
+       conf_att[1] = EGL_PBUFFER_BIT;
+ #ifdef ENABLE_GBM
+-   if (!gbm && (!surfaceless || !has_egl_base))
++   if (!gbm && (!surfaceless || !has_egl_base)) {
++#ifdef WFVTEST_DIAG
++      wfvtest_diag_value("init.reject_missing_gbm_or_platform", 1);
++#endif
+       goto fail;
++   }
+    egl->gbm = gbm;
+ #endif
+ 
+@@ -345,6 +381,9 @@
+    extensions = eglQueryString(NULL, EGL_EXTENSIONS);
+    if (!virgl_egl_add_extensions(egl, extensions))
+       goto fail;
++#ifdef WFVTEST_DIAG
++   wfvtest_diag_value("client.extension_functions", 1);
++#endif
+ 
+ #ifdef ENABLE_GBM_ALLOCATION
+    if (virgl_egl_get_display(egl)) {
+@@ -357,17 +396,27 @@
+       if (surfaceless) {
+          egl->egl_display = egl->funcs.eglGetPlatformDisplay(EGL_PLATFORM_SURFACELESS_MESA,
+                                                              (void *)EGL_DEFAULT_DISPLAY, NULL);
++#ifdef WFVTEST_DIAG
++         wfvtest_diag_result("display.platform_surfaceless", egl->egl_display != EGL_NO_DISPLAY);
++#endif
+       }
+ #ifdef ENABLE_GBM
+-      else
++      else {
+          egl->egl_display = egl->funcs.eglGetPlatformDisplay(EGL_PLATFORM_GBM_KHR,
+                                                              egl->gbm->device, NULL);
++#ifdef WFVTEST_DIAG
++         wfvtest_diag_result("display.platform_gbm", egl->egl_display != EGL_NO_DISPLAY);
++#endif
++      }
+ #endif
+    } else {
+ #ifdef ENABLE_GBM
+       egl->egl_display = eglGetDisplay((EGLNativeDisplayType)egl->gbm->device);
+ #else
+       egl->egl_display = eglGetDisplay(display_id);
++#endif
++#ifdef WFVTEST_DIAG
++      wfvtest_diag_result("display.native", egl->egl_display != EGL_NO_DISPLAY);
+ #endif
+    }
+ 
+@@ -382,11 +431,17 @@
+ #endif
+ 
+       egl->egl_display = eglGetDisplay(EGL_DEFAULT_DISPLAY);
++#ifdef WFVTEST_DIAG
++      wfvtest_diag_result("display.default_fallback", egl->egl_display != EGL_NO_DISPLAY);
++#endif
+       if (!egl->egl_display)
+          goto fail;
+    }
+ 
+    success = eglInitialize(egl->egl_display, &major, &minor);
++#ifdef WFVTEST_DIAG
++   wfvtest_diag_result("eglInitialize", success);
++#endif
+    if (!success)
+       goto fail;
+ 
+@@ -402,6 +457,9 @@
+ 
+    if (!virgl_egl_add_extensions(egl, extensions))
+       goto fail;
++#ifdef WFVTEST_DIAG
++   wfvtest_diag_value("display.has_surfaceless", has_bit(egl->extension_bits, EGL_KHR_SURFACELESS_CONTEXT) ? 1 : 0);
++#endif
+ 
+    if (!virgl_egl_check_extensions(egl))
+       goto fail;
+@@ -411,21 +469,36 @@
+    else
+       api = EGL_OPENGL_API;
+    success = eglBindAPI(api);
++#ifdef WFVTEST_DIAG
++   wfvtest_diag_result("eglBindAPI", success);
++#endif
+    if (!success)
+       goto fail;
+ 
+    success = eglChooseConfig(egl->egl_display, conf_att, &egl->egl_conf,
+                              1, &num_configs);
++#ifdef WFVTEST_DIAG
++   wfvtest_diag_result("eglChooseConfig", success);
++   wfvtest_diag_value("eglChooseConfig.count", num_configs);
++#endif
+    if (!success || num_configs != 1)
+       goto fail;
+ 
+    egl->egl_ctx = eglCreateContext(egl->egl_display, egl->egl_conf, EGL_NO_CONTEXT,
+                                    ctx_att);
++#ifdef WFVTEST_DIAG
++   wfvtest_diag_result("eglCreateContext", egl->egl_ctx != EGL_NO_CONTEXT);
++#endif
+    if (!egl->egl_ctx)
+       goto fail;
+-
++#ifdef WFVTEST_DIAG
++   success = eglMakeCurrent(egl->egl_display, EGL_NO_SURFACE, EGL_NO_SURFACE,
++                            egl->egl_ctx);
++   wfvtest_diag_result("eglMakeCurrent", success);
++#else
+    eglMakeCurrent(egl->egl_display, EGL_NO_SURFACE, EGL_NO_SURFACE,
+                   egl->egl_ctx);
++#endif
+ 
+    if (virgl_egl_supports_fences(egl)) {
+       egl->signaled_fence = eglCreateSyncKHR(egl->egl_display,

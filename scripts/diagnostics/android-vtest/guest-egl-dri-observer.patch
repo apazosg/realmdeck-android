@@ -1,0 +1,43 @@
+--- GuestEglLoader.c
++++ GuestEglLoader.c
+@@ -320,7 +320,7 @@
+ static int environment_name_allowed(const char *name) {
+     static const char *const allowed[] = {
+         "PATH", "ANDROID_ROOT", "ANDROID_DATA", "LD_LIBRARY_PATH", "TMPDIR",
+-        "__EGL_VENDOR_LIBRARY_FILENAMES", "GALLIUM_DRIVER", "VTEST_SOCKET_NAME", "EGL_LOG_LEVEL", "MESA_LOG", "MESA_LOG_LEVEL"
++        "__EGL_VENDOR_LIBRARY_FILENAMES", "GALLIUM_DRIVER", "VTEST_SOCKET_NAME", "EGL_LOG_LEVEL", "MESA_LOG", "MESA_LOG_LEVEL", "LD_PRELOAD"
+     };
+     size_t i;
+     for (i = 0U; i < sizeof(allowed) / sizeof(allowed[0]); ++i) if (strcmp(name, allowed[i]) == 0) return 1;
+@@ -331,11 +331,13 @@
+     extern char **environ;
+     static const char *const names[] = {
+         "PATH", "ANDROID_ROOT", "ANDROID_DATA", "LD_LIBRARY_PATH", "TMPDIR",
+-        "__EGL_VENDOR_LIBRARY_FILENAMES", "GALLIUM_DRIVER", "VTEST_SOCKET_NAME", "EGL_LOG_LEVEL", "MESA_LOG", "MESA_LOG_LEVEL"
++        "__EGL_VENDOR_LIBRARY_FILENAMES", "GALLIUM_DRIVER", "VTEST_SOCKET_NAME", "EGL_LOG_LEVEL", "MESA_LOG", "MESA_LOG_LEVEL", "LD_PRELOAD"
+     };
+     const char *values[sizeof(names) / sizeof(names[0])];
+     size_t i;
+     size_t count = 0U;
++    char observerPath[MAX_PATH_STRING];
++    int observerLength;
+     for (i = 0U; i < sizeof(names) / sizeof(names[0]); ++i) values[i] = NULL;
+     if (environ == NULL) return 0;
+     for (i = 0U; environ[i] != NULL; ++i) {
+@@ -356,12 +358,15 @@
+         }
+     }
+     if (count != sizeof(names) / sizeof(names[0])) return 0;
++    observerLength = snprintf(observerPath, sizeof(observerPath), "%s/guest/observer/libdri_return_observer.so", paths->cwd);
++    if (observerLength <= 0 || (size_t)observerLength >= sizeof(observerPath)) return 0;
+     return strcmp(values[0], "/system/bin:/system/xbin") == 0 &&
+            strcmp(values[1], "/system") == 0 && strcmp(values[2], "/data") == 0 &&
+            strcmp(values[3], paths->ldLibraryPath) == 0 && strcmp(values[4], paths->cwd) == 0 &&
+            strcmp(values[5], paths->vendorJson) == 0 && strcmp(values[6], "virpipe") == 0 &&
+            strcmp(values[7], "vtest.sock") == 0 && strcmp(values[8], "debug") == 0 &&
+-           strcmp(values[9], "file") == 0 && strcmp(values[10], "debug") == 0;
++           strcmp(values[9], "file") == 0 && strcmp(values[10], "debug") == 0 &&
++           strcmp(values[11], observerPath) == 0;
+ }
+ 
+ static int validate_scope(const char *runId, const Identity *identity, Paths *paths) {

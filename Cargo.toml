@@ -1,0 +1,3 @@
+[workspace]
+members = ["crates/forever-patcher", "crates/forever-patcher-jni"]
+resolver = "2"

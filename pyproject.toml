@@ -1,0 +1,27 @@
+[project]
+name = "wowforever"
+version = "0.1.0"
+description = "Provisión del cliente WoW Classic Beta para Classic Forever (Fase 1)"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+  "cascette-tools",
+]
+
+[project.scripts]
+forever-client = "forever_client.cli:main"
+
+[tool.uv.sources]
+cascette-tools = { git = "https://github.com/apazosg/cascette-py", rev = "c13c16c3b80008e8a9715f7dcbc9abea10130412" }
+
+[dependency-groups]
+dev = [
+  "pytest>=8",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/forever_client"]

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Forever launcher icon for API 26-32: background plus foreground only.
+     The monochrome layer lives in the v33 overlay because pre-33
+     AdaptiveIconDrawable rejects the unknown tag. -->
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@drawable/forever_emblem_background" />
+    <foreground android:drawable="@drawable/forever_emblem_foreground" />
+</adaptive-icon>

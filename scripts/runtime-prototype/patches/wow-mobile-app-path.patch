@@ -1,0 +1,9 @@
+diff --git a/app/src/main/java/com/winlator/core/AppUtils.java b/app/src/main/java/com/winlator/core/AppUtils.java
+--- a/app/src/main/java/com/winlator/core/AppUtils.java
++++ b/app/src/main/java/com/winlator/core/AppUtils.java
+@@ -45,4 +45,4 @@ public abstract class AppUtils {
+ public abstract class AppUtils {
+     public static final String DIRECTORY_DOWNLOADS = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS).getPath();
+-    public static final String INTERNAL_STORAGE = "/data/data/it.wowmobile/storage";
++    public static final String INTERNAL_STORAGE = "/data/data/com.wowforever.runtimeprobe/storage";
+     private static WeakReference<Toast> globalToastReference = null;

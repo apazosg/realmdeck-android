@@ -1,0 +1,16 @@
+[package]
+name = "forever-patcher-jni"
+version = "0.1.0"
+edition = "2021"
+description = "Puente JNI (Android) al núcleo forever-patcher. Todo el `unsafe` del FFI vive aquí; el núcleo no contiene `unsafe`."
+license = "MIT"
+
+[lib]
+name = "forever_patcher_jni"
+crate-type = ["cdylib"]
+
+[dependencies]
+forever-patcher = { path = "../forever-patcher", version = "0.1" }
+jni = "0.21"
+libc = "0.2"
+serde_json = "1"
