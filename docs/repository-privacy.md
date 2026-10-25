@@ -3,6 +3,8 @@
 The code may be published; physical identifiers, credentials, signing keys, and
 private reports may not. Keep artifacts and screenshots outside the repository.
 If a local directory inside the checkout is needed, `private/` is ignored.
+Local device-control values and internal operating rules live in
+`private/device-control.md`; never copy them into versioned documentation.
 
 ## Phone selection
 
