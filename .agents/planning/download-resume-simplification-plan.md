@@ -253,6 +253,30 @@ costes y la reanudación con una sola acción cuando el plan siga siendo válido
   confirmación. Diagnosticar la condición exacta de `canResume`: los presupuestos
   privados/destino se comparan separadamente y no basta un pico combinado menor
   para demostrar que el consentimiento sigue válido. No relajar la guarda.
+- Diagnóstico confirmado por lectura de argumentos en C147 debug: espacio válido,
+  misma revisión y mismo `planId`. El presupuesto privado pasa de 1.831.494.496 a
+  1.835.889.466 bytes (+4.394.970); descarga, destino y pico bajan. La guarda hace
+  bien en rechazarlo. La corrección local conserva esa guarda y el cálculo actual
+  de espacio libre: separar del coste consentido los créditos de ocupación privada
+  transitoria para que retirar raws/scratch propios no eleve su límite consentido.
+  Usar una cota conservadora estable en el camino sin fuente, como ya se hace con
+  la reserva de orden de archivo, dejando el camino con fuente intacto. Reproducir
+  primero con un parcial sintético escaso, luego probar límites/espacio y mostrar
+  las cotas por volumen exigidas por AC-02. Sin formato/recibo nuevo, sin persistir
+  consentimiento y sin una segunda máquina de estados. Si exige cambiar una
+  garantía o el comportamiento aprobado, parar para decisión en vez de ampliarlo.
+- Reparación `5516cf6`: cinco focales PASS, fuentes compiladas cotejadas y revisión
+  independiente GPT-6 Luna/OpenAI sin hallazgos (modelo autorizado por el usuario).
+  C148 local / `0.2.124-download-resume-test` verificará esta corrección: identidad
+  diferenciada, reconstrucción autenticada, auditoría, actualización conservando
+  datos y prueba acotada. No repetir suites verdes por un retag ni publicar. La
+  autorización del dispositivo cubre la actualización; confirmar los costes reales
+  antes de iniciar payload si necesitan un consentimiento nuevo.
+- C148 reconstruida/autenticada, compilación Modern y auditoría del APK exacto
+  aprobadas; actualización `install -r` verificada, Home disponible 19:57:58 UTC.
+  Comprobación previa sin updater/juego activo; no se borró progreso. Preparación
+  de C148 en curso. Resultado de Resume y reconexión aún pendientes: no cerrar por
+  la compilación o por el ahorro del inspector. Artefactos fuera del repositorio.
 - Consentimiento persistente tras muerte del proceso y pausa viva son cambios de
   producto fuera del primer alcance. Si resultan necesarios, presentar decisión;
   conservar checkpoint no autoriza a descargar automáticamente.

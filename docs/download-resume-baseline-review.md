@@ -374,16 +374,76 @@ autoriza dejar descargando todo el cliente ni aceptar otro plan de costes.
   hay que distinguir una invalidación incorrecta de un presupuesto por volumen
   legítimamente mayor, aunque el pico combinado redondeado haya bajado.
 - Artefacto filtrado: `/tmp/opencode/c147-startup-trial/download-resume-summary.json`.
-  El diagnóstico posterior con debugger, si consigue leer los argumentos de la
-  guarda, no se considerará una medición de rendimiento. No se elimina ninguna
+  El diagnóstico posterior con debugger lee los argumentos de la guarda; no se
+  considera una medición de rendimiento. No se elimina ninguna
   comparación de identidad, revisión, espacio o consentimiento para hacer avanzar
   el flujo.
+
+### Causa comprobada de la reconfirmación y regresión local
+
+La lectura de argumentos de `canResume` en C147 debug confirmó **espacio válido,
+misma revisión y mismo plan**; no se escribieron campos ni se aceptó otra descarga.
+Artefacto externo: `resume-guard-diagnosis.json` en el mismo directorio de prueba.
+
+| Cota (bytes) | Consentida | Recalculada |
+|---|---:|---:|
+| Descarga | 67.628.383.358 | 67.567.830.532 |
+| Privado | 1.831.494.496 | 1.835.889.466 |
+| Destino | 68.136.800.030 | 68.076.242.884 |
+| Pico combinado | 69.968.294.526 | 69.912.132.350 |
+
+El privado sube **4.394.970 bytes**: la guarda rechaza correctamente ese plan.
+El cálculo descontaba toda la ocupación privada del límite consentido; retirar
+raws/scratch propios durante progreso normal puede hacer subir de nuevo ese límite.
+No se elimina la comparación ni se declara válido el consentimiento antiguo.
+
+Regresión local nueva, con el fixture existente y un parcial sintético sparse de
+4 MiB: planificar con el parcial, retirarlo y volver a planificar conservando
+destino/revisión. Antes de modificar producción compiló y falló en la aserción
+esperada «retiring private scratch must not require another consent» (un test,
+un fallo, cero errores; XML 2026-10-25T19:31:46). No se transfieren objetos grandes.
+
+Corrección local `5516cf6`: cota privada conservadora completa para consentir
+el camino sin fuente; crédito de ocupación y mínimo de planificación **idénticos
+a los anteriores** para comprobar el espacio libre actual. Camino con fuente y
+las cuatro guardas intactos. Se muestran también las cotas app/cliente cuando son
+volúmenes distintos, como exige AC-02. Compilación Modern y **cinco regresiones
+focales PASS**, cero fallos/errores/omitidos (XML 2026-10-25T19:35:59), incluidas la
+nueva, rechazo de consentimiento, cancelación de dieciséis descargas y finalización
+al reanudar, ownership del temporal y actualización con fuente. Las tres fuentes
+modificadas coinciden byte a byte con las compiladas; `git diff --check` limpio.
+No se repiten suites previas no afectadas.
+
+Revisión independiente completada, sin hallazgos: tras fallar el worker configurado,
+el usuario autorizó explícitamente GPT-6 Luna de OpenAI para esta revisión, sin
+cambiar configuración. No se repitieron los checks ya verdes.
+
+C148 local / `0.2.124-download-resume-test` (`47c1158`) prepara la prueba física de
+esta corrección. Tres tests de identidad/transformación/marker PASS. Reconstrucción
+autenticada completada bajo `work/download-resume-c148-20261025` fuera del repo;
+fuentes críticas cotejadas con el repositorio. Frente al recibo C147 cambian solo
+la identidad Gradle, el marker, Updater, Management y UpdaterTest (cinco paths).
+El primer proceso de compilación quedó interrumpido sin veredicto ni APK; no se
+interpretó como éxito ni como defecto de Kotlin. Tras comprobar ese estado se
+ejecutó el mismo comando en foreground, con log retenido: `:app:assembleModernDebug
+--offline --no-daemon --max-workers=2`, JDK17, **BUILD SUCCESSFUL en 4m 7s** (68
+tareas). No se repitieron las suites verdes.
+
+Auditoría del APK exacto: **PASS_SOURCE_BUILD_AND_PAYLOAD_AUDIT**, 2.226 fuentes
+sin cambios y 178 payloads; 484.904.415 bytes, SHA-256
+`a6f4ea27d5e8b7dd960823d249f25c3ccb0fc7335a9be94cc375350a60e3776a`.
+Recibo, `build-final.log`, `apk-audit.json` e `install-summary.json` están en el
+directorio externo anterior. Con updater inactivo y sin ejecutables Wine/box64,
+`adb install -r` finalizó con éxito: PackageManager confirmó C148 y Home abrió a
+las 19:57:58 UTC. Sin reset, desinstalación ni publicación. La preparación física
+de C148 está en curso; no se atribuyen a esta corrección resultados físicos aún
+no medidos ni se da por válido el consentimiento de un proceso anterior.
 
 ## Auditoría del objetivo (cierre pendiente)
 
 | Entregable | Evidencia | Pendiente |
 |---|---|---|
 | Menor preparación al iniciar/reanudar | Menos rehashes y tiempos host; tres inspectores C147 físicos sin rehashes; transferencia visible tras una confirmación | Reducción causal de latencia total y primer byte exacto no acreditados |
-| Primera pulsación efectiva, sin repetir | Flujo físico abrir/Continuar/Descargar completado sin acciones extra; diez tests del servicio PASS; `633329e` | Resume volvió a pedir confirmación; diagnosticar la guarda antes de atribuir defecto o aceptar costes |
+| Primera pulsación efectiva, sin repetir | Flujo físico abrir/Continuar/Descargar completado sin acciones extra; diez tests del servicio PASS; `633329e`; regresión privada corregida/revisada en `5516cf6` | Validar Resume físico sin reconfirmación con la corrección |
 | Garantías intactas | Review y focales; checkpoint recuperado y pausa normal con commit durable; ninguna guarda eliminada | No se ejecutó toda la suite; reconexión UI durante transferencia y Resume válido pendientes |
 | Entrega versionada y honesta | Commits separados; baseline C146 y C147 auditada/instalada/probada sin reset | Resolver reanudación y aceptación global; no cerrar por ahorro de un subcomponente |
