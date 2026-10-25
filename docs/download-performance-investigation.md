@@ -1,5 +1,34 @@
 # Download performance investigation
 
+## C144 append-clock diagnostic
+
+C144 (`0.2.120-append-breakdown`) adds five local aggregate clocks inside the
+existing append timing: segment transition/opening, local header construction
+and private-to-segment copy, ordinary index insertion, buffered group flush, and
+data-file force. Segment transition includes its full storage check and generated
+header index entries; those are not part of the ordinary index clock. The light
+group check remains outside the append timer. Checkpoint and raw-retirement
+ordering, buffers, quotas, verification and storage policy are unchanged.
+
+The two focused interrupted-prefix and failed-boundary/resume regressions passed
+on the final source, with no failures or skips. Six focused host source-admission
+and version tests passed. Independent inline-diff review found no actionable
+blocker; it did not independently execute tests. Child nanoseconds and the old
+per-operation rounded milliseconds are not an exact accounting partition, and
+failure-final `newObjects` is not a durable count. Periodic committed samples
+will be used for attribution, not concurrent HTTP totals or a pure-USB claim.
+
+The canonical build completed in 4m57s and its source/build/payload audit passed.
+APK SHA-256:
+`f33c57b13e00796179d02fd935950dc3cc2aab47c74311923f19a37b72524962`.
+The certificate matches C143 and the packaged version is 144. A fresh paused,
+no-guest, Wi-Fi and writable-USB preflight passed before replacement. Installation
+succeeded; before launch, all three owner/receipt/checkpoint hashes and stat
+fields matched exactly, and the installed APK hash matched the audited candidate.
+The consented ten-minute measurement has been initiated, with preparation counted
+separately. It is not yet complete; no C144 throughput result is claimed.
+Merge and any further optimization remain deferred until this diagnosis.
+
 ## C143 directed storage-boundary candidate
 
 Commit `1632460` implements the approved heavy/light policy for directed,
