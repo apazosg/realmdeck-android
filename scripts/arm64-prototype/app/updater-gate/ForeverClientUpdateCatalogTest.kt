@@ -24,6 +24,135 @@ import org.json.JSONObject
 @Config(sdk = [29])
 class ForeverClientUpdateCatalogTest {
     @Test
+    fun archiveOrderStreamsPhysicalOrderAndReusesOnlyTheExactCatalogMembership() {
+        Fixture().use { fixture ->
+            val authorityHash = sha256(fixture.database)
+            ForeverClientUpdateCatalog(fixture.database, authorityHash, fixture.database.length()).use { catalog ->
+                val directory = File(fixture.root, "archive-order").also { check(it.mkdir()) }
+                ForeverClientArchiveOrder.open(catalog, directory) { false }.use { order ->
+                    assertEquals(2L, order.objectCount)
+                    assertTrue(order.fileBytes in 1..ForeverClientArchiveOrder.MAX_BYTES)
+                    assertEquals(listOf(Fixture.RANGE_EKEY, Fixture.DIRECT_EKEY),
+                        order.withObjects({ false }) { it.map { record -> record.ekey }.toList() })
+                    assertEquals(0, order.ordinalOf(Fixture.RANGE_EKEY))
+                    assertEquals(1, order.ordinalOf(Fixture.DIRECT_EKEY))
+                    assertThrows(NoSuchElementException::class.java) { order.ordinalOf("ff".repeat(16)) }
+                    assertEquals(Fixture.RANGE_EKEY, order.withObjects({ false }) { it.first().ekey })
+                }
+                val published = directory.listFiles()!!.single { it.extension == "sqlite3" }
+                val digest = sha256(published)
+                ForeverClientArchiveOrder.open(catalog, directory) { false }.use { order ->
+                    assertEquals(2, order.withObjects({ false }) { it.count() })
+                }
+                assertEquals(digest, sha256(published))
+                assertEquals(authorityHash, sha256(fixture.database))
+            }
+        }
+    }
+
+    @Test
+    fun archiveOrderBatchingPreservesAuthoritativeRecordsAndClosesOnEarlyReturn() {
+        Fixture(extraRangeObjects = 257).use { fixture ->
+            ForeverClientUpdateCatalog(fixture.database, sha256(fixture.database), fixture.database.length()).use { catalog ->
+                val directory = File(fixture.root, "archive-order").also { check(it.mkdir()) }
+                val expected = catalog.withObjects({ false }) { it.toList() }.sortedWith(
+                    compareBy<ForeverClientUpdateCatalog.ObjectRecord>(
+                        { if (it.sourceKind == "range") 0 else 1 },
+                        { it.sourceHash },
+                        { it.sourceOffset },
+                        { it.ekey },
+                    ),
+                )
+                ForeverClientArchiveOrder.open(catalog, directory) { false }.use { order ->
+                    assertEquals(259, expected.size)
+                    assertEquals(expected, order.withObjects({ false }) { it.toList() })
+                    assertEquals(expected.first(), order.withObjects({ false }) { it.first() })
+                    assertEquals(expected.first().ekey, catalog.objectByKey(expected.first().ekey).ekey)
+                    var checks = 0
+                    assertThrows(java.util.concurrent.CancellationException::class.java) {
+                        order.withObjects({ ++checks > 3 }) { it.toList() }
+                    }
+                    assertEquals(expected, order.withObjects({ false }) { it.toList() })
+                }
+                assertThrows(IllegalArgumentException::class.java) {
+                    catalog.objectsByKeys(listOf(Fixture.RANGE_EKEY, Fixture.RANGE_EKEY)) { false }
+                }
+                assertThrows(IllegalArgumentException::class.java) {
+                    catalog.objectsByKeys(List(ForeverClientUpdateCatalog.MAX_OBJECT_KEYS_PER_QUERY + 1) { Fixture.RANGE_EKEY }) { false }
+                }
+                assertThrows(IllegalStateException::class.java) {
+                    catalog.objectsByKeys(listOf("ff".repeat(16))) { false }
+                }
+                var checks = 0
+                assertThrows(java.util.concurrent.CancellationException::class.java) {
+                    catalog.objectsByKeys(listOf(Fixture.RANGE_EKEY, Fixture.DIRECT_EKEY)) { ++checks > 1 }
+                }
+                assertEquals(Fixture.DIRECT_EKEY, catalog.objectByKey(Fixture.DIRECT_EKEY).ekey)
+            }
+        }
+    }
+
+    @Test
+    fun archiveOrderRejectsForeignKeysOrSchemaEvenWithMatchingCountAndFingerprint() {
+        Fixture().use { fixture ->
+            val authorityHash = sha256(fixture.database)
+            ForeverClientUpdateCatalog(fixture.database, authorityHash, fixture.database.length()).use { catalog ->
+                val directory = File(fixture.root, "archive-order").also { check(it.mkdir()) }
+                ForeverClientArchiveOrder.open(catalog, directory) { false }.close()
+                val published = directory.listFiles()!!.single { it.extension == "sqlite3" }
+                SQLiteDatabase.openDatabase(published.absolutePath, null, SQLiteDatabase.NO_LOCALIZED_COLLATORS).use { db ->
+                    db.execSQL("UPDATE schedule SET ekey=X'${"ff".repeat(16)}' WHERE ordinal=0")
+                }
+                val failure = assertThrows(IllegalStateException::class.java) {
+                    ForeverClientArchiveOrder.open(catalog, directory) { false }.close()
+                }
+                assertTrue(failure.message.orEmpty().contains("membership"))
+                SQLiteDatabase.openDatabase(published.absolutePath, null, SQLiteDatabase.NO_LOCALIZED_COLLATORS).use { db ->
+                    db.execSQL("UPDATE schedule SET ekey=X'${Fixture.RANGE_EKEY}' WHERE ordinal=0")
+                    db.execSQL("CREATE TABLE sqlitex_extra(value BLOB)")
+                }
+                val schemaFailure = assertThrows(IllegalStateException::class.java) {
+                    ForeverClientArchiveOrder.open(catalog, directory) { false }.close()
+                }
+                assertTrue(schemaFailure.message.orEmpty().contains("schema"))
+                assertEquals(authorityHash, sha256(fixture.database))
+            }
+        }
+    }
+
+    @Test
+    fun archiveOrderCancellationNeverPublishesAnIncompleteHint() {
+        Fixture().use { fixture ->
+            ForeverClientUpdateCatalog(fixture.database, sha256(fixture.database), fixture.database.length()).use { catalog ->
+                val directory = File(fixture.root, "archive-order").also { check(it.mkdir()) }
+                var checks = 0
+                assertThrows(java.util.concurrent.CancellationException::class.java) {
+                    ForeverClientArchiveOrder.open(catalog, directory) { ++checks >= 3 }.close()
+                }
+                assertTrue(directory.listFiles().orEmpty().isEmpty())
+                ForeverClientArchiveOrder.open(catalog, directory) { false }.use { order ->
+                    assertEquals(2, order.withObjects({ false }) { it.count() })
+                }
+            }
+        }
+    }
+
+    @Test
+    fun archiveOrderRejectsLinkedDirectoriesWithoutWritingThroughThem() {
+        Fixture().use { fixture ->
+            ForeverClientUpdateCatalog(fixture.database, sha256(fixture.database), fixture.database.length()).use { catalog ->
+                val outside = File(fixture.root, "outside").also { check(it.mkdir()) }
+                val linked = File(fixture.root, "linked-order")
+                Files.createSymbolicLink(linked.toPath(), outside.toPath())
+                assertThrows(IllegalArgumentException::class.java) {
+                    ForeverClientArchiveOrder.open(catalog, linked) { false }.close()
+                }
+                assertTrue(outside.listFiles().orEmpty().isEmpty())
+            }
+        }
+    }
+
+    @Test
     fun readsAdmittedFingerprintAndStreamsBoundedObjectRows() {
         Fixture().use { fixture ->
             ForeverClientUpdateCatalog(fixture.database, sha256(fixture.database), fixture.database.length()).use { catalog ->
@@ -406,6 +535,7 @@ class ForeverClientUpdateCatalogTest {
     }
 
     private class Fixture(
+        extraRangeObjects: Int = 0,
         loosePaths: List<String> = listOf("Interface/patch.mpq"),
         looseCkeyMismatch: Boolean = false,
         buildConfigHash: String = ForeverClientUpdateCatalog.PINNED_BUILD_CONFIG_HASH,
@@ -441,6 +571,10 @@ class ForeverClientUpdateCatalogTest {
                 )
                 insertObject(db, DIRECT_EKEY, DIRECT_CKEY, directEncodedSize, directDecodedSize, "direct", DIRECT_EKEY, 0)
                 insertObject(db, RANGE_EKEY, RANGE_CKEY, rangeEncodedSize, rangeDecodedSize, "range", "33".repeat(16), 50)
+                repeat(extraRangeObjects) { index ->
+                    val ekey = (index + 0x100).toString(16).padStart(32, '0')
+                    insertObject(db, ekey, "ee".repeat(16), 1, 1, "range", "44".repeat(16), index.toLong() + 100)
+                }
                 loosePaths.forEachIndexed { index, path ->
                     db.insertOrThrow("loose", null, ContentValues().apply {
                         put("path", path)

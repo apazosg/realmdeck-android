@@ -61,7 +61,11 @@ class ForeverClientUpdaterTest {
             // Private cost covers the prefetch in-flight bound, not just one
             // object: a sourceless install fetches ahead of the commit cursor.
             assertTrue(plan.privateWorkBytes >= plan.downloadBytes)
+            assertTrue(plan.privateWorkBytes >= 2L * ForeverClientArchiveOrder.MAX_BYTES)
             assertTrue(plan.hasEnoughSpace)
+            val orderCache = File(paths.work, ".forever-client-archive-order/${ForeverClientArchiveOrder.CACHE_NAME}")
+            assertTrue("planning must create its pre-reserved reusable order cache", orderCache.isFile)
+            assertTrue(orderCache.length() in 1..ForeverClientArchiveOrder.MAX_BYTES)
             assertEquals(emptyList<String>(), paths.client.list()!!.toList())
             assertFalse(updater.hasPendingTransaction(destination))
 
@@ -78,6 +82,16 @@ class ForeverClientUpdaterTest {
             assertEquals(plan.destinationBytes, replanned.destinationBytes)
             assertEquals(plan.peakAdditionalBytes, replanned.peakAdditionalBytes)
             assertEquals(plan.snapshotHash, replanned.snapshotHash)
+
+            val priorConsent = ForeverClientUpdateConsent(plan.planId, plan.downloadBytes,
+                plan.peakAdditionalBytes, plan.privateWorkBytes, plan.destinationBytes)
+            assertTrue(ForeverClientUpdateExecution.canResume(replanned, priorConsent, plan.sourceRevision))
+            assertTrue(ForeverClientUpdateExecution.canResume(replanned, priorConsent.copy(downloadBytes = plan.downloadBytes + 1), plan.sourceRevision))
+            assertFalse(ForeverClientUpdateExecution.canResume(replanned, priorConsent.copy(downloadBytes = plan.downloadBytes - 1), plan.sourceRevision))
+            assertFalse(ForeverClientUpdateExecution.canResume(replanned, priorConsent.copy(privateWorkBytes = plan.privateWorkBytes - 1), plan.sourceRevision))
+            assertFalse(ForeverClientUpdateExecution.canResume(replanned, priorConsent.copy(destinationBytes = plan.destinationBytes - 1), plan.sourceRevision))
+            assertFalse(ForeverClientUpdateExecution.canResume(replanned, priorConsent.copy(peakAdditionalBytes = plan.peakAdditionalBytes - 1), plan.sourceRevision))
+            assertFalse(ForeverClientUpdateExecution.canResume(replanned, priorConsent, plan.sourceRevision + "-changed"))
 
             val rejected = ForeverClientUpdateConsent(
                 plan.planId,
@@ -96,7 +110,326 @@ class ForeverClientUpdaterTest {
     }
 
     @Test
-    fun orderedSourceNullPlanningKeepsExactConsentCostsStable() {
+    fun archiveOrderCacheRetainsOneCatalogSlotAndRejectsForeignDirectoryEntries() {
+        val configAssets = configAssetsOrSkip()
+        Fixture().use { oldFixture ->
+            Fixture(version = "1.60.1.70426").use { newFixture ->
+                val unownedPaths = oldFixture.makePaths("unowned-order")
+                val unownedDirectory = File(unownedPaths.work, ".forever-client-archive-order").apply { check(mkdir()) }
+                val preexisting = File(unownedDirectory, "foreign-entry").apply { writeText("preserve me") }
+                val unownedUpdater = oldFixture.updater(unownedPaths, configAssets) { _, _, _, _ ->
+                    error("unowned archive-order state must be rejected before any fetch")
+                }
+                assertThrows(IllegalStateException::class.java) {
+                    unownedUpdater.plan(oldFixture.destination(unownedPaths))
+                }
+                assertTrue("unowned files are preserved", preexisting.isFile)
+                assertFalse("an unknown nonempty directory is never adopted", File(unownedDirectory, ".owner").exists())
+
+                val paths = oldFixture.makePaths()
+                val destination = oldFixture.destination(paths)
+                val oldUpdater = oldFixture.updater(paths, configAssets) { _, _, _, _ ->
+                    error("archive-order planning must not fetch client objects")
+                }
+                oldUpdater.plan(destination)
+
+                val directory = File(paths.work, ".forever-client-archive-order")
+                val cache = File(directory, ForeverClientArchiveOrder.CACHE_NAME)
+                assertTrue(cache.isFile)
+                val oldDigest = sha256(cache.readBytes())
+                assertTrue(File(directory, ".owner").isFile)
+
+                val newUpdater = newFixture.updater(paths, configAssets) { _, _, _, _ ->
+                    error("rebuilding a disposable ordering hint must not fetch client objects")
+                }
+                newUpdater.plan(destination)
+
+                assertEquals("only one catalog-specific ordering slot is retained", 1,
+                    directory.listFiles()!!.count { it.extension == "sqlite3" })
+                assertFalse("the fixed slot now contains the new catalog ordering", oldDigest == sha256(cache.readBytes()))
+                val currentDigest = sha256(cache.readBytes())
+                val foreign = File(directory, "foreign-entry").apply { writeText("preserve me") }
+                val failure = assertThrows(IllegalStateException::class.java) { newUpdater.plan(destination) }
+                assertTrue(failure.message.orEmpty().contains("unowned state"))
+                assertTrue("foreign entries are not deleted", foreign.isFile)
+                assertEquals("refusing foreign state leaves the owned cache intact", currentDigest, sha256(cache.readBytes()))
+            }
+        }
+    }
+
+    @Test(timeout = 30_000)
+    fun sourceLessUpdaterFetchesExactContiguousPhysicalGroupsThroughBatchPath() {
+        val configAssets = configAssetsOrSkip()
+        Fixture(cascObjectCount = 4, contiguousRangeObjectCount = 3).use { fixture ->
+            val paths = fixture.makePaths()
+            val calls = java.util.Collections.synchronizedList(ArrayList<List<String>>())
+            val fetch: (ForeverClientUpdateCatalog.ObjectRecord, File, () -> Boolean, (Long) -> Unit) -> File =
+                { record, work, _, progress ->
+                    val output = File(work, "${record.ekey}.blte")
+                    output.writeBytes(fixture.rawFor(record))
+                    progress(output.length())
+                    output
+                }
+            val updater = fixture.updater(paths, configAssets, fetch).apply {
+                batchFetchForTests = { members, work, cancelled, progress ->
+                    calls += members.map { it.ekey }
+                    members.map { record ->
+                        check(!cancelled())
+                        val output = File(work, "${record.ekey}.blte")
+                        output.writeBytes(fixture.rawFor(record))
+                        progress(record.ekey, record.encodedSize)
+                        output
+                    }
+                }
+            }
+            val destination = fixture.destination(paths)
+            val plan = updater.plan(destination)
+            val result = updater.execute(destination, plan, consentFor(plan))
+
+            assertEquals(4L, result.reusedObjects + result.writtenObjects)
+            assertEquals("the consecutive same-archive range run is one batch", 1, calls.size)
+            assertEquals(fixture.contiguousRangeEkeys, calls.single())
+            val grouped = calls.single().map(fixture.catalog::objectByKey)
+            assertTrue(grouped.all { it.sourceKind == "range" && it.sourceHash == grouped.first().sourceHash })
+            grouped.zipWithNext().forEach { (left, right) ->
+                assertEquals(left.sourceOffset + left.encodedSize, right.sourceOffset)
+            }
+        }
+    }
+
+    @Test(timeout = 60_000)
+    fun parallelStorageCadenceUsesBoundaryHooksOnlyWithBothCapabilities() {
+        val configAssets = configAssetsOrSkip()
+        Fixture(cascObjectCount = 4, contiguousRangeObjectCount = 3).use { fixture ->
+            fun run(label: String, capabilities: Int): Pair<Long, Int> {
+                val paths = fixture.makePaths(label)
+                val fullChecks = AtomicLong()
+                val segmentChecks = AtomicInteger()
+                val groupChecks = AtomicInteger()
+                val updater = fixture.updater(paths, configAssets) { record, work, _, progress ->
+                    val output = File(work, "${record.ekey}.blte").apply { writeBytes(fixture.rawFor(record)) }
+                    progress(output.length())
+                    output
+                }
+                val destination = fixture.destination(paths).copy(
+                    revalidate = { fullChecks.incrementAndGet(); check(paths.client.isDirectory) },
+                    revalidateCascSegment = if (capabilities >= 1) ({ segmentChecks.incrementAndGet() }) else null,
+                    revalidateCascCommitGroup = if (capabilities == 2) ({ groupChecks.incrementAndGet() }) else null,
+                )
+                val plan = updater.plan(destination)
+                updater.execute(destination, plan, consentFor(plan))
+                if (capabilities == 2) {
+                    assertTrue("eligible write validates before opening CASC segments", segmentChecks.get() > 0)
+                    assertTrue("eligible write validates before durable groups", groupChecks.get() > 0)
+                }
+                if (capabilities == 1) assertEquals("one capability does not activate reduced cadence", 0, segmentChecks.get())
+                return fullChecks.get() to plan.missingObjects.toInt()
+            }
+
+            val fallback = run("fallback", capabilities = 0)
+            val partial = run("partial", capabilities = 1)
+            val reduced = run("reduced", capabilities = 2)
+            assertEquals("one hook alone retains full per-object validation", fallback.first, partial.first)
+            assertEquals("fallback retains per-object full validation", fallback.second.toLong(),
+                fallback.first - reduced.first)
+        }
+    }
+
+    @Test(timeout = 30_000)
+    fun physicalBatchPressureSchedulesReservedPrefixBeforeWaitingForRemainingMembers() {
+        val configAssets = configAssetsOrSkip()
+        Fixture(cascObjectCount = 4, contiguousRangeObjectCount = 3).use { fixture ->
+            val paths = fixture.makePaths()
+            val batches = AtomicInteger(0)
+            val fetch: (ForeverClientUpdateCatalog.ObjectRecord, File, () -> Boolean, (Long) -> Unit) -> File =
+                { record, work, _, progress ->
+                    val output = File(work, "${record.ekey}.blte")
+                    output.writeBytes(fixture.rawFor(record))
+                    progress(output.length())
+                    output
+                }
+            val updater = fixture.updater(paths, configAssets, fetch).apply {
+                // The range group cannot be reserved as a unit; the producer
+                // must schedule each fitting prefix before waiting on its tail.
+                prefetchMaxBytesForTests = fixture.targetSpecs().maxOf { it.encodedSize }
+                batchFetchForTests = { _, _, _, _ ->
+                    batches.incrementAndGet()
+                    error("a pressure-split one-object prefix must use the single-object path")
+                }
+            }
+            val destination = fixture.destination(paths)
+            val plan = updater.plan(destination)
+            val result = updater.execute(destination, plan, consentFor(plan))
+            assertEquals(4L, result.reusedObjects + result.writtenObjects)
+            assertEquals(0, batches.get())
+        }
+    }
+
+    @Test(timeout = 30_000)
+    fun physicalBatchPressureRegroupsContiguousTailAfterCapacityReturns() {
+        val configAssets = configAssetsOrSkip()
+        Fixture(cascObjectCount = 10, contiguousRangeObjectCount = 9).use { fixture ->
+            val paths = fixture.makePaths()
+            val batches = java.util.Collections.synchronizedList(ArrayList<List<String>>())
+            val fetch: (ForeverClientUpdateCatalog.ObjectRecord, File, () -> Boolean, (Long) -> Unit) -> File =
+                { record, work, _, progress ->
+                    val output = File(work, "${record.ekey}.blte")
+                    output.writeBytes(fixture.rawFor(record))
+                    progress(output.length())
+                    output
+                }
+            val updater = fixture.updater(paths, configAssets, fetch).apply {
+                // Three maximum-sized ranges fit. The larger contiguous run
+                // therefore exercises a pressure split and later regrouping.
+                prefetchMaxBytesForTests = fixture.rangeEncodedSize * 3
+                batchFetchForTests = { members, work, cancelled, progress ->
+                    batches += members.map { it.ekey }
+                    members.map { record ->
+                        check(!cancelled())
+                        val output = File(work, "${record.ekey}.blte")
+                        output.writeBytes(fixture.rawFor(record))
+                        progress(record.ekey, output.length())
+                        output
+                    }
+                }
+            }
+            val destination = fixture.destination(paths)
+            val plan = updater.plan(destination)
+            val result = updater.execute(destination, plan, consentFor(plan))
+
+            assertEquals(10L, result.reusedObjects + result.writtenObjects)
+            assertTrue("the initial prefix and a later tail must both use batch fetch", batches.size >= 2)
+            assertTrue("pressure regrouping must submit multi-object tail groups", batches.drop(1).all { it.size > 1 })
+            assertTrue(batches.flatten().all { it in fixture.contiguousRangeEkeys })
+            assertNoLiveFetchWorkers("pressure-split contiguous tail regrouping")
+        }
+    }
+
+    @Test(timeout = 30_000)
+    fun pipelineReadinessIsMeasuredBeforeAndAfterStorageRevalidationAndIncludesActualFutureWait() {
+        val configAssets = configAssetsOrSkip()
+        Fixture(cascObjectCount = 4, contiguousRangeObjectCount = 3).use { fixture ->
+            val paths = fixture.makePaths()
+            val releaseHeadFetch = CountDownLatch(1)
+            val headFetchStarted = CountDownLatch(1)
+            val otherFuturesReady = CountDownLatch(3)
+            val afterSampleCaptured = CountDownLatch(1)
+            val releaseAfterSample = CountDownLatch(1)
+            val headFutureReady = CountDownLatch(1)
+            val afterSampleHeadReady = AtomicBoolean(true)
+            val afterSampleReadyAhead = AtomicInteger(0)
+            val lines = java.util.Collections.synchronizedList(ArrayList<String>())
+            val logger = java.util.logging.Logger.getLogger("ForeverClientUpdate")
+            val handler = object : java.util.logging.Handler() {
+                override fun publish(record: java.util.logging.LogRecord) { lines += record.message }
+                override fun flush() = Unit
+                override fun close() = Unit
+            }
+            logger.addHandler(handler)
+            try {
+                var headEkey: String? = null
+                val fetch: (ForeverClientUpdateCatalog.ObjectRecord, File, () -> Boolean, (Long) -> Unit) -> File =
+                    { record, work, _, progress ->
+                        if (record.ekey == headEkey) {
+                            headFetchStarted.countDown()
+                            check(releaseHeadFetch.await(10, TimeUnit.SECONDS))
+                        }
+                        val output = File(work, "${record.ekey}.blte").apply { writeBytes(fixture.rawFor(record)) }
+                        progress(output.length())
+                        output
+                    }
+                val updater = fixture.updater(paths, configAssets, fetch)
+                updater.fetchReadyForTests = { key ->
+                    if (key == headEkey) headFutureReady.countDown() else otherFuturesReady.countDown()
+                }
+                updater.sourceReadinessForTests = { afterRevalidate, headReady, readyAhead ->
+                    if (afterRevalidate) {
+                        afterSampleHeadReady.set(headReady)
+                        afterSampleReadyAhead.set(readyAhead)
+                        afterSampleCaptured.countDown()
+                        check(releaseAfterSample.await(10, TimeUnit.SECONDS))
+                    }
+                }
+                updater.beforePostRevalidateSampleForTests = {
+                    check(otherFuturesReady.await(10, TimeUnit.SECONDS))
+                }
+                val destination = fixture.destination(paths)
+                val plan = updater.plan(destination)
+                headEkey = ForeverClientArchiveOrder.open(
+                    fixture.catalog,
+                    File(paths.work, ".forever-client-archive-order"),
+                    { false },
+                ).use { order -> order.withObjects({ false }) { records -> records.first().ekey } }
+                val execution = java.util.concurrent.FutureTask<Unit> {
+                    updater.execute(destination, plan, consentFor(plan))
+                    Unit
+                }
+                Thread(execution, "diagnostic-readiness-test").apply { isDaemon = true; start() }
+                assertTrue(headFetchStarted.await(10, TimeUnit.SECONDS))
+                assertTrue(otherFuturesReady.await(10, TimeUnit.SECONDS))
+                assertTrue(afterSampleCaptured.await(10, TimeUnit.SECONDS))
+                assertFalse("head remains pending at the post-revalidation sample", afterSampleHeadReady.get())
+                assertTrue("other prepared futures remain ahead of the head", afterSampleReadyAhead.get() >= 3)
+                releaseHeadFetch.countDown()
+                assertTrue("head future becomes ready after the storage sample", headFutureReady.await(10, TimeUnit.SECONDS))
+                releaseAfterSample.countDown()
+                execution.get(20, TimeUnit.SECONDS)
+            } finally {
+                releaseHeadFetch.countDown()
+                releaseAfterSample.countDown()
+                logger.removeHandler(handler)
+            }
+            val summary = lines.lastOrNull { it.contains("CASC fetch pipeline event=complete") }
+                ?: error("missing final fetch-pipeline diagnostic")
+            assertTrue(summary.contains("headPendingAtRequest=1"))
+            assertTrue(summary.contains("headPendingAfterRevalidate=1"))
+            assertTrue(summary.contains("readyAheadDepthAfterRevalidateTotal="))
+            assertTrue(summary.contains("sourceWaitCount=") &&
+                summary.substringAfter("sourceWaitCount=").substringBefore(' ').toLong() > 0L)
+            assertTrue(summary.contains("sourceWaitMaxMs="))
+            assertTrue(summary.contains("reservedKeys=0 reservedBytes=0"))
+            assertNoLiveFetchWorkers("controlled readiness run")
+        }
+    }
+
+    @Test(timeout = 30_000)
+    fun physicalBatchCancellationJoinsWorkersBeforeReturning() {
+        val configAssets = configAssetsOrSkip()
+        Fixture(cascObjectCount = 4, contiguousRangeObjectCount = 3).use { fixture ->
+            val paths = fixture.makePaths()
+            val cancelled = AtomicBoolean(false)
+            val batches = AtomicInteger(0)
+            val fetch: (ForeverClientUpdateCatalog.ObjectRecord, File, () -> Boolean, (Long) -> Unit) -> File =
+                { record, work, _, progress ->
+                    val output = File(work, "${record.ekey}.blte")
+                    output.writeBytes(fixture.rawFor(record))
+                    progress(output.length())
+                    output
+                }
+            val updater = fixture.updater(paths, configAssets, fetch).apply {
+                batchFetchForTests = { members, work, _, progress ->
+                    batches.incrementAndGet()
+                    val first = members.first()
+                    val output = File(work, "${first.ekey}.blte").apply { writeBytes(fixture.rawFor(first)) }
+                    progress(first.ekey, first.encodedSize)
+                    cancelled.set(true)
+                    throw java.util.concurrent.CancellationException("test pause during archive batch")
+                }
+            }
+            val destination = fixture.destination(paths)
+            val plan = updater.plan(destination)
+            assertThrows(java.util.concurrent.CancellationException::class.java) {
+                updater.execute(destination, plan, consentFor(plan), cancelled::get)
+            }
+            assertEquals(1, batches.get())
+            assertNoLiveFetchWorkers("cancelled archive batch")
+            assertWorkspaceWritesSettled(paths)
+            assertFalse(File(paths.client, "Data/data").exists())
+        }
+    }
+
+    @Test
+    fun physicalArchiveOrderPlanningKeepsExactConsentCostsStable() {
         val configAssets = configAssetsOrSkip()
         Fixture().use { fixture ->
             val paths = fixture.makePaths()
@@ -106,7 +439,7 @@ class ForeverClientUpdaterTest {
             val destination = fixture.destination(paths)
             val first = updater.plan(destination)
             val second = updater.plan(destination)
-            // The sourceless replan through the ordered planner must reproduce
+            // The sourceless replan through the physical-order planner must reproduce
             // the entire consent surface: plan identity, every public cost,
             // and the snapshot binding requireSamePlan enforces before transfer.
             assertEquals(first.planId, second.planId)
@@ -127,21 +460,28 @@ class ForeverClientUpdaterTest {
             assertEquals(0L, first.reusableObjects)
             assertEquals(2L, first.missingObjects)
             assertEquals(2L * fixture.directEncodedSize + fixture.rangeEncodedSize, first.downloadBytes)
-            // The ordered scan must agree with the generic planner row-for-row
-            // over the same admitted cursor before the updater trusts its costs.
-            val sorted = fixture.targetSpecs().sortedBy { it.ekey }
-            val compareRoot = Files.createTempDirectory("ordered-plan-compare-").toFile()
+            // Planning uses the same archive-ordered generic inspection as
+            // ingestion; packing and space estimates must match that order.
+            val orderDirectory = File(paths.work, ".forever-client-archive-order")
+            val physicalSpecs = ForeverClientArchiveOrder.open(fixture.catalog, orderDirectory) { false }.use { order ->
+                order.withObjects({ false }) { records ->
+                    records.map { record ->
+                        ForeverCasc.IncrementalObjectSpec(record.ekey, record.contentKey, record.encodedSize, record.decodedSize)
+                    }.toList()
+                }
+            }
+            val compareRoot = Files.createTempDirectory("physical-plan-compare-").toFile()
             try {
-                val generic = ForeverCasc.inspectTarget(null, File(compareRoot, "generic"), sorted.asSequence(), { false }) { _, _ -> }
-                val ordered = ForeverCasc.inspectTargetOrderedSourceNull(File(compareRoot, "ordered"), sorted.asSequence(), { false }) { _, _ -> }
-                assertEquals(generic, ordered)
-                assertEquals(first.totalObjects, ordered.totalObjects)
-                assertEquals(first.missingObjects, ordered.missingObjects)
+                val physical = ForeverCasc.inspectTarget(null, File(compareRoot, "physical"), physicalSpecs.asSequence(), { false }) { _, _ -> }
+                assertEquals(first.totalObjects, physical.totalObjects)
+                assertEquals(first.missingObjects, physical.missingObjects)
+                assertEquals(first.cascNewSegmentCount, physical.newSegmentCount)
+                assertEquals(first.cascNewSegmentBytes, physical.newSegmentBytesUpperBound)
+                assertEquals(first.cascIndexBytes, physical.indexBytesUpperBound)
                 // The scan covers CASC objects only (direct + range); the
-                // plan's downloadBytes additionally carries the loose-file
-                // fetch for the direct key. Both are pinned, not conflated.
-                assertEquals(fixture.directEncodedSize + fixture.rangeEncodedSize, ordered.downloadBytes)
-                assertEquals(ordered.downloadBytes + fixture.directEncodedSize, first.downloadBytes)
+                // plan additionally carries the loose-file fetch for direct.
+                assertEquals(fixture.directEncodedSize + fixture.rangeEncodedSize, physical.downloadBytes)
+                assertEquals(physical.downloadBytes + fixture.directEncodedSize, first.downloadBytes)
             } finally {
                 compareRoot.deleteRecursively()
             }
@@ -430,6 +770,40 @@ class ForeverClientUpdaterTest {
         }
     }
 
+    @Test(timeout = 30_000)
+    fun bytePressureFlushesPartialGroupOnWriterAndFinishesFetchWorkers() {
+        val configAssets = configAssetsOrSkip()
+        Fixture().use { fixture ->
+            val paths = fixture.makePaths()
+            val writerId = Thread.currentThread().id
+            val acknowledgementThreads = mutableListOf<Long>()
+            var acknowledged = 0L
+            val updater = fixture.updater(paths, configAssets) { record, work, _, progress ->
+                File(work, "${record.ekey}.blte").also {
+                    it.writeBytes(fixture.rawFor(record))
+                    progress(it.length())
+                }
+            }.apply {
+                // One tiny object fits, two do not: waiting for a full 16-object
+                // group would deadlock the producer before the second submit.
+                prefetchMaxBytesForTests = maxOf(fixture.directEncodedSize, fixture.rangeEncodedSize)
+            }
+            val destination = fixture.destination(paths)
+            val plan = updater.plan(destination)
+            val result = updater.execute(destination, plan, consentFor(plan), { false }) { progress ->
+                if (progress.phase == ForeverClientUpdateProgress.Phase.DOWNLOADING &&
+                    progress.completedObjects > acknowledged && progress.completedObjects <= 2L
+                ) {
+                    acknowledged = progress.completedObjects
+                    acknowledgementThreads += Thread.currentThread().id
+                }
+            }
+            assertEquals(2L, result.writtenObjects)
+            assertEquals(listOf(writerId, writerId), acknowledgementThreads)
+            assertNoLiveFetchWorkers("partial group byte-pressure flush")
+        }
+    }
+
     @Test
     fun pauseAfterCheckpointResumesSameTransactionOwnedSegmentWithoutAnotherFullDeltaCache() {
         val configAssets = configAssetsOrSkip()
@@ -462,9 +836,10 @@ class ForeverClientUpdaterTest {
             assertThrows(java.util.concurrent.CancellationException::class.java) {
                 firstUpdater.execute(destination, originalPlan, originalConsent, cancelAfterFirstCheckpoint)
             }
-            // c98 prefetch: the cancel fires after the first commit; workers may
-            // already be fetching queued objects (assigned [first, prefetch tail]).
-            assertTrue(fetches.get() >= 1)
+            // A final bounded group commit lands before the next phase checks
+            // cancellation; both tiny CASC objects may therefore be durable
+            // together while the loose-file transfer remains unstarted.
+            assertTrue(fetches.get() in 1..2)
             assertNoLiveFetchWorkers("cancelled run")
             assertWorkspaceWritesSettled(paths)
             assertFalse(File(paths.client, "Data/data").exists())
@@ -481,12 +856,11 @@ class ForeverClientUpdaterTest {
             assertTrue(resumedPlan.downloadBytes < originalPlan.downloadBytes)
             val result = resumedUpdater.execute(destination, resumedPlan, originalConsent)
 
-            // c98: the resumed producer skips the staged object, then fetches the
-            // remaining CASC object plus the loose file (2 calls); the first run
-            // contributed between 1 and 2 calls before the cancel fired.
+            // An empty producer queue may flush early; one or both tiny objects
+            // are checkpointed and must be reused, never fetched unnecessarily.
             assertTrue(fetches.get() in 3..4)
-            assertEquals(1L, result.reusedObjects)
-            assertEquals(1L, result.writtenObjects)
+            assertTrue(result.reusedObjects in 1L..2L)
+            assertEquals(2L, result.reusedObjects + result.writtenObjects)
             assertFalse(resumedUpdater.hasPendingTransaction(destination))
             assertFalse(stageBase.exists())
             val dataFiles = File(paths.client, "Data/data")
@@ -500,8 +874,90 @@ class ForeverClientUpdaterTest {
         }
     }
 
+    @Test(timeout = 60_000)
+    fun legacyEkeyCheckpointResumesInPhysicalOrderAndCanResumeAgain() {
+        val configAssets = configAssetsOrSkip()
+        Fixture(cascObjectCount = 4, contiguousRangeObjectCount = 3).use { fixture ->
+            val paths = fixture.makePaths()
+            val destination = fixture.destination(paths)
+            val fetches = AtomicInteger(0)
+            val fetch: (ForeverClientUpdateCatalog.ObjectRecord, File, () -> Boolean, (Long) -> Unit) -> File =
+                { record, work, _, progress ->
+                    fetches.incrementAndGet()
+                    val output = File(work, "${record.ekey}.blte")
+                    output.writeBytes(fixture.rawFor(record))
+                    progress(output.length())
+                    output
+                }
+            val firstUpdater = fixture.updater(paths, configAssets, fetch)
+            val originalPlan = firstUpdater.plan(destination)
+            assertThrows(java.util.concurrent.CancellationException::class.java) {
+                firstUpdater.execute(destination, originalPlan, consentFor(originalPlan), {
+                    checkpointLength(paths) >= 40L + 72L
+                })
+            }
+            assertEquals(ForeverClientRecoveryResult.RESUMABLE_STAGE_AVAILABLE, firstUpdater.recover(destination).result)
+
+            // Replace the tiny generated prefix with a valid one-object legacy
+            // EKey-ordered checkpoint while retaining the updater's real receipt
+            // and identity. The EKey chosen is deliberately not physical ordinal 0.
+            val privateRoot = requireNotNull(workspaceRoot(paths))
+            val receiptEnvelope = JSONObject(File(privateRoot, ".transaction-stage-receipt.json").readText())
+            val receipt = JSONObject(receiptEnvelope.getString("payload"))
+            val stageId = receipt.getString("stageId")
+            val markerHash = receipt.getString("markerHash")
+            val cascOutput = File(paths.client, ".forever-update-staging/$stageId/Data/data")
+            cascOutput.deleteRecursively()
+            check(cascOutput.mkdirs())
+            File(privateRoot, ".forever-casc-resume-owner").delete()
+            File(privateRoot, ".forever-casc-resume-checkpoint").delete()
+            objectsDir(paths).listFiles().orEmpty().forEach { check(it.delete()) }
+            val physicalFirst = fixture.contiguousRangeEkeys.first()
+            val legacy = fixture.targetSpecs().sortedBy { it.ekey }.first { it.ekey != physicalFirst }
+            val legacyRaw = File(paths.work, "legacy-raw-${legacy.ekey}.blte").apply { writeBytes(fixture.rawFor(fixture.catalog.objectByKey(legacy.ekey))) }
+            val checkpointIdentity = "${fixture.catalog.verifiedSha256}|${fixture.catalog.summary().version}|" +
+                "${destination.storageId}|${destination.root.toPath().toAbsolutePath().normalize()}|" +
+                "${originalPlan.sourceRevision}|$stageId|$markerHash"
+            ForeverCasc.writeTargetIncrementalResumable(
+                null,
+                cascOutput,
+                privateRoot,
+                sequenceOf(legacy),
+                { legacyRaw },
+                { false },
+                checkpointIdentity,
+            )
+            val legacyCheckpointBytes = checkpointLength(paths)
+            assertTrue(legacyCheckpointBytes > 40L)
+
+            val resumeUpdater = fixture.updater(paths, configAssets, fetch)
+            val resumePlan = resumeUpdater.plan(destination)
+            assertEquals(originalPlan.planId, resumePlan.planId)
+            assertTrue("legacy checkpointed object is credited in the plan", resumePlan.downloadBytes < originalPlan.downloadBytes)
+            assertThrows(java.util.concurrent.CancellationException::class.java) {
+                resumeUpdater.execute(destination, resumePlan, consentFor(resumePlan), {
+                    checkpointLength(paths) > legacyCheckpointBytes
+                })
+            }
+            assertEquals(ForeverClientRecoveryResult.RESUMABLE_STAGE_AVAILABLE, resumeUpdater.recover(destination).result)
+            val secondResumeUpdater = fixture.updater(paths, configAssets, fetch)
+            val secondResumePlan = secondResumeUpdater.plan(destination)
+            assertEquals(originalPlan.planId, secondResumePlan.planId)
+            assertTrue(secondResumePlan.downloadBytes <= resumePlan.downloadBytes)
+            val result = secondResumeUpdater.execute(destination, secondResumePlan, consentFor(secondResumePlan))
+
+            assertTrue(fetches.get() > 0)
+            assertEquals(4L, result.reusedObjects + result.writtenObjects)
+            ForeverCasc.verifyExisting(
+                paths.client,
+                fixture.targetSpecs().map { ForeverCasc.RuntimeObjectSpec(it.ekey, it.contentKey, it.decodedSize) },
+                { false },
+            )
+        }
+    }
+
     @Test
-    fun deltaDownloadPrefetchesConcurrentlyWhileCommitFollowsCatalogOrder() {
+    fun deltaDownloadPrefetchesConcurrentlyWhileCommitFollowsPhysicalArchiveOrder() {
         val configAssets = configAssetsOrSkip()
         // Sixteen CASC objects saturate the sixteen prefetch workers; the
         // seventeenth fetch is the loose-file materialization that runs
@@ -515,7 +971,7 @@ class ForeverClientUpdaterTest {
             // Arrival order vs finish order: the first arrival waits for every
             // other fetch to finish its file, so the first-started fetch
             // finishes last among the CASC fetches while the writer still
-            // commits in catalog order (the final CASC verification below only
+            // commits in physical archive order (the final CASC verification below only
             // passes on an ordered commit).
             val arrivals = java.util.Collections.synchronizedList(ArrayList<String>())
             val finishOrder = java.util.Collections.synchronizedList(ArrayList<String>())
@@ -1296,11 +1752,11 @@ class ForeverClientUpdaterTest {
                 originalPlan.privateWorkBytes,
                 originalPlan.destinationBytes,
             )
-            // Manifest order is ORDER BY ekey, so the head commit is the
-            // smallest admitted ekey. Only it is served; every other fetch
+            // Physical archive order starts with the range object. Only
+            // that head is served; every other fetch
             // fails fast without writing any file, so the crash below leaves
             // exactly one checkpointed object plus its not-yet-deleted raw.
-            val headEkey = fixture.targetSpecs().minByOrNull { it.ekey }!!.ekey
+            val headEkey = physicalArchiveKeys(fixture, paths, 1).single()
             val headSize = fixture.targetSpecs().first { it.ekey == headEkey }.encodedSize
             val crashOnce = AtomicBoolean(false)
             val crashingProgress: (ForeverClientUpdateProgress) -> Unit = { progress ->
@@ -1400,7 +1856,7 @@ class ForeverClientUpdaterTest {
                 originalPlan.destinationBytes,
             )
             // First leave exactly one checkpointed raw via the crash window.
-            val headEkey = fixture.targetSpecs().minByOrNull { it.ekey }!!.ekey
+            val headEkey = physicalArchiveKeys(fixture, paths, 1).single()
             val crashOnce = AtomicBoolean(false)
             assertThrows(IllegalStateException::class.java) {
                 fixture.updater(paths, configAssets) { record, workDir, _, progress ->
@@ -1495,10 +1951,11 @@ class ForeverClientUpdaterTest {
             )
             // Crash window again: exactly one checkpointed raw on disk.
             val specs = fixture.targetSpecs()
-            val headEkey = specs.minByOrNull { it.ekey }!!.ekey
+            val physicalPrefix = physicalArchiveKeys(fixture, paths, 2)
+            val headEkey = physicalPrefix[0]
             val headSize = specs.first { it.ekey == headEkey }.encodedSize
-            val otherEkey = specs.first { it.ekey != headEkey }.ekey
-            val otherSize = specs.first { it.ekey != headEkey }.encodedSize
+            val otherEkey = physicalPrefix[1]
+            val otherSize = specs.first { it.ekey == otherEkey }.encodedSize
             val normalFetch: (ForeverClientUpdateCatalog.ObjectRecord, File, () -> Boolean, (Long) -> Unit) -> File =
                 { record, workDir, _, progress ->
                     val output = File(workDir, "${record.ekey}.blte")
@@ -1634,7 +2091,7 @@ class ForeverClientUpdaterTest {
             )
             // Same legitimate artifact as the drain test: checkpointed head
             // with only its partial on disk.
-            val headEkey = fixture.targetSpecs().minByOrNull { it.ekey }!!.ekey
+            val headEkey = physicalArchiveKeys(fixture, paths, 1).single()
             val crashOnce = AtomicBoolean(false)
             assertThrows(IllegalStateException::class.java) {
                 fixture.updater(paths, configAssets) { record, workDir, _, progress ->
@@ -1723,7 +2180,7 @@ class ForeverClientUpdaterTest {
         // payload bytes allocated anywhere) under the same per-key full-bound
         // contract the parallel writer uses.
         val budgetClass = Class.forName("app.gamenative.ForeverClientUpdater\$PrefetchBudget")
-        val constructor = budgetClass.declaredConstructors.single().apply { isAccessible = true }
+        val constructor = budgetClass.getDeclaredConstructor().apply { isAccessible = true }
         val seed = budgetClass.getDeclaredMethod("seed", String::class.java, java.lang.Long.TYPE).apply { isAccessible = true }
         val request = budgetClass.getDeclaredMethod(
             "request",
@@ -1951,8 +2408,17 @@ class ForeverClientUpdaterTest {
             // currently needed nor checkpointed prefixes); leftovers must
             // never exceed 34 distinct keys, or the replan could not accept
             // its own state.
+            val firstWave = CountDownLatch(16)
+            val firstWaveCalls = AtomicInteger(0)
             val normalFetch: (ForeverClientUpdateCatalog.ObjectRecord, File, () -> Boolean, (Long) -> Unit) -> File =
                 { record, workDir, _, progress ->
+                    if (firstWaveCalls.incrementAndGet() <= 16) {
+                        firstWave.countDown()
+                        assertTrue(
+                            "evictable far-future debt must not strand fifteen fetch workers",
+                            firstWave.await(5, TimeUnit.SECONDS),
+                        )
+                    }
                     val output = File(workDir, "${record.ekey}.blte")
                     Files.write(output.toPath(), fixture.rawFor(record))
                     progress(output.length())
@@ -1977,6 +2443,10 @@ class ForeverClientUpdaterTest {
             }
             assertNoLiveFetchWorkers("crashed prefetch run")
             assertWorkspaceWritesSettled(paths)
+            // The crash callback can land inside a four-object durable group:
+            // the complete group, not the callback's count, is resumable.
+            val durableObjects = (checkpointLength(paths) - 40L) / 72L
+            assertTrue("the crash must retain its acknowledged prefix", durableObjects >= 10L)
             val leftoverKeys = objectsDir.listFiles()!!.map { it.name.substringBefore('.') }.distinct()
             assertTrue(
                 "leftover raws must stay within the 34-key recovery quota, found ${leftoverKeys.size}",
@@ -2006,9 +2476,9 @@ class ForeverClientUpdaterTest {
                     resumedPlan.destinationBytes,
                 ),
             )
-            assertEquals(10L, result.reusedObjects)
-            assertEquals(54L, result.writtenObjects)
-            assertEquals("fifty-four CASC misses plus the serial loose fetch", 55, resumeCalls.get())
+            assertEquals(durableObjects, result.reusedObjects)
+            assertEquals(64L - durableObjects, result.writtenObjects)
+            assertEquals("remaining CASC misses plus the serial loose fetch", (65L - durableObjects).toInt(), resumeCalls.get())
             assertTrue(
                 "resumed network must not exceed the consented remainder: ${actualNetwork.get()} vs ${resumedPlan.downloadBytes}",
                 actualNetwork.get() <= resumedPlan.downloadBytes,
@@ -2253,10 +2723,11 @@ class ForeverClientUpdaterTest {
                 originalPlan.destinationBytes,
             )
             val specs = fixture.targetSpecs()
-            val headEkey = specs.minByOrNull { it.ekey }!!.ekey
+            val physicalPrefix = physicalArchiveKeys(fixture, paths, 2)
+            val headEkey = physicalPrefix[0]
             val headSize = specs.first { it.ekey == headEkey }.encodedSize
-            val otherEkey = specs.first { it.ekey != headEkey }.ekey
-            val otherSize = specs.first { it.ekey != headEkey }.encodedSize
+            val otherEkey = physicalPrefix[1]
+            val otherSize = specs.first { it.ekey == otherEkey }.encodedSize
             val normalFetch: (ForeverClientUpdateCatalog.ObjectRecord, File, () -> Boolean, (Long) -> Unit) -> File =
                 { record, workDir, _, progress ->
                     val output = File(workDir, "${record.ekey}.blte")
@@ -2484,6 +2955,14 @@ class ForeverClientUpdaterTest {
         plan.destinationBytes,
     )
 
+    private fun physicalArchiveKeys(fixture: Fixture, paths: Paths, count: Int): List<String> =
+        ForeverClientArchiveOrder.open(
+            fixture.catalog,
+            File(paths.work, ".forever-client-archive-order"),
+        ) { false }.use { order ->
+            order.withObjects({ false }) { records -> records.take(count).map { it.ekey }.toList() }
+        }
+
     private fun workspaceRoot(paths: Paths): File? {
         val base = File(paths.work, ".forever-client-update-work")
         if (!base.isDirectory) return null
@@ -2543,13 +3022,14 @@ class ForeverClientUpdaterTest {
             assertThrows(java.util.concurrent.CancellationException::class.java) {
                 firstUpdater.execute(destination, plan, consentFor(plan), { checkpointLength(paths) >= 40L + 34L * 72L })
             }
-            assertEquals(34L, (checkpointLength(paths) - 40L) / 72L)
-            // Leftover raws for EXACTLY the checkpointed prefix, in walk
-            // (ekey) order: the first 34 admitted objects hold the quota.
-            // Insertion order differs from walk order, so an unsorted take
-            // would plant the wrong keys and the budget would self-balance
-            // through commit releases without ever proving anything.
-            val prefixKeys = fixture.targetSpecs().sortedBy { it.ekey }.take(34).map { it.ekey }.toSet()
+            val checkpointedPrefix = (checkpointLength(paths) - 40L) / 72L
+            assertEquals("checkpoint ends on a durable object-frame boundary", 0L, (checkpointLength(paths) - 40L) % 72L)
+            assertTrue("the durable prefix may cross the 34-frame cancellation threshold", checkpointedPrefix >= 34L)
+            // Grouped durable commits can cross the cancellation threshold.
+            // Seed exactly 34 raws from the actual durable prefix, near its tail,
+            // so the remaining objects are still a genuine blocked-verifier case.
+            val prefixKeys = physicalArchiveKeys(fixture, paths, checkpointedPrefix.toInt()).takeLast(34).toSet()
+            assertEquals("the inherited raw debt remains exactly at quota", 34, prefixKeys.size)
             prefixKeys.forEach { key ->
                 val bytes = fixture.rawFor(fixture.catalog.objectByKey(key))
                 Files.write(File(objectsDir(paths), "$key.blte").toPath(), bytes)
@@ -2563,6 +3043,9 @@ class ForeverClientUpdaterTest {
                     assertTrue("only tail debt is dropped", leftover.delete())
                 }
             }
+            assertEquals(34, objectsDir(paths).listFiles()!!.count { it.name.endsWith(".blte") || it.name.endsWith(".part") })
+            val missingTailObjects = plan.totalObjects - checkpointedPrefix
+            assertTrue("the checkpointed prefix leaves a nonempty tail", missingTailObjects > 0L)
             val vGate = CountDownLatch(1)
             val vEntered = CountDownLatch(1)
             val created = AtomicInteger(0)
@@ -2591,7 +3074,7 @@ class ForeverClientUpdaterTest {
                     { progress ->
                         if (progress.phase == ForeverClientUpdateProgress.Phase.DOWNLOADING) {
                             maxCommitted = maxOf(maxCommitted, progress.completedObjects)
-                            if (maxCommitted >= 35L) newCommitted.countDown()
+                            if (maxCommitted >= missingTailObjects) newCommitted.countDown()
                         }
                     },
                 )
@@ -2599,8 +3082,8 @@ class ForeverClientUpdaterTest {
             run.isDaemon = true
             run.start()
             assertTrue("verifier must park at its first segment bind", vEntered.await(180, TimeUnit.SECONDS))
-            assertTrue("35 new objects must commit while V is still blocked", newCommitted.await(180, TimeUnit.SECONDS))
-            assertEquals("all 35 new commits durable with the gate closed", 69L, (checkpointLength(paths) - 40L) / 72L)
+            assertTrue("the complete missing tail must commit while V is still blocked", newCommitted.await(180, TimeUnit.SECONDS))
+            assertEquals("the complete target is durable with the gate closed", plan.totalObjects, (checkpointLength(paths) - 40L) / 72L)
             // The gate never opened above: every freed budget unit came from
             // an individual full-strength proof on its own reader, never from
             // a group ack. At least the first blocked request must have proven
@@ -2612,8 +3095,8 @@ class ForeverClientUpdaterTest {
             vGate.countDown()
             joinBounded(run, "proof-driven overlap resume")
             val done = requireNotNull(result)
-            assertEquals(34L, done.reusedObjects)
-            assertEquals(35L, done.writtenObjects)
+            assertEquals(checkpointedPrefix, done.reusedObjects)
+            assertEquals(missingTailObjects, done.writtenObjects)
             assertTrue("the private workspace is fully cleaned after success", workspaceRoot(paths) == null)
             assertFalse(resumedUpdater.hasPendingTransaction(destination))
         }
@@ -2639,6 +3122,7 @@ class ForeverClientUpdaterTest {
             val created = AtomicInteger(0)
             val firstUpdater = fixture.updater(paths, configAssets, fetch)
             firstUpdater.replayReaderFactory = { _ -> created.incrementAndGet(); UpdaterFakeReader() }
+            firstUpdater.prefetchMaxBytesForTests = fixture.targetSpecs().maxOf { it.encodedSize }
             val plan = firstUpdater.plan(destination)
             assertThrows(java.util.concurrent.CancellationException::class.java) {
                 firstUpdater.execute(destination, plan, consentFor(plan), { checkpointLength(paths) > 40L })
@@ -2695,6 +3179,7 @@ class ForeverClientUpdaterTest {
             val resumePaths = fixture.makePaths("resume-nofactory")
             val resumeDestination = fixture.destination(resumePaths)
             val resumeUpdater = fixture.updater(resumePaths, configAssets, fetch)
+            resumeUpdater.prefetchMaxBytesForTests = fixture.targetSpecs().maxOf { it.encodedSize }
             val resumePlan = resumeUpdater.plan(resumeDestination)
             assertThrows(java.util.concurrent.CancellationException::class.java) {
                 resumeUpdater.execute(resumeDestination, resumePlan, consentFor(resumePlan), { checkpointLength(resumePaths) > 40L })
@@ -2740,11 +3225,12 @@ class ForeverClientUpdaterTest {
                 firstUpdater.execute(destination, plan, consentFor(plan), { checkpointLength(paths) >= 40L + 34L * 72L })
             }
             val prefixObjects = ((checkpointLength(paths) - 40L) / 72L)
-            assertEquals("interrupted run must checkpoint exactly the quota", 34L, prefixObjects)
-            // Leftover raws for EXACTLY the checkpointed prefix, in walk
-            // (ekey) order. Insertion order differs from walk order, so an
-            // unsorted take would plant the wrong keys.
-            val prefixKeys = fixture.targetSpecs().sortedBy { it.ekey }.take(34).map { it.ekey }.toSet()
+            assertEquals("checkpoint ends on a durable object-frame boundary", 0L, (checkpointLength(paths) - 40L) % 72L)
+            assertTrue("grouped commits may checkpoint beyond the cancellation threshold", prefixObjects >= 34L)
+            // Durable groups may extend the prefix beyond 34; only exactly 34
+            // checkpointed keys hold inherited raws and consume quota.
+            val prefixKeys = physicalArchiveKeys(fixture, paths, prefixObjects.toInt()).takeLast(34).toSet()
+            assertEquals("the inherited raw debt remains exactly at quota", 34, prefixKeys.size)
             prefixKeys.forEach { key ->
                 val bytes = fixture.rawFor(fixture.catalog.objectByKey(key))
                 Files.write(File(objectsDir(paths), "$key.blte").toPath(), bytes)
@@ -2757,6 +3243,7 @@ class ForeverClientUpdaterTest {
                     assertTrue("only tail debt is dropped", leftover.delete())
                 }
             }
+            assertEquals(34, objectsDir(paths).listFiles()!!.count { it.name.endsWith(".blte") || it.name.endsWith(".part") })
             val created = AtomicInteger(0)
             val resumedUpdater = fixture.updater(paths, configAssets, fetch)
             resumedUpdater.replayReaderFactory = { _ -> created.incrementAndGet(); UpdaterFakeReader() }
@@ -2771,6 +3258,178 @@ class ForeverClientUpdaterTest {
             assertEquals(prefixObjects, done.reusedObjects)
             assertTrue("the private workspace is fully cleaned after success", workspaceRoot(paths) == null)
             assertFalse(resumedUpdater.hasPendingTransaction(destination))
+        }
+    }
+
+    @Test
+    fun overlapLegacyEkeyCheckpointInterleavingProvesFutureRawBeforeEviction() {
+        val configAssets = configAssetsOrSkip()
+        Fixture(cascObjectCount = 69, contiguousRangeObjectCount = 68).use { fixture ->
+            val paths = fixture.makePaths()
+            val destination = fixture.destination(paths)
+            val bootstrapFetch: (ForeverClientUpdateCatalog.ObjectRecord, File, () -> Boolean, (Long) -> Unit) -> File =
+                { record, workDir, _, progress ->
+                    val output = File(workDir, "${record.ekey}.blte")
+                    output.writeBytes(fixture.rawFor(record))
+                    progress(output.length())
+                    output
+                }
+            val bootstrap = fixture.updater(paths, configAssets, bootstrapFetch)
+            val bootstrapPlan = bootstrap.plan(destination)
+            assertThrows(java.util.concurrent.CancellationException::class.java) {
+                bootstrap.execute(destination, bootstrapPlan, consentFor(bootstrapPlan), { checkpointLength(paths) > 40L })
+            }
+
+            // Re-seed a real, identity-bound checkpoint in the old EKey prefix
+            // order. Its membership is deliberately interleaved with the new
+            // physical order, so the first physical object is missing while
+            // checkpointed retained raws occur later in that same schedule.
+            val workspace = requireNotNull(workspaceRoot(paths))
+            val receiptEnvelope = JSONObject(File(workspace, ".transaction-stage-receipt.json").readText())
+            val receipt = JSONObject(receiptEnvelope.getString("payload"))
+            val stageId = receipt.getString("stageId")
+            val checkpointIdentity = "${fixture.catalog.verifiedSha256}|${bootstrapPlan.version}|" +
+                "${destination.storageId}|${destination.root.toPath().toAbsolutePath().normalize()}|" +
+                "${bootstrapPlan.sourceRevision}|$stageId|${receipt.getString("markerHash")}"
+            ForeverCasc.resetResumableCheckpoint(workspace, checkpointIdentity)
+            val cascData = File(File(File(destination.root, ".forever-update-staging"), stageId), "Data/data")
+            cascData.deleteRecursively()
+
+            val physicalSpecs = ForeverClientArchiveOrder.open(
+                fixture.catalog,
+                File(paths.work, ".forever-client-archive-order"),
+            ) { false }.use { order ->
+                order.withObjects({ false }) { records ->
+                    records.map { record ->
+                        ForeverCasc.IncrementalObjectSpec(record.ekey, record.contentKey, record.encodedSize, record.decodedSize)
+                    }.toList()
+                }
+            }
+            val indexedSpecs = physicalSpecs.mapIndexed { ordinal, spec -> spec.ekey to IndexedValue(ordinal, spec) }.toMap()
+            val legacyPrefix = fixture.targetSpecs().sortedBy { it.ekey }.take(40)
+            val legacyFlush = java.util.concurrent.atomic.AtomicReference<(() -> Boolean)?>(null)
+            val seedDirectory = File(paths.privateRoot, "legacy-casc-seed").apply { check(mkdir()) }
+            legacyPrefix.forEach { spec ->
+                File(seedDirectory, "${spec.ekey}.blte").writeBytes(fixture.rawFor(fixture.catalog.objectByKey(spec.ekey)))
+            }
+            assertThrows(java.util.concurrent.CancellationException::class.java) {
+                ForeverCasc.writeTargetIncrementalResumable(
+                    sourceDataFiles = null,
+                    outputDataFiles = cascData,
+                    checkpointDirectory = workspace,
+                    objects = sequence {
+                        legacyPrefix.forEachIndexed { index, spec ->
+                            yield(spec)
+                            // Seed the previous four-object durable boundaries,
+                            // independent of the new writer's maximum group size.
+                            if ((index + 1) % 4 == 0) assertTrue(requireNotNull(legacyFlush.get()).invoke())
+                        }
+                        throw java.util.concurrent.CancellationException("seed a partial legacy EKey checkpoint")
+                    },
+                    sourceFor = { spec -> File(seedDirectory, "${spec.ekey}.blte") },
+                    cancelled = { false },
+                    checkpointIdentity = checkpointIdentity,
+                    commitFlushRequest = legacyFlush,
+                    targetObjectCount = physicalSpecs.size,
+                    targetMembership = { key ->
+                        indexedSpecs[key.lowercase()]
+                            ?: throw IllegalStateException("test checkpoint key escaped the physical target")
+                    },
+                )
+            }
+            seedDirectory.deleteRecursively()
+
+            val checkpointedCount = ((checkpointLength(paths) - 40L) / 72L).toInt()
+            assertEquals("complete legacy commit groups are durable", legacyPrefix.size, checkpointedCount)
+            val checkpointedKeys = ArrayList<String>()
+            ForeverCasc.withResumableCheckpointObjects(cascData, workspace, checkpointIdentity, { false }) { saved ->
+                saved.forEach { checkpointedKeys += it.ekey }
+            }
+            assertEquals(legacyPrefix.map { it.ekey }, checkpointedKeys)
+
+            val physicalOrdinal = physicalSpecs.mapIndexed { ordinal, spec -> spec.ekey to ordinal }.toMap()
+            val firstMissing = physicalSpecs.first { it.ekey !in checkpointedKeys }
+            val futureCheckpointed = checkpointedKeys.filter { physicalOrdinal.getValue(it) > physicalOrdinal.getValue(firstMissing.ekey) }
+            assertTrue("the legacy EKey prefix interleaves after a missing physical object", futureCheckpointed.size >= 34)
+            val retainedRawKeys = futureCheckpointed.takeLast(34).toSet()
+            assertEquals(34, retainedRawKeys.size)
+
+            val rawDirectory = objectsDir(paths)
+            rawDirectory.listFiles()!!.forEach { file ->
+                if (Regex("[0-9a-f]{32}\\.(blte|part)").matches(file.name)) {
+                    assertTrue("discard only bootstrap raw debt", file.delete())
+                }
+            }
+            retainedRawKeys.forEach { key ->
+                File(rawDirectory, "$key.blte").writeBytes(fixture.rawFor(fixture.catalog.objectByKey(key)))
+            }
+            assertEquals("only 34 checkpointed inherited raws hold quota debt", 34,
+                rawDirectory.listFiles()!!.count { it.name.endsWith(".blte") || it.name.endsWith(".part") })
+
+            val verifierGate = CountDownLatch(1)
+            val verifierEntered = CountDownLatch(1)
+            val proofReaders = AtomicInteger(0)
+            val proofReadersAtFirstFetch = AtomicInteger(-1)
+            val firstFetchedKey = java.util.concurrent.atomic.AtomicReference<String?>()
+            val fetchCount = AtomicInteger(0)
+            val resumedFetch: (ForeverClientUpdateCatalog.ObjectRecord, File, () -> Boolean, (Long) -> Unit) -> File =
+                { record, workDir, _, progress ->
+                    if (fetchCount.getAndIncrement() == 0) {
+                        firstFetchedKey.set(record.ekey)
+                        proofReadersAtFirstFetch.set(proofReaders.get())
+                    }
+                    val output = File(workDir, "${record.ekey}.blte")
+                    output.writeBytes(fixture.rawFor(record))
+                    progress(output.length())
+                    output
+                }
+            val resumed = fixture.updater(paths, configAssets, resumedFetch)
+            resumed.replayReaderFactory = { cancelled ->
+                if (Thread.currentThread().name == "forever-prefix-verify") {
+                    UpdaterFakeReader(cancelled) {
+                        verifierEntered.countDown()
+                        if (!verifierGate.await(180, TimeUnit.SECONDS)) throw IllegalStateException("test verifier gate timed out")
+                    }
+                } else {
+                    proofReaders.incrementAndGet()
+                    UpdaterFakeReader(cancelled)
+                }
+            }
+            val resumedPlan = resumed.plan(destination)
+            val tailCount = resumedPlan.totalObjects - checkpointedCount
+            val tailCommitted = CountDownLatch(1)
+            val maxCommitted = AtomicLong(0L)
+            val result = java.util.concurrent.atomic.AtomicReference<ForeverClientUpdateResult?>()
+            val failure = java.util.concurrent.atomic.AtomicReference<Throwable?>()
+            val run = Thread {
+                try {
+                    result.set(resumed.execute(destination, resumedPlan, consentFor(resumedPlan), { false }) { progress ->
+                        if (progress.phase == ForeverClientUpdateProgress.Phase.DOWNLOADING) {
+                            val current = maxCommitted.updateAndGet { old -> maxOf(old, progress.completedObjects) }
+                            if (current >= tailCount) tailCommitted.countDown()
+                        }
+                    })
+                } catch (problem: Throwable) {
+                    failure.set(problem)
+                }
+            }.apply { isDaemon = true; start() }
+            try {
+                assertTrue("the verifier must block before any overlap group ack", verifierEntered.await(180, TimeUnit.SECONDS))
+                assertTrue("the complete tail commits while exact individual proofs free quota", tailCommitted.await(180, TimeUnit.SECONDS))
+                assertEquals("the first request schedules the earliest missing physical object", firstMissing.ekey, firstFetchedKey.get())
+                assertTrue("the blocked verifier requires an individual staged-copy proof", proofReadersAtFirstFetch.get() > 0)
+                assertEquals("all target frames are durable while the verifier gate remains closed", resumedPlan.totalObjects,
+                    (checkpointLength(paths) - 40L) / 72L)
+            } finally {
+                verifierGate.countDown()
+            }
+            joinBounded(run, "legacy EKey checkpoint physical interleaving")
+            failure.get()?.let { throw AssertionError("interleaved checkpoint resume failed", it) }
+            val done = requireNotNull(result.get())
+            assertEquals(checkpointedCount.toLong(), done.reusedObjects)
+            assertEquals(tailCount, done.writtenObjects)
+            assertTrue("the private workspace is fully cleaned after success", workspaceRoot(paths) == null)
+            assertFalse(resumed.hasPendingTransaction(destination))
         }
     }
 
@@ -2839,9 +3498,11 @@ class ForeverClientUpdaterTest {
         private val buildConfigContents: ByteArray? = null,
         private val cdnConfigContents: ByteArray? = null,
         private val cascObjectCount: Int = 2,
+        private val contiguousRangeObjectCount: Int = 1,
     ) : AutoCloseable {
         init {
             require(cascObjectCount in 1..96) { "synthetic CASC object count is outside the small-fixture bound" }
+            require(contiguousRangeObjectCount in 1..cascObjectCount) { "synthetic contiguous-range count is outside the fixture bound" }
         }
         private val root = Files.createTempDirectory("client-updater-engine-test-").toFile()
         private val database = File(root, "synthetic-catalog.sqlite3")
@@ -2859,6 +3520,7 @@ class ForeverClientUpdaterTest {
         private val extraRaw: List<ByteArray> = extraDecoded.map { blteRaw(it) }
         private val extraEkey: List<String> = extraRaw.map { ekey(it) }
         private val extraCkey: List<String> = extraDecoded.map { md5(it) }
+        val contiguousRangeEkeys: List<String> = listOf(rangeEkey) + extraEkey.take(contiguousRangeObjectCount - 1)
         private val rawByKey = mapOf(directEkey to directRaw, rangeEkey to rangeRaw) +
             extraEkey.mapIndexed { index, key -> key to extraRaw[index] }.toMap()
         val buildConfigHash = buildConfigContents?.let(::md5) ?: ForeverClientUpdateCatalog.PINNED_BUILD_CONFIG_HASH
@@ -2883,8 +3545,23 @@ class ForeverClientUpdaterTest {
                 )
                 insertObject(db, directEkey, directCkey, directEncodedSize, directDecoded.size.toLong(), "direct", directEkey, 0)
                 insertObject(db, rangeEkey, rangeCkey, rangeEncodedSize, rangeDecoded.size.toLong(), "range", "33".repeat(16), 50)
+                var nextRangeOffset = 50L + rangeEncodedSize
                 extraEkey.forEachIndexed { index, key ->
-                    insertObject(db, key, extraCkey[index], extraRaw[index].size.toLong(), extraDecoded[index].size.toLong(), "direct", key, 0)
+                    if (index < contiguousRangeObjectCount - 1) {
+                        insertObject(
+                            db,
+                            key,
+                            extraCkey[index],
+                            extraRaw[index].size.toLong(),
+                            extraDecoded[index].size.toLong(),
+                            "range",
+                            "33".repeat(16),
+                            nextRangeOffset,
+                        )
+                        nextRangeOffset = Math.addExact(nextRangeOffset, extraRaw[index].size.toLong())
+                    } else {
+                        insertObject(db, key, extraCkey[index], extraRaw[index].size.toLong(), extraDecoded[index].size.toLong(), "direct", key, 0)
+                    }
                 }
                 db.insertOrThrow("loose", null, ContentValues().apply {
                     put("path", "Interface/patch.mpq")

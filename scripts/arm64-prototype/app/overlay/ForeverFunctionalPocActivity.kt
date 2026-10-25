@@ -118,6 +118,11 @@ import java.util.concurrent.atomic.AtomicReference
 // verification remains pending and is not claimed by this build.
 private const val ASSISTED_ENTRY_ENABLED = true
 
+/** Visibility only: verified patch application is not an authentication claim. */
+internal fun assistedAccountButtonVisible(status: ForeverFunctionalPocPatchSession.PatchStatus?): Boolean =
+    status == null || status.captureOnly ||
+        (status.phase != ForeverFunctionalPocPatchSession.PatchAttemptPhase.VERIFIED && !status.everApplied)
+
 /**
  * Brief Spanish wording for the advisory per-attempt patch state (US-004
  * AC-12). Fixed strings only: raw native errors, memory contents, addresses,
@@ -258,6 +263,7 @@ class ForeverFunctionalPocActivity : ComponentActivity() {
 
     override fun onCreate(state: Bundle?) {
         super.onCreate(state)
+        ForeverWifiDownloads.initialize(this)
         if (!ForeverFunctionalPoc.protectActiveAssistedCredentialWindow(window)) {
             finish()
             return
@@ -706,6 +712,7 @@ private fun ForeverFunctionalPocScreen(
     var showSettings by remember { mutableStateOf(false) }
     var showClientManagement by remember { mutableStateOf(false) }
     var managerReturnToSettings by remember { mutableStateOf(true) }
+    val inlineClientManagement = showClientManagement && !managerReturnToSettings
     var showAdvancedSettings by remember { mutableStateOf(false) }
     var showAutologinSettings by remember { mutableStateOf(false) }
     var showClientDetails by remember { mutableStateOf(false) }
@@ -1648,18 +1655,19 @@ private fun ForeverFunctionalPocScreen(
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
+            val showAssistedAccount = ASSISTED_ENTRY_ENABLED && assistedAccountButtonVisible(patchStatus)
             Surface(
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
                     .padding(12.dp)
-                    .width(if (ASSISTED_ENTRY_ENABLED) 96.dp else 48.dp)
+                    .width(if (showAssistedAccount) 96.dp else 48.dp)
                     .height(48.dp),
-                shape = if (ASSISTED_ENTRY_ENABLED) RoundedCornerShape(24.dp) else CircleShape,
+                shape = if (showAssistedAccount) RoundedCornerShape(24.dp) else CircleShape,
                 tonalElevation = 4.dp,
                 color = MaterialTheme.colorScheme.surfaceVariant,
             ) {
                 Row {
-                    if (ASSISTED_ENTRY_ENABLED) {
+                    if (showAssistedAccount) {
                         IconButton(onClick = { assistedSender?.request() }) {
                             Icon(
                                 imageVector = ForeverFunctionalIcons.Account,
@@ -1763,7 +1771,24 @@ private fun ForeverFunctionalPocScreen(
                     // partial-file labels; the hardcoded build is never shown
                     // as the installed version (the target build is authoritative
                     // only inside the manager).
-                    when (val state = homeState) {
+                    if (inlineClientManagement) {
+                        ForeverClientManagementDialog(
+                            inline = true,
+                            initialMissingStorageLabel = if (homeState is ForeverFunctionalLauncherUx.HomeState.Missing) readiness.storageLabel else null,
+                            onDismiss = { showClientManagement = false; refreshReadiness() },
+                            onPlay = {
+                                showClientManagement = false
+                                prepareEnvironment(fromManager = true)
+                            },
+                            onClientChanged = {
+                                prepared = null
+                                consent = false
+                                status = "Cliente actualizado"
+                                refreshStorage()
+                                refreshReadiness()
+                            },
+                        )
+                    } else when (val state = homeState) {
                         is ForeverFunctionalLauncherUx.HomeState.Checking -> {
                             Text(
                                 "Comprobando…",
@@ -1788,6 +1813,7 @@ private fun ForeverFunctionalPocScreen(
                                 style = MaterialTheme.typography.bodyMedium,
                             )
                             val fraction = ForeverFunctionalUiText.downloadFraction(detail)
+                            ForeverClientDownloadEstimate()
                             if (fraction != null) {
                                 Box(
                                     modifier = Modifier
@@ -1884,17 +1910,17 @@ private fun ForeverFunctionalPocScreen(
                             )
                         }
                     }
-                    Text(
+                    if (!inlineClientManagement) Text(
                         "Almacenamiento: ${readiness.storageLabel}",
                         modifier = Modifier.padding(top = 6.dp),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = MaterialTheme.typography.bodySmall,
                     )
-                    TextButton(
+                    if (!inlineClientManagement) TextButton(
                         onClick = { showClientDetails = !showClientDetails },
                         modifier = Modifier.heightIn(min = 48.dp),
                     ) { Text(if (showClientDetails) "Ocultar detalles" else "Detalles") }
-                    if (showClientDetails) {
+                    if (showClientDetails && !inlineClientManagement) {
                         Text(
                             "Ruta: ${readiness.storageRoute}",
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -1955,7 +1981,7 @@ private fun ForeverFunctionalPocScreen(
                         )
                     }
                 }
-            } else when (val state = homeState) {
+            } else if (!inlineClientManagement) when (val state = homeState) {
                 is ForeverFunctionalLauncherUx.HomeState.Checking -> {
                     // No actionable readiness while the first inspection runs.
                 }
@@ -2399,7 +2425,7 @@ private fun ForeverFunctionalPocScreen(
         )
     }
 
-    if (showClientManagement) {
+    if (showClientManagement && managerReturnToSettings) {
         ForeverClientManagementDialog(
             onPlay = {
                 // Single launch path: prepare here, then return to the home

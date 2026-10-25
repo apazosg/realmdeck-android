@@ -1,7 +1,20 @@
 # Current status
 
-**Evidence snapshot: 2026-10-23.** RealmDeck Android is an experimental Android
-ARM64 launcher project, not a general release. The current public preview is
+The current experimental preview is [C146](releases/c146-0.2.122.md), version code
+146 / `0.2.122-performance-preview`. Its source/build/payload audit passed; a
+same-certificate replacement preserved the three owned progress fingerprints,
+and a MAIN/LAUNCHER start from the ordinary launcher UID was observed on one phone.
+There is no general performance guarantee or full-client/gameplay acceptance.
+Updates are manual; this build does not contain the earlier APK notice feature.
+
+Download engineering on `perf/download-bottlenecks` is documented separately in
+the [performance investigation](download-performance-investigation.md). That
+historical measurements do not constitute a speed guarantee for this preview.
+
+## Previous C142 evidence snapshot (2026-10-23)
+
+RealmDeck Android is an experimental Android
+ARM64 launcher project, not a general release. The previous public preview was
 [C142, RealmDeck Android 0.2.118 · Preview](https://github.com/apazosg/realmdeck-android/releases/tag/c142-0.2.118-test)
 (version code 142; version name `0.2.118-apk-update-notice`).
 
@@ -30,7 +43,7 @@ for all attached assets.
 
 ## Manual updates
 
-Install the APK manually from the [C142 release page](https://github.com/apazosg/realmdeck-android/releases/tag/c142-0.2.118-test).
+Install the APK manually from the [C146 release page](https://github.com/apazosg/realmdeck-android/releases/tag/c146-0.2.122-test).
 Do not rely on the in-app notice as an update mechanism: C140 has no update checker,
 and the checker shipped in C142 still targets the former `apazosg/wowforever` API
 and rejects redirects. The former API now returns HTTP 301, so C142's check fails

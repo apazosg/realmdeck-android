@@ -82,6 +82,20 @@ class ForeverClientCatalogResolverTest {
     }
 
     @Test
+    fun preparationReportsManifestAndIndexPhases() {
+        val root = Files.createTempDirectory("catalog-resolver-progress-").toFile()
+        try {
+            val graph = SyntheticGraph(File(root, "fixture"), 70_425, 11)
+            val resolver = ForeverClientCatalogResolver(File(root, "work").apply { mkdirs() }) { _, _ -> GraphSource(graph) }
+            val phases = HashSet<String>()
+            resolver.resolve(graph.fingerprint, true, { false }) { stage, _, _ -> phases += stage }
+            assertTrue(phases.containsAll(listOf("parse-download", "parse-size", "parse-encoding-content", "parse-encoding", "cdn-indexes")))
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
     fun rejectsWrongConfigRawMetadataAndTruncatedIndexWithoutPublishingCatalog() {
         val root = Files.createTempDirectory("catalog-resolver-invalid-").toFile()
         try {

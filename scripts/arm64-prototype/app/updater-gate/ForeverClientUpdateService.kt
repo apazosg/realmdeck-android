@@ -101,6 +101,7 @@ class ForeverClientUpdateService private constructor(
     }
 
     private val appContext = context.applicationContext ?: context
+    init { ForeverWifiDownloads.initialize(appContext) }
     // Android may expose an OS-owned alias above the private sandbox. Resolve
     // only this Context-provided anchor, never caller-selected child paths.
     private val privateAnchor = appContext.noBackupFilesDir.canonicalFile
@@ -204,6 +205,9 @@ class ForeverClientUpdateService private constructor(
     /** Blocking official-metadata request; no client or payload files are written. */
     fun checkVersions(): ForeverClientUpdateCheck.CheckResult {
         checkOpen()
+        // This is an explicitly remote operation. Fail before an expensive local
+        // catalog import/inspection when no permitted network can perform it.
+        ForeverWifiDownloads.requireAvailable()
         val catalog = catalog()
         val installed = try {
             val target = storage.resolveForUpdate()
@@ -695,6 +699,12 @@ class ForeverClientUpdateService private constructor(
             verifiedOwnedFiles = ownership.toMap(),
             storageMarkerIdentity = target.identity.id,
             sourceOrigin = sourceOrigin,
+            revalidateCascSegment = if (target.hasDirectedProof() && target.rootIdentity != null && target.baseIdentity != null) {
+                { storage.revalidateForUpdate(target) }
+            } else null,
+            revalidateCascCommitGroup = if (target.hasDirectedProof() && target.rootIdentity != null && target.baseIdentity != null) {
+                { storage.revalidateForUpdateLight(target) }
+            } else null,
         )
     }
 

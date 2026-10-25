@@ -30,6 +30,44 @@ def require(condition: bool, message: str) -> None:
         raise ValueError(message)
 
 
+def check_functional_entry_permission(manifest_dump: str) -> None:
+    """Require the functional launcher Activity to have no caller permission."""
+    lines = manifest_dump.splitlines()
+    applications = [
+        (index, len(match.group(1)))
+        for index, line in enumerate(lines)
+        if (match := re.match(r'^(\s*)E: application(?:\s|$)', line))
+    ]
+    require(len(applications) == 1, 'APK manifest application is missing or ambiguous')
+    app_index, app_indent = applications[0]
+    require(not any(
+        (match := re.match(r'^(\s*)A: android:permission(?:\s|\()', line))
+        and len(match.group(1)) == app_indent + 2
+        for line in lines[app_index + 1:]
+    ), 'application requires a caller permission')
+
+    activities = []
+    for index, line in enumerate(lines):
+        match = re.match(r'^(\s*)E: activity(?:\s|$)', line)
+        if not match:
+            continue
+        indent = len(match.group(1))
+        end = index + 1
+        while end < len(lines):
+            next_element = re.match(r'^(\s*)E:', lines[end])
+            if next_element and len(next_element.group(1)) <= indent:
+                break
+            end += 1
+        block = lines[index:end]
+        if any('app.gamenative.ForeverFunctionalPocActivity' in item for item in block):
+            activities.append(block)
+
+    require(len(activities) == 1, 'functional entry Activity is missing or ambiguous in APK manifest')
+    require(not any(re.match(r'^\s*A: android:permission(?:\s|\()', line)
+                    for line in activities[0]),
+            'functional entry Activity requires a caller permission')
+
+
 def check_descriptor_delta(added: set[str], removed: set[str]) -> None:
     # Full recompilation changes method encodings/indices; only descriptor
     # additions/removals are constrained here. Core source lineage is checked
@@ -82,6 +120,14 @@ def check_descriptor_delta(added: set[str], removed: set[str]) -> None:
         'Lapp/gamenative/MetadataUiProgress;',
     )
     exact_descriptors = {
+        # Bounded aggregate-only fetch pipeline diagnostics; no new prefix.
+        'Lapp/gamenative/FetchPipelineDiagnostics;',
+        'Lapp/gamenative/FetchPipelineDiagnostics$$ExternalSyntheticLambda0;',
+        'Lapp/gamenative/FetchPipelineDiagnostics$$ExternalSyntheticLambda1;',
+        'Lapp/gamenative/FetchPipelineDiagnostics$$ExternalSyntheticLambda2;',
+        'Lapp/gamenative/FetchPipelineDiagnostics$$ExternalSyntheticLambda3;',
+        'Lapp/gamenative/FetchPipelineDiagnostics$$ExternalSyntheticLambda4;',
+        'Lapp/gamenative/FetchPipelineDiagnostics$$ExternalSyntheticLambda5;',
         # C141: reviewed typed summary, its bounded callbacks/IO writer and
         # the existing session observer wrapper. Exact names, not a new prefix.
         'Lapp/gamenative/ForeverFunctionalPatchSummary;',
@@ -149,6 +195,24 @@ def check_descriptor_delta(added: set[str], removed: set[str]) -> None:
         # binding-mismatch subtype required by the physical preflight gate.
         'Lapp/gamenative/CascReplayReader;',
         'Lapp/gamenative/CascReplayBindingMismatchException;',
+        # Reviewed bounded archive-order hint; do not admit neighbouring helpers.
+        'Lapp/gamenative/ForeverClientArchiveOrder;',
+        'Lapp/gamenative/ForeverClientArchiveOrder$Companion;',
+        'Lapp/gamenative/ForeverClientArchiveOrder$Companion$CacheIdentity;',
+        'Lapp/gamenative/ForeverClientArchiveOrder$withObjects$1$1;',
+        'Lapp/gamenative/ForeverClientArchiveOrder$Companion$$ExternalSyntheticLambda0;',
+        'Lapp/gamenative/ForeverClientArchiveOrder$Companion$$ExternalSyntheticLambda1;',
+        # Existing reviewed Home Wi-Fi policy and bounded speed estimator;
+        # exact additions observed in the canonical candidate's D8 output.
+        'Lapp/gamenative/ForeverWifiDownloads;',
+        'Lapp/gamenative/ForeverWifiDownloads$$ExternalSyntheticLambda0;',
+        'Lapp/gamenative/ForeverWifiDownloads$BoundClient;',
+        'Lapp/gamenative/ForeverWifiDownloads$Unavailable;',
+        'Lapp/gamenative/ForeverWifiDownloads$callback$1;',
+        'Lapp/gamenative/ForeverClientDownloadRate;',
+        'Lapp/gamenative/ForeverClientDownloadRate$Companion;',
+        'Lapp/gamenative/ForeverClientDownloadRate$Estimate;',
+        'Lapp/gamenative/ForeverClientDownloadRate$Sample;',
         # C111 reviewed architecture: per-invocation coordinator and immutable
         # prefix snapshot; no broad replay-related descriptor prefix is allowed.
         'Lapp/gamenative/CascOverlapCoordinator;',
@@ -257,18 +321,20 @@ def validate_c138_privacy_sanitization(
     baseline_contract_bytes: bytes,
     helper,
 ) -> dict[str, str]:
-    """Validate the one pinned C138 serial-redaction receipt and its payloads."""
+    """Validate serial redaction bound to one exact admitted recipe/provenance pair."""
     require(helper.C138_PROVENANCE_SHA256 != 'UNFROZEN_AFTER_SOURCE_FREEZE',
             'C138 provenance pin is unfrozen')
     recipe_sha256 = helper.sha256_file(helper.APPLY_OVERLAY)
-    require(recipe_sha256 == helper.C138_RECIPE_SHA256,
-            'C138 recipe differs from its frozen pin')
+    try:
+        provenance_sha256 = helper.privacy_provenance_pin_for_recipe(recipe_sha256)
+    except helper.ReconstructionError as failure:
+        raise ValueError('C138 recipe has no admitted provenance pair') from failure
 
     contract_member = helper.INTERRUPTED_DISPOSITION_MEMBER
     provenance_member = helper.CODE_PROVENANCE_MEMBER
     expected_pins = {
         contract_member: helper.C138_DISPOSITION_SHA256,
-        provenance_member: helper.C138_PROVENANCE_SHA256,
+        provenance_member: provenance_sha256,
     }
     require(set(expected_pins) == C138_PRIVACY_MEMBERS,
             'frozen C138 privacy members differ from the reviewed payload pair')
@@ -465,6 +531,7 @@ def main() -> None:
     require("native-code: 'arm64-v8a'" in badging, 'candidate ABI mismatch')
     require("sdkVersion:'29'" in badging and "targetSdkVersion:'36'" in badging, 'SDK drift')
     require("launchable-activity: name='app.gamenative.ForeverFunctionalPocActivity'" in badging, 'wrong launcher')
+    check_functional_entry_permission(commands['manifest'])
     require('MANAGE_EXTERNAL_STORAGE' not in commands['manifest'], 'broad storage permission introduced')
     branding_manifest = helper.read_stable_file(source / helper.MANIFEST, 'branded source manifest').decode('utf-8')
     require('android:icon="@mipmap/forever_ic_launcher"' in branding_manifest, 'branded app icon binding is missing')

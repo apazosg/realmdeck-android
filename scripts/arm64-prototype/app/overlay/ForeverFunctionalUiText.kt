@@ -13,6 +13,30 @@ import java.util.Locale
  * propagate instead of passing it here.
  */
 object ForeverFunctionalUiText {
+    /** Resolver counters are not interchangeable: indexes/rows are never bytes. */
+    fun preparationStatus(stage: String, completed: Long, total: Long): String {
+        val (label, unit) = when {
+            stage == "build-config" || stage == "cdn-config" -> "Consultando versión" to "bytes"
+            stage.startsWith("raw-") || stage.startsWith("cdn-index-") -> "Descargando metadatos" to "bytes"
+            stage.startsWith("decoded-") -> "Verificando metadatos" to "bytes"
+            stage == "parse-install" -> "Leyendo archivos" to "archivos"
+            stage == "parse-download" -> "Leyendo lista de descarga" to "registros"
+            stage == "parse-size" -> "Leyendo tamaños" to "registros"
+            stage == "parse-encoding-content" -> "Relacionando archivos" to "registros"
+            stage == "parse-encoding" -> "Leyendo catálogo de archivos" to "registros"
+            stage == "manifests-parsed" -> "Manifiestos verificados" to "registros"
+            stage == "cdn-indexes" -> "Consultando índices" to "índices"
+            stage == "catalog-objects" -> "Preparando catálogo" to "objetos"
+            stage == "catalog-cache-hit" -> "Reutilizando catálogo verificado" to "objetos"
+            stage == "catalog-ready" -> "Catálogo preparado" to "bytes"
+            else -> return "Preparando la descarga…"
+        }
+        if (completed < 0 || (total > 0 && completed > total)) return "$label…"
+        val done = if (unit == "bytes") clientBytes(completed) else completed.toString()
+        val goal = if (unit == "bytes") clientBytes(total) else "$total $unit"
+        return if (total > 0) "$label: $done de $goal" else "$label: $done${if (unit == "bytes") "" else " $unit"}"
+    }
+
     fun clientBytes(bytes: Long): String {
         if (bytes < 1024) return "$bytes B"
         var value = bytes.toDouble()
@@ -121,6 +145,11 @@ object ForeverFunctionalUiText {
      * the raw failure; this is only the displayed sentence.
      */
     fun userMessage(failure: Throwable): String {
+        val wifiFailure = generateSequence(failure) { it.cause }.filterIsInstance<ForeverWifiDownloads.Unavailable>().firstOrNull()
+        if (wifiFailure != null) {
+            return if (wifiFailure.vpnActive) "Descarga en pausa: esta versión no admite descargar con una VPN activa. Tu VPN no se omite."
+            else "Conéctate a una red Wi-Fi con acceso a Internet para continuar. El progreso guardado se conserva."
+        }
         val code = (failure as? ForeverFunctionalClientStorage.StorageException)?.code
         if (code != null) {
             return when (code) {

@@ -1,5 +1,6 @@
 package app.gamenative
 
+import android.app.Application
 import java.io.ByteArrayInputStream
 import java.io.File
 import java.nio.file.Files
@@ -475,6 +476,18 @@ class ForeverClientUpdateServiceTest {
             }
             assertArrayEquals("corrupt active receipt is preserved; no fallback/replacement", corrupt, receipt.readBytes())
             outside.delete()
+        }
+    }
+
+    @Test
+    @Config(application = Application::class)
+    fun missingWifiRejectsVersionCheckBeforeImportingTheLocalCatalog() {
+        val app = RuntimeEnvironment.getApplication()
+        val target = ForeverClientTargetBuild.parse(admissionTarget(70_500, "a1".repeat(16), "b2".repeat(16)))
+        ForeverClientUpdateService(app, target,
+            { error("no metadata query without Wi-Fi") },
+            { error("no resolver without Wi-Fi") }, Unit).use { service ->
+            assertThrows(ForeverWifiDownloads.Unavailable::class.java) { service.checkVersions() }
         }
     }
 

@@ -27,6 +27,7 @@ import java.util.UUID
 import java.util.concurrent.CancellationException
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
+import java.util.logging.Logger
 import org.json.JSONObject
 
 /** Actual client/Data storage selection. Paths are resolved from Android volumes, never prefs. */
@@ -52,6 +53,99 @@ object ForeverFunctionalClientStorage {
     private const val MAX_CLIENT_TREE_DEPTH = 64
     private const val MAX_CLIENT_TREE_ENTRIES = 100_000
     private val processRevision = AtomicLong(0)
+    private val revalidationDiagnostics = RevalidationDiagnostics()
+    private val lightRevalidationDiagnostics = LightRevalidationDiagnostics()
+
+    internal data class RevalidationDiagnosticSnapshot(
+        val calls: Long, val directed: Long, val fallback: Long,
+        val failures: Long, val cancellations: Long,
+        val totalNanos: Long, val selectionRegistryNanos: Long,
+        val freshMetadataNanos: Long, val namespaceNanos: Long,
+        val candidateInspectionNanos: Long, val resolveNanos: Long,
+        val pathCanonicalNanos: Long, val markerNanos: Long,
+        val identityMountNanos: Long, val finalCompareNanos: Long,
+    )
+
+    private class RevalidationDiagnostics {
+        private val values = LongArray(15)
+        @Synchronized fun record(timing: DirectedRevalidationTiming?, fallback: Boolean, failure: Throwable?) {
+            values[0]++
+            if (fallback) values[2]++ else values[1]++
+            if (failure != null && failure !is CancellationException) values[3]++
+            if (failure is CancellationException) values[4]++
+            if (timing != null) {
+                values[5] += timing.total
+                values[6] += timing.selectionRegistry
+                values[7] += timing.freshMetadata
+                values[8] += timing.namespace
+                values[9] += timing.candidateInspection
+                values[10] += timing.resolve
+                values[11] += timing.pathCanonical
+                values[12] += timing.marker
+                values[13] += timing.identityMount
+                values[14] += timing.finalCompare
+            }
+            if (values[0] % 256L == 0L) runCatching {
+                revalidationLogger.info(
+                    "storage revalidation scope=process calls=${values[0]} directed=${values[1]} fallback=${values[2]} " +
+                        "failures=${values[3]} cancellations=${values[4]} directedTotalMs=${values[5] / 1_000_000} " +
+                        "selectionRegistryMs=${values[6] / 1_000_000} metadataMs=${values[7] / 1_000_000} " +
+                        "namespaceMs=${values[8] / 1_000_000} candidateMs=${values[9] / 1_000_000} " +
+                        "resolveInclusiveMs=${values[10] / 1_000_000} pathsMs=${values[11] / 1_000_000} " +
+                        "markerMs=${values[12] / 1_000_000} identityMountMs=${values[13] / 1_000_000} " +
+                        "compareMs=${values[14] / 1_000_000}",
+                )
+            }
+        }
+        @Synchronized fun snapshot() = RevalidationDiagnosticSnapshot(
+            values[0], values[1], values[2], values[3], values[4], values[5], values[6], values[7],
+            values[8], values[9], values[10], values[11], values[12], values[13], values[14],
+        )
+    }
+
+    internal data class LightRevalidationDiagnosticSnapshot(
+        val calls: Long,
+        val failures: Long,
+        val totalNanos: Long,
+    )
+
+    private class LightRevalidationDiagnostics {
+        private val calls = AtomicLong()
+        private val failures = AtomicLong()
+        private val totalNanos = AtomicLong()
+
+        fun record(elapsedNanos: Long, failure: Throwable?) {
+            val callCount = calls.incrementAndGet()
+            if (failure != null && failure !is CancellationException) failures.incrementAndGet()
+            totalNanos.addAndGet(elapsedNanos.coerceAtLeast(0L))
+            if (callCount % 256L == 0L) runCatching {
+                revalidationLogger.info(
+                    "storage light revalidation scope=process calls=$callCount failures=${failures.get()} " +
+                        "totalMs=${totalNanos.get() / 1_000_000}",
+                )
+            }
+        }
+
+        fun snapshot() = LightRevalidationDiagnosticSnapshot(calls.get(), failures.get(), totalNanos.get())
+    }
+
+    private class DirectedRevalidationTiming {
+        var total = 0L
+        var selectionRegistry = 0L
+        var freshMetadata = 0L
+        var namespace = 0L
+        var candidateInspection = 0L
+        var resolve = 0L
+        var pathCanonical = 0L
+        var marker = 0L
+        var identityMount = 0L
+        var finalCompare = 0L
+    }
+
+    private val revalidationLogger = Logger.getLogger("ForeverClientUpdate")
+
+    internal fun revalidationDiagnosticSnapshot(): RevalidationDiagnosticSnapshot = revalidationDiagnostics.snapshot()
+    internal fun lightRevalidationDiagnosticSnapshot(): LightRevalidationDiagnosticSnapshot = lightRevalidationDiagnostics.snapshot()
 
     internal fun formatAvailableBytes(value: Long): String {
         if (value <= 0) return "No disponible"
@@ -652,28 +746,49 @@ object ForeverFunctionalClientStorage {
         }
 
         /** Resolve only the selection from this call's fresh snapshot, never a cached option. */
-        private fun resolveForUpdate(selected: StorageOption): UpdateTarget {
-            requireSelectable(selected)
-            val lexicalRoot = selected.root ?: throw StorageException("storage_unavailable")
-            val base = selected.trustedBase ?: throw StorageException("storage_base_unavailable")
-            require(selected.trusted && lexicalWithin(lexicalRoot, base) && safeSegments(base, lexicalRoot)) {
-                throw StorageException("storage_path_invalid")
+        private fun resolveForUpdate(selected: StorageOption, timing: DirectedRevalidationTiming? = null): UpdateTarget {
+            val pathStarted = if (timing != null) System.nanoTime() else 0L
+            val lexicalRoot: File
+            val base: File
+            val canonicalRoot: File
+            val canonicalBase: File
+            try {
+                requireSelectable(selected)
+                lexicalRoot = selected.root ?: throw StorageException("storage_unavailable")
+                base = selected.trustedBase ?: throw StorageException("storage_base_unavailable")
+                require(selected.trusted && lexicalWithin(lexicalRoot, base) && safeSegments(base, lexicalRoot)) {
+                    throw StorageException("storage_path_invalid")
+                }
+                canonicalBase = base.canonicalFile
+                canonicalRoot = lexicalRoot.canonicalFile
+                require(lexicalWithin(canonicalRoot, canonicalBase)) { throw StorageException("storage_path_escape") }
+                require(isDirectory(canonicalBase)) { throw StorageException("storage_base_unavailable") }
+            } finally {
+                if (timing != null) timing.pathCanonical += System.nanoTime() - pathStarted
             }
-            val canonicalBase = base.canonicalFile
-            val canonicalRoot = lexicalRoot.canonicalFile
-            require(lexicalWithin(canonicalRoot, canonicalBase)) { throw StorageException("storage_path_escape") }
-            require(isDirectory(canonicalBase)) { throw StorageException("storage_base_unavailable") }
-
             val exists = Files.exists(canonicalRoot.toPath(), LinkOption.NOFOLLOW_LINKS)
             if (exists) {
                 require(isDirectory(canonicalRoot)) { throw StorageException("storage_not_directory") }
-                verifyMarker(canonicalRoot, selected.identity)
+                val markerStarted = if (timing != null) System.nanoTime() else 0L
+                try {
+                    verifyMarker(canonicalRoot, selected.identity)
+                } finally {
+                    if (timing != null) timing.marker += System.nanoTime() - markerStarted
+                }
             }
-            val baseIdentity = fileIdentity(canonicalBase, selected.legacy)
-            val rootIdentity = if (exists) fileIdentity(canonicalRoot, selected.legacy) else null
-            val mount = mountIdentity(selected)
-            require(selected.legacy || (baseIdentity != null && mount != null && (!exists || rootIdentity != null))) {
-                throw StorageException("storage_identity_unproven")
+            val identityStarted = if (timing != null) System.nanoTime() else 0L
+            val baseIdentity: FileIdentity?
+            val rootIdentity: FileIdentity?
+            val mount: String?
+            try {
+                baseIdentity = fileIdentity(canonicalBase, selected.legacy)
+                rootIdentity = if (exists) fileIdentity(canonicalRoot, selected.legacy) else null
+                mount = mountIdentity(selected)
+                require(selected.legacy || (baseIdentity != null && mount != null && (!exists || rootIdentity != null))) {
+                    throw StorageException("storage_identity_unproven")
+                }
+            } finally {
+                if (timing != null) timing.identityMount += System.nanoTime() - identityStarted
             }
             return UpdateTarget(
                 selected.identity,
@@ -688,27 +803,95 @@ object ForeverFunctionalClientStorage {
 
         /** Re-resolve the same destination; a created/replaced root requires fresh admission. */
         fun revalidateForUpdate(target: UpdateTarget) {
-            if (!target.hasDirectedProof()) {
-                if (target.hasPartialProof()) throw StorageException("storage_unavailable")
-                val selected = snapshot(includeClientMetadata = false).selected ?: throw StorageException("storage_unselected")
-                require(selected.identity == target.identity && target.revision == processRevision.get()) {
-                    throw StorageException("storage_selection_changed")
+            val directed = target.hasDirectedProof()
+            val timing = if (directed) DirectedRevalidationTiming() else null
+            val started = if (timing != null) System.nanoTime() else 0L
+            var failure: Throwable? = null
+            try {
+                if (!directed) {
+                    if (target.hasPartialProof()) throw StorageException("storage_unavailable")
+                    val selected = snapshot(includeClientMetadata = false).selected ?: throw StorageException("storage_unselected")
+                    require(selected.identity == target.identity && target.revision == processRevision.get()) {
+                        throw StorageException("storage_selection_changed")
+                    }
+                    requireSelectable(selected)
+                    val current = resolveForUpdate(selected)
+                    require(current.root == target.root) { throw StorageException("storage_root_changed") }
+                    require(current.rootIdentity == target.rootIdentity) { throw StorageException("storage_root_replaced") }
+                    require(current.baseIdentity == target.baseIdentity) { throw StorageException("storage_base_replaced") }
+                    require(current.mountIdentity == target.mountIdentity) { throw StorageException("storage_mount_changed") }
+                    return
                 }
-                requireSelectable(selected)
-                val current = resolveForUpdate(selected)
-                require(current.root == target.root) { throw StorageException("storage_root_changed") }
-                require(current.rootIdentity == target.rootIdentity) { throw StorageException("storage_root_replaced") }
-                require(current.baseIdentity == target.baseIdentity) { throw StorageException("storage_base_replaced") }
-                require(current.mountIdentity == target.mountIdentity) { throw StorageException("storage_mount_changed") }
-                return
+                revalidateDirected(
+                    target,
+                    requireNotNull(target.admittedUuid),
+                    requireNotNull(target.admittedVolumeDirectory),
+                    requireNotNull(target.admittedAppFilesDirectory),
+                    requireNotNull(target.admittedLexicalRoot),
+                    requireNotNull(timing),
+                )
+            } catch (caught: Throwable) {
+                failure = caught
+                throw caught
+            } finally {
+                if (timing != null) {
+                    timing.total = System.nanoTime() - started
+                    runCatching { revalidationDiagnostics.record(timing, fallback = false, failure) }
+                } else {
+                    runCatching { revalidationDiagnostics.record(null, fallback = true, failure) }
+                }
             }
-            revalidateDirected(
-                target,
-                requireNotNull(target.admittedUuid),
-                requireNotNull(target.admittedVolumeDirectory),
-                requireNotNull(target.admittedAppFilesDirectory),
-                requireNotNull(target.admittedLexicalRoot),
-            )
+        }
+
+        /** Cheap group-boundary proof for directed sourceless updates only. */
+        internal fun revalidateForUpdateLight(target: UpdateTarget) {
+            val started = System.nanoTime()
+            var failure: Throwable? = null
+            try {
+                revalidateForUpdateLightInternal(target)
+            } catch (caught: Throwable) {
+                failure = caught
+                throw caught
+            } finally {
+                lightRevalidationDiagnostics.record(System.nanoTime() - started, failure)
+            }
+        }
+
+        private fun revalidateForUpdateLightInternal(target: UpdateTarget) {
+            if (!target.hasDirectedProof()) throw StorageException("storage_identity_unproven")
+            val expectedRoot = target.rootIdentity ?: throw StorageException("storage_identity_unproven")
+            val expectedBase = target.baseIdentity ?: throw StorageException("storage_identity_unproven")
+            val persisted = persistedSelection() ?: throw StorageException("storage_selection_changed")
+            require(persisted.first == target.identity.id && target.revision == processRevision.get()) {
+                throw StorageException("storage_selection_changed")
+            }
+            val registry = registryEntries().firstOrNull { it.id == target.identity.id }
+                ?: throw StorageException("storage_selection_changed")
+            require(registry.kind == target.identity.kind) { throw StorageException("storage_selection_changed") }
+
+            fun freshDirectoryIdentity(file: File, expected: FileIdentity, code: String): FileIdentity {
+                val attributes = try {
+                    Files.readAttributes(
+                        file.toPath(),
+                        java.nio.file.attribute.BasicFileAttributes::class.java,
+                        LinkOption.NOFOLLOW_LINKS,
+                    )
+                } catch (_: java.nio.file.NoSuchFileException) {
+                    throw StorageException(code)
+                } catch (_: java.io.IOException) {
+                    throw StorageException(code)
+                } catch (_: SecurityException) {
+                    throw StorageException(code)
+                }
+                require(attributes.isDirectory && !attributes.isSymbolicLink) { throw StorageException(code) }
+                val actual = FileIdentity(attributes.fileKey()?.toString()
+                    ?: throw StorageException("storage_identity_unproven"))
+                require(actual == expected) { throw StorageException(code) }
+                return actual
+            }
+
+            freshDirectoryIdentity(target.root, expectedRoot, "storage_root_replaced")
+            freshDirectoryIdentity(requireNotNull(target.admittedAppFilesDirectory), expectedBase, "storage_base_replaced")
         }
 
         /**
@@ -724,55 +907,90 @@ object ForeverFunctionalClientStorage {
             admittedVolumeDirectory: File,
             admittedAppFilesDirectory: File,
             admittedLexicalRoot: File,
+            timing: DirectedRevalidationTiming,
         ) {
             // Fresh selection/registry/revision, exactly as today but without a snapshot.
-            val persisted = persistedSelection() ?: throw StorageException("storage_selection_changed")
-            require(persisted.first == target.identity.id) { throw StorageException("storage_selection_changed") }
-            registryEntries().firstOrNull { it.id == target.identity.id }?.let { entry ->
-                require(entry.kind == target.identity.kind) { throw StorageException("storage_selection_changed") }
+            val selectionStarted = System.nanoTime()
+            try {
+                val persisted = persistedSelection() ?: throw StorageException("storage_selection_changed")
+                require(persisted.first == target.identity.id) { throw StorageException("storage_selection_changed") }
+                registryEntries().firstOrNull { it.id == target.identity.id }?.let { entry ->
+                    require(entry.kind == target.identity.kind) { throw StorageException("storage_selection_changed") }
+                }
+                require(target.revision == processRevision.get()) { throw StorageException("storage_selection_changed") }
+                require(target.identity.id == "volume:$admittedUuid") { throw StorageException("storage_unavailable") }
+            } finally {
+                timing.selectionRegistry += System.nanoTime() - selectionStarted
             }
-            require(target.revision == processRevision.get()) { throw StorageException("storage_selection_changed") }
-            require(target.identity.id == "volume:$admittedUuid") { throw StorageException("storage_unavailable") }
 
+            val metadataStarted = System.nanoTime()
             val fresh = try {
                 freshNativeVolumes(context)
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Exception) {
                 throw StorageException("storage_unavailable")
+            } finally {
+                timing.freshMetadata += System.nanoTime() - metadataStarted
             }
-            val matches = fresh.filter { it.uuid == admittedUuid }
-            val volume = when {
-                matches.isEmpty() -> throw StorageException("storage_mount_unproven")
-                matches.size > 1 -> throw StorageException("storage_unavailable")
-                else -> matches.single()
+            var volume: NativeVolumeMetadata? = null
+            var directory: File? = null
+            var actualAppFiles: File? = null
+            val namespaceStarted = System.nanoTime()
+            try {
+                val matches = fresh.filter { it.uuid == admittedUuid }
+                val foundVolume = when {
+                    matches.isEmpty() -> throw StorageException("storage_mount_unproven")
+                    matches.size > 1 -> throw StorageException("storage_unavailable")
+                    else -> matches.single()
+                }
+                volume = foundVolume
+                val foundDirectory = foundVolume.directory ?: throw StorageException("storage_mount_unproven")
+                directory = foundDirectory
+                if (foundVolume.primary || !foundVolume.removable) throw StorageException("storage_selection_changed")
+                if (foundVolume.state != Environment.MEDIA_MOUNTED) throw StorageException("storage_unavailable")
+                if (foundDirectory.absoluteFile.toPath().normalize().toString() !=
+                    admittedVolumeDirectory.absoluteFile.toPath().normalize().toString()
+                ) throw StorageException("storage_root_changed")
+                val foundAppFiles = File(foundDirectory, "Android/data/${context.packageName}/files")
+                actualAppFiles = foundAppFiles
+                if (foundAppFiles.absoluteFile.toPath().normalize().toString() !=
+                    admittedAppFilesDirectory.absoluteFile.toPath().normalize().toString()
+                ) throw StorageException("storage_root_changed")
+                val expectedLexical = File(foundAppFiles, "CustomGames/${ForeverFunctionalPoc.GAME_FOLDER_NAME}")
+                if (expectedLexical.absoluteFile.toPath().normalize().toString() !=
+                    admittedLexicalRoot.absoluteFile.toPath().normalize().toString()
+                ) throw StorageException("storage_root_changed")
+            } finally {
+                timing.namespace += System.nanoTime() - namespaceStarted
             }
-            val directory = volume.directory ?: throw StorageException("storage_mount_unproven")
-            if (volume.primary || !volume.removable) throw StorageException("storage_selection_changed")
-            if (volume.state != Environment.MEDIA_MOUNTED) throw StorageException("storage_unavailable")
-            if (directory.absoluteFile.toPath().normalize().toString() !=
-                admittedVolumeDirectory.absoluteFile.toPath().normalize().toString()
-            ) throw StorageException("storage_root_changed")
 
-            // Rebuild only the admitted app sandbox from the current public directory.
-            // Never guess /storage/<UUID>; the namespace stays app-specific and exact.
-            val actualAppFiles = File(directory, "Android/data/${context.packageName}/files")
-            if (actualAppFiles.absoluteFile.toPath().normalize().toString() !=
-                admittedAppFilesDirectory.absoluteFile.toPath().normalize().toString()
-            ) throw StorageException("storage_root_changed")
-            val expectedLexical = File(actualAppFiles, "CustomGames/${ForeverFunctionalPoc.GAME_FOLDER_NAME}")
-            if (expectedLexical.absoluteFile.toPath().normalize().toString() !=
-                admittedLexicalRoot.absoluteFile.toPath().normalize().toString()
-            ) throw StorageException("storage_root_changed")
-
-            val selected = inspectCandidate(buildDirectedCandidate(volume, directory, actualAppFiles), includeClientMetadata = false)
+            val candidateStarted = System.nanoTime()
+            val selected = try {
+                inspectCandidate(
+                    buildDirectedCandidate(requireNotNull(volume), requireNotNull(directory), requireNotNull(actualAppFiles)),
+                    includeClientMetadata = false,
+                )
+            } finally {
+                timing.candidateInspection += System.nanoTime() - candidateStarted
+            }
             require(selected.identity == target.identity) { throw StorageException("storage_selection_changed") }
-            val current = resolveForUpdate(selected)
-            require(current.root == target.root) { throw StorageException("storage_root_changed") }
-            require(current.rootIdentity == target.rootIdentity) { throw StorageException("storage_root_replaced") }
-            require(current.baseIdentity == target.baseIdentity) { throw StorageException("storage_base_replaced") }
-            require(current.mountIdentity == target.mountIdentity) { throw StorageException("storage_mount_changed") }
-            require(current.revision == target.revision) { throw StorageException("storage_selection_changed") }
+            val resolveStarted = System.nanoTime()
+            val current = try {
+                resolveForUpdate(selected, timing)
+            } finally {
+                timing.resolve += System.nanoTime() - resolveStarted
+            }
+            val compareStarted = System.nanoTime()
+            try {
+                require(current.root == target.root) { throw StorageException("storage_root_changed") }
+                require(current.rootIdentity == target.rootIdentity) { throw StorageException("storage_root_replaced") }
+                require(current.baseIdentity == target.baseIdentity) { throw StorageException("storage_base_replaced") }
+                require(current.mountIdentity == target.mountIdentity) { throw StorageException("storage_mount_changed") }
+                require(current.revision == target.revision) { throw StorageException("storage_selection_changed") }
+            } finally {
+                timing.finalCompare += System.nanoTime() - compareStarted
+            }
         }
 
         /** Sandbox candidate from the current public directory; trusts nothing until inspected. */
@@ -1159,14 +1377,28 @@ object ForeverFunctionalClientStorage {
             val base = if (primary) candidate.externalFilesDir.absoluteFile.parentFile else candidate.externalFilesDir.absoluteFile
             val kind = when { primary -> Kind.PRIMARY; candidate.isRemovable -> Kind.REMOVABLE; else -> Kind.OTHER }
             val mount = candidate.mountIdentity ?: mountIdentityFor(candidate.externalFilesDir)
-            val rootShapeValid = !Files.exists(root.toPath(), LinkOption.NOFOLLOW_LINKS) || isDirectory(root)
+            val rootShapeValid = try {
+                Files.readAttributes(
+                    root.toPath(),
+                    java.nio.file.attribute.BasicFileAttributes::class.java,
+                    LinkOption.NOFOLLOW_LINKS,
+                ).isDirectory
+            } catch (_: java.nio.file.NoSuchFileException) {
+                true
+            } catch (_: java.io.IOException) {
+                false
+            } catch (_: SecurityException) {
+                false
+            }
             val nativeRoot = candidate.nativeVolumeRoot
             val nativeNamespaceValid = nativeRoot != null &&
                 candidate.externalFilesDir.absoluteFile.toPath().normalize() ==
                 File(nativeRoot, "Android/data/${context.packageName}/files").absoluteFile.toPath().normalize()
             val trusted = base != null && rootShapeValid && lexicalWithin(root, base) &&
                 if (nativeRoot != null) {
-                    nativeNamespaceValid && safeSegments(nativeRoot, base) && safeSegments(nativeRoot, root)
+                    // The root walk includes the exact app-files base and all
+                    // its ancestors; a second prefix walk repeats the same I/O.
+                    nativeNamespaceValid && safeSegments(nativeRoot, root)
                 } else {
                     base.canWrite() && safeSegments(base, root)
                 }
@@ -2150,8 +2382,15 @@ object ForeverFunctionalClientStorage {
         var current = bp
         for (part in relative) {
             current = current.resolve(part)
-            if (!Files.exists(current, LinkOption.NOFOLLOW_LINKS)) break
-            val attrs = runCatching { Files.readAttributes(current, java.nio.file.attribute.BasicFileAttributes::class.java, LinkOption.NOFOLLOW_LINKS) }.getOrNull() ?: return false
+            // One NOFOLLOW lookup proves existence and type. Only an absent
+            // component permits a not-yet-created sandbox; other errors fail closed.
+            val attrs = try {
+                Files.readAttributes(current, java.nio.file.attribute.BasicFileAttributes::class.java, LinkOption.NOFOLLOW_LINKS)
+            } catch (_: java.nio.file.NoSuchFileException) {
+                break
+            } catch (_: Exception) {
+                return false
+            }
             if (!attrs.isDirectory) return false
         }
         return true

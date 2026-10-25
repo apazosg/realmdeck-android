@@ -7,6 +7,7 @@ import java.security.MessageDigest
 import java.nio.file.Files
 import java.nio.file.LinkOption
 import java.nio.file.StandardOpenOption
+import java.util.concurrent.atomic.AtomicReference
 import java.util.zip.Deflater
 import org.json.JSONArray
 import org.json.JSONObject
@@ -16,6 +17,52 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ForeverCascTest {
+    @Test
+    fun sixteenObjectDurableGroupRetainsRawSourcesUntilCheckpointBarrier() {
+        val root = tempDir()
+        try {
+            val objects = (0 until 16).map { index ->
+                val decoded = "sixteen-object-group-$index".toByteArray()
+                val rawBytes = blteRaw(decoded)
+                val raw = file(root, "private/raw-$index.blte", rawBytes)
+                Pair(
+                    ForeverCasc.IncrementalObjectSpec(
+                        encodedEkey(rawBytes), md5Hex(decoded), rawBytes.size.toLong(), decoded.size.toLong(),
+                    ),
+                    raw,
+                )
+            }.sortedBy { it.first.ekey }
+            val output = File(root, "client/Data/data")
+            assertTrue(output.parentFile!!.mkdirs())
+            val checkpoint = File(root, "private/checkpoint").apply { assertTrue(mkdirs()) }
+            val checkpointFile = File(checkpoint, ".forever-casc-resume-checkpoint")
+            var groups = 0
+            val result = ForeverCasc.writeTargetIncrementalResumable(
+                null,
+                output,
+                checkpoint,
+                objects.asSequence().map { it.first },
+                { spec -> objects.single { it.first.ekey == spec.ekey }.second },
+                { false },
+                "sixteen-object-group",
+                { _, raw -> assertTrue("raw is retired only after the checkpoint barrier", raw.delete()) },
+                beforeDurableGroup = {
+                    groups++
+                    assertEquals("no object frame is acknowledged before the full group barrier", 40L, checkpointFile.length())
+                    assertTrue("every raw remains available through the data/checkpoint force", objects.all { it.second.isFile })
+                },
+            )
+
+            assertEquals(1, groups)
+            assertEquals(16L, result.writtenObjects)
+            // Sixteen object frames followed by the existing finalization frame.
+            assertEquals(40L + 17L * 72L, checkpointFile.length())
+            assertTrue(objects.none { it.second.exists() })
+        } finally {
+            delete(root)
+        }
+    }
+
     @Test
     fun buildInfoMatchesPinnedProducerSerialization() {
         val fields = JSONObject()
@@ -901,6 +948,9 @@ class ForeverCascTest {
     @Test
     fun resumableTargetWriterKeepsVerifiedSegmentAndTruncatesOnlyItsUncheckpointedTail() {
         val root = tempDir()
+        val logs = LogCapture()
+        val logger = java.util.logging.Logger.getLogger("ForeverClientUpdate")
+        logger.addHandler(logs)
         try {
             val objects = (0..1).map { index ->
                 val decoded = "resume-object-$index".toByteArray()
@@ -919,12 +969,21 @@ class ForeverCascTest {
             val manifest = objects.map { it.first }
             var stopAfterFirst = false
             var sourceCalls = 0
+            val commitFlushRequest = AtomicReference<(() -> Boolean)?>(null)
+            val interruptedManifest = sequence {
+                yield(manifest.first())
+                // Model the producer reaching byte-budget backpressure before
+                // its next item can arrive. It asks the writer to drain the
+                // completed one-object group rather than waiting for a full batch.
+                assertTrue(commitFlushRequest.get()?.invoke() == true)
+                yield(manifest.last())
+            }
             val firstPass = org.junit.Assert.assertThrows(java.util.concurrent.CancellationException::class.java) {
                 ForeverCasc.writeTargetIncrementalResumable(
                     null,
                     target,
                     checkpointDirectory,
-                    manifest.asSequence(),
+                    interruptedManifest,
                     { spec ->
                         sourceCalls++
                         objects.single { it.first.ekey == spec.ekey }.second
@@ -935,9 +994,15 @@ class ForeverCascTest {
                         if (raw.exists()) assertTrue(raw.delete())
                         stopAfterFirst = true
                     },
+                    commitFlushRequest = commitFlushRequest,
                 )
             }
             assertTrue(firstPass is java.util.concurrent.CancellationException)
+            val timing = logs.records.map { it.message }.single { it.startsWith("CASC commit final newObjects=1") }
+            listOf("segmentTransitionNanos=", "objectHeaderCopyNanos=", "indexPutNanos=", "groupFlushNanos=", "groupForceNanos=").forEach { key ->
+                val value = timing.substringAfter(key).substringBefore(' ').toLong()
+                assertTrue("$key must be nonnegative", value >= 0L)
+            }
             assertEquals(1, sourceCalls)
             val dataSegment = File(target, "data.000")
             val oneObjectEnd = 480L + 30L + objects.first().first.encodedSize
@@ -966,8 +1031,13 @@ class ForeverCascTest {
             assertTrue(beforeWrongIdentity.contentEquals(dataSegment.readBytes()))
 
             // Simulate a process death after bytes reached the owned segment but before
-            // their checkpoint frame was appended. Only this last tail is disposable.
+            // the next grouped frame finished appending. The complete frame is
+            // retained; only the partial final frame and segment tail are disposable.
             java.io.FileOutputStream(dataSegment, true).use { it.write(byteArrayOf(9, 8, 7, 6)) }
+            val checkpointFile = File(checkpointDirectory, ".forever-casc-resume-checkpoint")
+            assertEquals(40L + 72L, checkpointFile.length())
+            java.io.FileOutputStream(checkpointFile, true).use { it.write(ByteArray(19) { 7 }) }
+            assertTrue("unacknowledged raw must remain available", objects.last().second.isFile)
             stopAfterFirst = false
             val result = ForeverCasc.writeTargetIncrementalResumable(
                 null,
@@ -1004,8 +1074,86 @@ class ForeverCascTest {
                 { false },
             )
         } finally {
+            logger.removeHandler(logs)
             delete(root)
         }
+    }
+
+    @Test
+    fun checkpointInspectionAuthenticatesUnorderedMembershipWithoutChangingItsBytes() {
+        val root = tempDir()
+        try {
+            val objects = (0..1).map { index ->
+                val decoded = "unordered-checkpoint-$index".toByteArray()
+                val raw = blteRaw(decoded)
+                ForeverCasc.IncrementalObjectSpec(encodedEkey(raw), md5Hex(decoded), raw.size.toLong(), decoded.size.toLong()) to
+                    file(root, "private-work/$index.blte", raw)
+            }.sortedByDescending { it.first.ekey }
+            val target = File(root, "stage/Data/data")
+            assertTrue(target.parentFile!!.mkdirs())
+            val checkpoint = File(root, "checkpoint").also { assertTrue(it.mkdir()) }
+            val identity = "admitted-catalog|unchanged-root"
+            ForeverCasc.writeTargetIncrementalResumable(
+                null, target, checkpoint, objects.asSequence().map { it.first },
+                { spec -> objects.single { it.first.ekey == spec.ekey }.second }, { false }, identity,
+            )
+            val before = directFileHashes(checkpoint)
+            val stageBefore = directFileHashes(target)
+            val byKey = objects.sortedBy { it.first.ekey }.mapIndexed { index, item ->
+                item.first.ekey to IndexedValue(index, item.first)
+            }.toMap()
+            org.junit.Assert.assertThrows(IllegalStateException::class.java) {
+                ForeverCasc.inspectResumableCheckpoint(target, checkpoint,
+                    byKey.values.asSequence().map { it.value }, { false }, identity)
+            }
+            val summary = ForeverCasc.inspectResumableCheckpoint(
+                target, checkpoint, emptySequence(), { false }, identity,
+                targetObjectCount = byKey.size, targetMembership = { byKey.getValue(it) },
+            )
+            assertEquals(2L, summary.completedObjectCount)
+            assertEquals(objects.sumOf { it.first.encodedSize }, summary.completedEncodedBytes)
+            assertTrue(summary.finalizing)
+            org.junit.Assert.assertThrows(IllegalStateException::class.java) {
+                ForeverCasc.inspectResumableCheckpoint(target, checkpoint, emptySequence(), { false }, identity,
+                    targetObjectCount = byKey.size, targetMembership = { key ->
+                        val admitted = byKey.getValue(key)
+                        IndexedValue(admitted.index, admitted.value.copy(contentKey = "ff".repeat(16)))
+                    })
+            }
+            org.junit.Assert.assertThrows(IllegalStateException::class.java) {
+                ForeverCasc.inspectResumableCheckpoint(target, checkpoint, emptySequence(), { false }, identity,
+                    targetObjectCount = byKey.size, targetMembership = { key -> IndexedValue(0, byKey.getValue(key).value) })
+            }
+            org.junit.Assert.assertThrows(IllegalStateException::class.java) {
+                ForeverCasc.inspectResumableCheckpoint(target, checkpoint, emptySequence(), { false }, identity,
+                    targetObjectCount = byKey.size, targetMembership = { throw NoSuchElementException("unknown target key") })
+            }
+            fun assertWriterRejectsWithoutMutation(
+                membership: (String) -> IndexedValue<ForeverCasc.IncrementalObjectSpec>,
+            ) {
+                org.junit.Assert.assertThrows(IllegalStateException::class.java) {
+                    ForeverCasc.writeTargetIncrementalResumable(
+                        null,
+                        target,
+                        checkpoint,
+                        emptySequence(),
+                        { error("invalid checkpoint must fail before source lookup") },
+                        { false },
+                        identity,
+                        targetObjectCount = byKey.size,
+                        targetMembership = membership,
+                    )
+                }
+                assertEquals(before, directFileHashes(checkpoint))
+                assertEquals(stageBefore, directFileHashes(target))
+            }
+            assertWriterRejectsWithoutMutation { key ->
+                val admitted = byKey.getValue(key)
+                IndexedValue(admitted.index, admitted.value.copy(contentKey = "ff".repeat(16)))
+            }
+            assertWriterRejectsWithoutMutation { key -> IndexedValue(0, byKey.getValue(key).value) }
+            assertEquals(before, directFileHashes(checkpoint))
+        } finally { delete(root) }
     }
 
     @Test
@@ -1029,21 +1177,33 @@ class ForeverCascTest {
             val manifest = objects.map { it.first }
             val usbTemp = File(target, ".forever-casc-incremental-object.tmp")
             val privateTemp = File(checkpointDirectory, ".forever-casc-incremental-object.tmp")
+            val checkpoint = File(checkpointDirectory, ".forever-casc-resume-checkpoint")
+            val expectedSegmentSize = 480L + objects.sumOf { 30L + it.first.encodedSize }
             var observedPrivateTemp = false
             var observedUsbTemp = false
+            var firstAcknowledgement = true
             val result = ForeverCasc.writeTargetIncrementalResumable(
                 null,
                 target,
                 checkpointDirectory,
                 manifest.asSequence(),
                 { spec -> objects.single { it.first.ekey == spec.ekey }.second },
-                { false },
-                "catalog-70425|private-temp",
-                { _, raw ->
-                    // The verified copy still sits in the temporary while the
-                    // commit callback runs: prove which volume holds it.
+                {
                     if (privateTemp.isFile) observedPrivateTemp = true
                     if (usbTemp.exists()) observedUsbTemp = true
+                    false
+                },
+                "catalog-70425|private-temp",
+                { _, raw ->
+                    // Every acknowledgement follows the full group data force
+                    // and checkpoint append; all group raws still exist for
+                    // the first acknowledgement.
+                    assertEquals(2L, (checkpoint.length() - 40L) / 72L)
+                    assertEquals(expectedSegmentSize, File(target, "data.000").length())
+                    if (firstAcknowledgement) {
+                        assertTrue(objects.all { it.second.isFile })
+                        firstAcknowledgement = false
+                    }
                     if (raw.exists()) assertTrue(raw.delete())
                 },
             )
@@ -1087,7 +1247,7 @@ class ForeverCascTest {
             var stopAfterFirst = false
             org.junit.Assert.assertThrows(java.util.concurrent.CancellationException::class.java) {
                 ForeverCasc.writeTargetIncrementalResumable(
-                    null, target, checkpointDirectory, manifest.asSequence(),
+                    null, target, checkpointDirectory, checkpointedPrefixCut(manifest),
                     { spec -> objects.single { it.first.ekey == spec.ekey }.second },
                     { stopAfterFirst },
                     "catalog-70425|temp-recovery",
@@ -1340,6 +1500,69 @@ class ForeverCascTest {
                 { false }, "catalog-70425|guarded-temp",
             )
             assertEquals(1L, retry.reusedObjects)
+        } finally {
+            delete(root)
+        }
+    }
+
+    @Test
+    fun failedDurableGroupHookRetainsRawAndAllowsIdentityBoundResume() {
+        val root = tempDir()
+        try {
+            val decoded = "group-hook-object".toByteArray()
+            val rawBytes = blteRaw(decoded)
+            val raw = file(root, "private/raw.blte", rawBytes)
+            val spec = ForeverCasc.IncrementalObjectSpec(
+                encodedEkey(rawBytes), md5Hex(decoded), rawBytes.size.toLong(), decoded.size.toLong(),
+            )
+            val output = File(root, "client/Data/data")
+            assertTrue(output.parentFile!!.mkdirs())
+            val checkpoint = File(root, "private/checkpoint").apply { assertTrue(mkdirs()) }
+            var segmentHooks = 0
+            var groupHooks = 0
+            var consumed = false
+            val failure = org.junit.Assert.assertThrows(IllegalStateException::class.java) {
+                ForeverCasc.writeTargetIncrementalResumable(
+                    null, output, checkpoint, sequenceOf(spec), { raw }, { false }, "same-plan",
+                    sourceConsumed = { _, _ -> consumed = true },
+                    beforeSegmentOpen = { segmentHooks++ },
+                    beforeDurableGroup = { groupHooks++; throw IllegalStateException("identity changed") },
+                )
+            }
+            assertEquals("identity changed", failure.message)
+            assertEquals(1, segmentHooks)
+            assertEquals("the single-object partial flush is checked", 1, groupHooks)
+            assertFalse(consumed)
+            assertTrue(raw.isFile)
+            val beforeResume = ForeverCasc.inspectResumableCheckpoint(
+                output, checkpoint, sequenceOf(spec), { false }, "same-plan",
+            )
+            assertEquals(0L, beforeResume.completedObjectCount)
+
+            org.junit.Assert.assertThrows(IllegalStateException::class.java) {
+                ForeverCasc.writeTargetIncrementalResumable(
+                    null, output, checkpoint, sequenceOf(spec), { raw }, { false }, "same-plan",
+                    beforeSegmentOpen = { throw IllegalStateException("resume admission changed") },
+                )
+            }
+            assertTrue("failed resumed segment admission retains the raw", raw.isFile)
+
+            var resumedSegmentHooks = 0
+            var resumedGroupHooks = 0
+            val resumed = ForeverCasc.writeTargetIncrementalResumable(
+                null, output, checkpoint, sequenceOf(spec), { raw }, { false }, "same-plan",
+                sourceConsumed = { _, consumedRaw -> assertTrue(consumedRaw.delete()) },
+                beforeSegmentOpen = { resumedSegmentHooks++ },
+                beforeDurableGroup = { resumedGroupHooks++ },
+            )
+            assertEquals(1, resumedSegmentHooks)
+            assertEquals(1, resumedGroupHooks)
+            assertEquals(1L, resumed.writtenObjects)
+            assertFalse(raw.exists())
+            val afterResume = ForeverCasc.inspectResumableCheckpoint(
+                output, checkpoint, sequenceOf(spec), { false }, "same-plan",
+            )
+            assertEquals(1L, afterResume.completedObjectCount)
         } finally {
             delete(root)
         }
@@ -1832,6 +2055,14 @@ class ForeverCascTest {
      * writer-side protocol; it never proves the Android Os/FUSE physical
      * binding, which stays gated on device evidence.
      */
+    /** Cut the source stream precisely, independently of durable group size. */
+    private fun checkpointedPrefixCut(
+        manifest: List<ForeverCasc.IncrementalObjectSpec>, count: Int = 1,
+    ): Sequence<ForeverCasc.IncrementalObjectSpec> = sequence {
+        yieldAll(manifest.take(count))
+        throw java.util.concurrent.CancellationException("synthetic prefix cut")
+    }
+
     private class FakeCascReplayReader(
         private val cancelled: () -> Boolean = { false },
     ) : CascReplayReader {
@@ -1974,7 +2205,7 @@ class ForeverCascTest {
                     null,
                     target,
                     checkpointDirectory,
-                    manifest.asSequence(),
+                    checkpointedPrefixCut(manifest),
                     { spec ->
                         sourceCalls++
                         objects.single { it.first.ekey == spec.ekey }.second
@@ -2137,7 +2368,7 @@ class ForeverCascTest {
                 var stopAfterFirst = false
                 org.junit.Assert.assertThrows(java.util.concurrent.CancellationException::class.java) {
                     ForeverCasc.writeTargetIncrementalResumable(
-                        null, target, checkpointDirectory, manifest.asSequence(),
+                        null, target, checkpointDirectory, checkpointedPrefixCut(manifest),
                         { spec -> objects.single { it.first.ekey == spec.ekey }.second },
                         { stopAfterFirst },
                         "catalog-70425|replay-corrupt-$name",
@@ -2201,7 +2432,7 @@ class ForeverCascTest {
             var stopAfterTwo = false
             org.junit.Assert.assertThrows(java.util.concurrent.CancellationException::class.java) {
                 ForeverCasc.writeTargetIncrementalResumable(
-                    null, target, checkpointDirectory, manifest.asSequence(),
+                    null, target, checkpointDirectory, checkpointedPrefixCut(manifest, 2),
                     { spec -> objects.single { it.first.ekey == spec.ekey }.second },
                     { stopAfterTwo },
                     "catalog-70425|replay-mid-swap",
@@ -2448,7 +2679,7 @@ class ForeverCascTest {
             var stopAfterFirst = false
             org.junit.Assert.assertThrows(java.util.concurrent.CancellationException::class.java) {
                 ForeverCasc.writeTargetIncrementalResumable(
-                    null, target, checkpointDirectory, manifest.asSequence(),
+                    null, target, checkpointDirectory, checkpointedPrefixCut(manifest),
                     { spec -> objects.single { it.first.ekey == spec.ekey }.second },
                     { stopAfterFirst },
                     "catalog-70425|replay-lifetime",
@@ -2663,7 +2894,12 @@ class ForeverCascTest {
     )
 
     /** First run commits exactly [prefixSize] objects, then cancels: a real torn resume. */
-    private fun buildOverlapFixture(prefixSize: Int, newSize: Int, name: String): OverlapFixture {
+    private fun buildOverlapFixture(
+        prefixSize: Int,
+        newSize: Int,
+        name: String,
+        unorderedPrefix: Boolean = false,
+    ): OverlapFixture {
         val root = tempDir()
         val total = prefixSize + newSize
         val raws = (0 until total).map { index ->
@@ -2678,6 +2914,11 @@ class ForeverCascTest {
         // inspect path requires strictly increasing checkpoint keys.
         }.sortedBy { it.first.ekey }
         val manifest = pairs.map { it.first }
+        val prefixPairs = if (unorderedPrefix) {
+            pairs.filterIndexed { index, _ -> index % 2 == 0 }.take(prefixSize).sortedByDescending { it.first.ekey }
+        } else {
+            pairs.take(prefixSize)
+        }
         val dataFiles = File(root, "stage/Data/data").also { assertTrue(it.mkdirs()) }
         val checkpointDir = File(root, "checkpoint").also { assertTrue(it.mkdirs()) }
         val rawByKey = HashMap<String, File>()
@@ -2686,15 +2927,18 @@ class ForeverCascTest {
         }
         val identity = "overlap-catalog|$name"
         var committed = 0
-        val stopAfterPrefix = { committed >= prefixSize }
+        val prefixThenCancel = sequence {
+            prefixPairs.forEach { yield(it.first) }
+            throw java.util.concurrent.CancellationException("synthetic prefix cut")
+        }
         org.junit.Assert.assertThrows(java.util.concurrent.CancellationException::class.java) {
             ForeverCasc.writeTargetIncrementalResumable(
                 null,
                 dataFiles,
                 checkpointDir,
-                manifest.asSequence(),
+                prefixThenCancel,
                 { spec -> rawByKey.getValue(spec.ekey) },
-                stopAfterPrefix,
+                { false },
                 identity,
                 { _, _ -> committed++ },
             )
@@ -2706,6 +2950,251 @@ class ForeverCascTest {
     private fun checkpointFrameCount(checkpointDir: File): Long {
         val checkpoint = File(checkpointDir, ".forever-casc-resume-checkpoint")
         return (checkpoint.length() - 40L) / 72L
+    }
+
+    /** Repack four tiny existing fixture objects as two interleaved-key frozen archives. */
+    private fun splitOverlapFixtureIntoInterleavedGroups(fixture: OverlapFixture): Pair<List<String>, List<String>> {
+        require(fixture.prefixCount == 4)
+        val checkpointFile = File(fixture.checkpointDir, ".forever-casc-resume-checkpoint")
+        val checkpointBytes = checkpointFile.readBytes()
+        val checkpointHeader = checkpointBytes.copyOfRange(0, 40)
+        val originalFrames = (0 until fixture.prefixCount).map { index ->
+            checkpointBytes.copyOfRange(40 + index * 72, 40 + (index + 1) * 72)
+        }
+        val physicalGroups = listOf(listOf(0, 2), listOf(1, 3))
+        val newFrames = ArrayList<ByteArray>(fixture.prefixCount)
+        physicalGroups.forEachIndexed { archiveId, indices ->
+            val segment = java.io.ByteArrayOutputStream().apply {
+                write(testCascSegmentHeader(fixture.dataFiles, archiveId))
+            }
+            var offset = 480L
+            indices.forEach { index ->
+                val spec = fixture.manifest[index]
+                val raw = fixture.rawByKey.getValue(spec.ekey).readBytes()
+                val localSize = 30L + raw.size
+                segment.write(testCascLocalHeader(
+                    spec.ekey,
+                    localSize,
+                    archiveId.toLong() * (1L shl 30) + offset,
+                    0,
+                ))
+                segment.write(raw)
+
+                val frame = originalFrames[index].copyOf()
+                java.nio.ByteBuffer.wrap(frame).order(java.nio.ByteOrder.BIG_ENDIAN).apply {
+                    putInt(56, archiveId)
+                    putLong(60, offset)
+                }
+                putU32be(
+                    frame,
+                    68,
+                    java.util.zip.CRC32().also { it.update(frame, 0, 68) }.value.toInt(),
+                )
+                newFrames += frame
+                offset += localSize
+            }
+            File(fixture.dataFiles, "data.%03d".format(archiveId)).writeBytes(segment.toByteArray())
+        }
+        val rewrittenCheckpoint = java.io.ByteArrayOutputStream().apply {
+            write(checkpointHeader)
+            newFrames.forEach { write(it) }
+        }
+        checkpointFile.writeBytes(rewrittenCheckpoint.toByteArray())
+        return physicalGroups[0].map { fixture.manifest[it].ekey } to
+            physicalGroups[1].map { fixture.manifest[it].ekey }
+    }
+
+    private fun testCascSegmentHeader(dataFiles: File, segmentId: Int): ByteArray = ByteArray(480).also { result ->
+        val pathHash = md5Bytes(dataFiles.absolutePath.toByteArray(Charsets.UTF_8))
+        repeat(16) { bucketIndex ->
+            val key = pathHash.copyOf()
+            key[1] = segmentId.toByte()
+            key[2] = (segmentId ushr 8).toByte()
+            var probe = 0
+            while (probe < 256) {
+                key[0] = probe.toByte()
+                if (bucket(key, 1) == bucketIndex) break
+                probe++
+            }
+            check(probe < 256)
+            val ekey = key.joinToString("") { "%02x".format(it.toInt() and 0xff) }
+            testCascLocalHeader(ekey, 30L, segmentId.toLong() * (1L shl 30) + bucketIndex * 30L, 1)
+                .copyInto(result, bucketIndex * 30)
+        }
+    }
+
+    private fun testCascLocalHeader(ekey: String, size: Long, offset: Long, flags: Int): ByteArray =
+        ByteArray(30).also { header ->
+            ekey.hexBytes().reversedArray().copyInto(header)
+            putU32le(header, 0x10, size)
+            putU16le(header, 0x14, flags)
+            putU32le(header, 0x16, hashlittle(header.copyOfRange(0, 0x16), 0x3D6BE971).toLong() and 0xffffffffL)
+            putU32le(header, 0x1a, checksumB(header, offset).toLong() and 0xffffffffL)
+        }
+
+    @Test
+    fun overlapReplaysUnorderedLegacyPrefixWithExactTargetMembership() {
+        val fixture = buildOverlapFixture(prefixSize = 4, newSize = 4, name = "unordered-membership", unorderedPrefix = true)
+        try {
+            val membership = fixture.manifest.mapIndexed { index, spec ->
+                spec.ekey to IndexedValue(index, spec)
+            }.toMap()
+            val prefixKeys = ForeverCasc.withResumableCheckpointObjects(
+                fixture.dataFiles,
+                fixture.checkpointDir,
+                fixture.identity,
+                { false },
+            ) { objects -> objects.map { it.ekey }.toList() }
+            assertEquals(fixture.prefixCount, prefixKeys.size)
+            val beforeStage = directFileHashes(fixture.dataFiles)
+            val beforeCheckpoint = directFileHashes(fixture.checkpointDir)
+            org.junit.Assert.assertThrows(IllegalStateException::class.java) {
+                ForeverCasc.inspectResumableCheckpoint(
+                    fixture.dataFiles,
+                    fixture.checkpointDir,
+                    fixture.manifest.asSequence(),
+                    { false },
+                    fixture.identity,
+                )
+            }
+            val inspected = ForeverCasc.inspectResumableCheckpoint(
+                fixture.dataFiles,
+                fixture.checkpointDir,
+                emptySequence(),
+                { false },
+                fixture.identity,
+                targetObjectCount = fixture.manifest.size,
+                targetMembership = { membership.getValue(it) },
+            )
+            assertEquals(fixture.prefixCount.toLong(), inspected.completedObjectCount)
+            assertEquals(beforeStage, directFileHashes(fixture.dataFiles))
+            assertEquals(beforeCheckpoint, directFileHashes(fixture.checkpointDir))
+
+            val retired = java.util.concurrent.CopyOnWriteArrayList<String>()
+            val coordinator = CascOverlapCoordinator(
+                retirePrefixRaw = { retired += it },
+                wantedKeys = prefixKeys.toSet(),
+            )
+            prefixKeys.forEach { assertFalse(coordinator.registerRawKey(it)) }
+            var sourceCalls = 0
+            val result = ForeverCasc.writeTargetIncrementalResumable(
+                null,
+                fixture.dataFiles,
+                fixture.checkpointDir,
+                fixture.manifest.asReversed().asSequence(),
+                { spec ->
+                    sourceCalls++
+                    fixture.rawByKey.getValue(spec.ekey)
+                },
+                { false },
+                fixture.identity,
+                replayReaderFactory = { cancelled -> FakeCascReplayReader(cancelled) },
+                overlapCoordinator = coordinator,
+                targetObjectCount = fixture.manifest.size,
+                targetMembership = { membership.getValue(it) },
+            )
+
+            assertEquals(fixture.prefixCount.toLong(), result.reusedObjects)
+            assertEquals((fixture.manifest.size - fixture.prefixCount).toLong(), result.writtenObjects)
+            assertEquals(fixture.manifest.size - fixture.prefixCount, sourceCalls)
+            assertEquals(prefixKeys.toSet(), retired.toSet())
+            assertEquals(prefixKeys.size, retired.size)
+            assertEquals(fixture.prefixCount.toLong(), coordinator.ackedObjects.get())
+            ForeverCasc.verifyExisting(
+                fixture.dataFiles.parentFile!!.parentFile!!,
+                fixture.manifest.map { it.toRuntimeSpec() },
+                { false },
+            )
+        } finally {
+            delete(fixture.root)
+        }
+    }
+
+    @Test(timeout = 60_000)
+    fun overlapTwoInterleavedArchiveGroupsRetireOnlyTheirExactWantedKeys() {
+        val fixture = buildOverlapFixture(prefixSize = 4, newSize = 0, name = "interleaved-two-groups")
+        val reachedSecondGroup = java.util.concurrent.CountDownLatch(1)
+        val releaseSecondGroup = java.util.concurrent.CountDownLatch(1)
+        val result = AtomicReference<ForeverCasc.IncrementalResult?>(null)
+        val failure = AtomicReference<Throwable?>(null)
+        var writer: Thread? = null
+        try {
+            val (firstGroup, secondGroup) = splitOverlapFixtureIntoInterleavedGroups(fixture)
+            assertTrue(firstGroup[0] < secondGroup[0])
+            assertTrue(secondGroup[0] < firstGroup[1])
+            assertTrue(firstGroup[1] < secondGroup[1])
+            val membership = fixture.manifest.mapIndexed { index, spec ->
+                spec.ekey to IndexedValue(index, spec)
+            }.toMap()
+            val retired = java.util.concurrent.CopyOnWriteArrayList<String>()
+            val coordinator = CascOverlapCoordinator(
+                retirePrefixRaw = { retired += it },
+                wantedKeys = fixture.manifest.map { it.ekey }.toSet(),
+            )
+            assertFalse(coordinator.registerRawKey(firstGroup[0]))
+            assertFalse(coordinator.registerRawKey(secondGroup[0]))
+
+            val runWriter = Thread {
+                try {
+                    result.set(ForeverCasc.writeTargetIncrementalResumable(
+                        null,
+                        fixture.dataFiles,
+                        fixture.checkpointDir,
+                        fixture.manifest.asSequence(),
+                        { error("all fixture objects are already checkpointed") },
+                        { false },
+                        fixture.identity,
+                        replayReaderFactory = { cancelled ->
+                            val delegate = FakeCascReplayReader(cancelled)
+                            object : CascReplayReader by delegate {
+                                override fun ensureSegment(file: File) {
+                                    delegate.ensureSegment(file)
+                                    if (file.name == "data.001") {
+                                        reachedSecondGroup.countDown()
+                                        if (!releaseSecondGroup.await(20, java.util.concurrent.TimeUnit.SECONDS)) {
+                                            throw IllegalStateException("second-group test gate timed out")
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                        overlapCoordinator = coordinator,
+                        targetObjectCount = fixture.manifest.size,
+                        targetMembership = { membership.getValue(it) },
+                    ))
+                } catch (t: Throwable) {
+                    failure.set(t)
+                }
+            }.apply { isDaemon = true }
+            writer = runWriter
+            runWriter.start()
+            assertTrue("verifier must reach the second frozen archive", reachedSecondGroup.await(10, java.util.concurrent.TimeUnit.SECONDS))
+            failure.get()?.let { throw AssertionError("overlap writer failed before the second group", it) }
+            assertEquals(2L, coordinator.ackedObjects.get())
+            assertEquals(listOf(firstGroup[0]), retired.toList())
+
+            // The first group has already acked this wanted key, so a delayed
+            // raw registration must retire immediately; the interleaved key
+            // from group two must remain pending until that group is proven.
+            assertTrue(coordinator.registerRawKey(firstGroup[1]))
+            retired += firstGroup[1]
+            assertFalse(coordinator.registerRawKey(secondGroup[1]))
+            assertFalse(secondGroup.any { it in retired })
+            assertEquals(2L, coordinator.ackedObjects.get())
+
+            releaseSecondGroup.countDown()
+            runWriter.join(20_000)
+            assertFalse("overlap writer must finish after releasing group two", runWriter.isAlive)
+            failure.get()?.let { throw AssertionError("overlap writer failed", it) }
+            assertEquals(4L, result.get()?.reusedObjects)
+            assertEquals(4L, coordinator.ackedObjects.get())
+            assertEquals(fixture.manifest.map { it.ekey }.toSet(), retired.toSet())
+            assertEquals(4, retired.size)
+        } finally {
+            releaseSecondGroup.countDown()
+            writer?.join(20_000)
+            delete(fixture.root)
+        }
     }
 
     private class GateReader(
@@ -3061,6 +3550,125 @@ class ForeverCascTest {
         }
     }
 
+    @Test(timeout = 30_000)
+    fun interruptedFailureCleanupJoinsVerifierWithoutMaskingPrimary() {
+        val fixture = buildOverlapFixture(1, 2, "interrupted-join")
+        val entered = java.util.concurrent.CountDownLatch(1)
+        val sourceFailed = java.util.concurrent.CountDownLatch(1)
+        val release = java.util.concurrent.CountDownLatch(1)
+        val returned = java.util.concurrent.CountDownLatch(1)
+        val primary = IllegalStateException("synthetic writer failure")
+        val failure = AtomicReference<Throwable?>(null)
+        val verifier = AtomicReference<Thread?>(null)
+        val reader = AtomicReference<FakeCascReplayReader?>(null)
+        val interruptRestored = java.util.concurrent.atomic.AtomicBoolean(false)
+        val writer = Thread {
+            try {
+                var sources = 0
+                ForeverCasc.writeTargetIncrementalResumable(
+                    null, fixture.dataFiles, fixture.checkpointDir, fixture.manifest.asSequence(),
+                    { spec ->
+                        assertTrue(entered.await(10, java.util.concurrent.TimeUnit.SECONDS))
+                        if (++sources == 2) { sourceFailed.countDown(); throw primary }
+                        fixture.rawByKey.getValue(spec.ekey)
+                    },
+                    { false }, fixture.identity,
+                    replayReaderFactory = { cancelled ->
+                        val fake = FakeCascReplayReader(cancelled).also { reader.set(it) }
+                        object : CascReplayReader by fake {
+                            override fun ensureSegment(file: File) {
+                                fake.ensureSegment(file)
+                                verifier.set(Thread.currentThread())
+                                entered.countDown()
+                                assertTrue(release.await(20, java.util.concurrent.TimeUnit.SECONDS))
+                            }
+                        }
+                    },
+                    overlapCoordinator = CascOverlapCoordinator(retirePrefixRaw = { }),
+                    overlapOfficialStream = overlapOfficialStreamOf(fixture),
+                )
+            } catch (t: Throwable) {
+                failure.set(t)
+            } finally {
+                interruptRestored.set(Thread.currentThread().isInterrupted)
+                returned.countDown()
+            }
+        }.apply { isDaemon = true }
+        try {
+            writer.start()
+            assertTrue(sourceFailed.await(10, java.util.concurrent.TimeUnit.SECONDS))
+            writer.interrupt()
+            assertFalse("interrupted cleanup must still wait for its verifier", returned.await(200, java.util.concurrent.TimeUnit.MILLISECONDS))
+            release.countDown()
+            assertTrue(returned.await(10, java.util.concurrent.TimeUnit.SECONDS))
+            assertTrue("primary writer failure must survive interruption", failure.get() === primary)
+            assertTrue(interruptRestored.get())
+            assertFalse(verifier.get()!!.isAlive)
+            assertTrue(reader.get()!!.closed)
+        } finally {
+            release.countDown()
+            writer.join(10_000)
+            verifier.get()?.join(10_000)
+            delete(fixture.root)
+        }
+    }
+
+    @Test(timeout = 30_000)
+    fun cancellationFlushFailureStillJoinsOverlapVerifier() {
+        val fixture = buildOverlapFixture(1, 2, "cancel-flush-failure")
+        val entered = java.util.concurrent.CountDownLatch(1)
+        val emergencyRelease = java.util.concurrent.CountDownLatch(1)
+        val verifier = AtomicReference<Thread?>(null)
+        val reader = AtomicReference<FakeCascReplayReader?>(null)
+        try {
+            var sources = 0
+            val failure = org.junit.Assert.assertThrows(IllegalStateException::class.java) {
+                ForeverCasc.writeTargetIncrementalResumable(
+                    null, fixture.dataFiles, fixture.checkpointDir,
+                    fixture.manifest.asSequence(),
+                    { spec ->
+                        assertTrue(entered.await(10, java.util.concurrent.TimeUnit.SECONDS))
+                        if (++sources == 2) {
+                            val checkpoint = File(fixture.checkpointDir, ".forever-casc-resume-checkpoint")
+                            assertTrue(checkpoint.delete())
+                            assertTrue(checkpoint.mkdir())
+                            throw java.util.concurrent.CancellationException("synthetic cancellation before group flush")
+                        }
+                        fixture.rawByKey.getValue(spec.ekey)
+                    },
+                    { false }, fixture.identity,
+                    { _, _ -> error("failed checkpoint must not retire raw sources") },
+                    replayReaderFactory = { cancelled ->
+                        val fake = FakeCascReplayReader(cancelled).also { reader.set(it) }
+                        object : CascReplayReader by fake {
+                            override fun ensureSegment(file: File) {
+                                fake.ensureSegment(file)
+                                verifier.set(Thread.currentThread())
+                                entered.countDown()
+                                while (!cancelled() && !emergencyRelease.await(10, java.util.concurrent.TimeUnit.MILLISECONDS)) {
+                                    // The source cancellation predicate stays false:
+                                    // only writer peer-cancel can stop this verifier.
+                                }
+                            }
+                        }
+                    },
+                    overlapCoordinator = CascOverlapCoordinator(retirePrefixRaw = { }),
+                    overlapOfficialStream = overlapOfficialStreamOf(fixture),
+                )
+            }
+            assertTrue(failure.message.orEmpty().contains("checkpoint changed"))
+            assertTrue(failure.suppressed.any { it is java.util.concurrent.CancellationException })
+            assertTrue(verifier.get() != null)
+            assertFalse("verifier must be joined before returning", verifier.get()!!.isAlive)
+            assertTrue(reader.get()!!.closed)
+            assertTrue(fixture.rawByKey.values.all { it.isFile })
+        } finally {
+            emergencyRelease.countDown()
+            verifier.get()?.join(10_000)
+            delete(fixture.root)
+        }
+    }
+
     @Test
     fun overlapCancelPreservesPrefixAndRecoversTornNewTailOnce() {
         val fixture = buildOverlapFixture(prefixSize = 3, newSize = 5, name = "cancel-recover")
@@ -3068,6 +3676,7 @@ class ForeverCascTest {
             val prefixBytes = File(fixture.dataFiles, "data.000").readBytes()
             val committed = java.util.concurrent.atomic.AtomicInteger(0)
             val cancelNow = java.util.concurrent.atomic.AtomicBoolean(false)
+            var newSources = 0
             val coordinator = CascOverlapCoordinator(retirePrefixRaw = { })
             val error = org.junit.Assert.assertThrows(java.util.concurrent.CancellationException::class.java) {
                 ForeverCasc.writeTargetIncrementalResumable(
@@ -3075,12 +3684,13 @@ class ForeverCascTest {
                     fixture.dataFiles,
                     fixture.checkpointDir,
                     fixture.manifest.asSequence(),
-                    { spec -> fixture.rawByKey.getValue(spec.ekey) },
+                    { spec ->
+                        if (++newSources > 2) throw java.util.concurrent.CancellationException("synthetic tail cut")
+                        fixture.rawByKey.getValue(spec.ekey)
+                    },
                     { cancelNow.get() },
                     fixture.identity,
-                    { _, _ ->
-                        if (committed.incrementAndGet() >= 2) cancelNow.set(true)
-                    },
+                    { _, _ -> committed.incrementAndGet() },
                     replayReaderFactory = { cancelled -> FakeCascReplayReader(cancelled) },
                     overlapCoordinator = coordinator,
                     overlapOfficialStream = overlapOfficialStreamOf(fixture),
@@ -3176,8 +3786,10 @@ class ForeverCascTest {
                 FakeCascReplayReader(cancelled).let { fake ->
                     object : CascReplayReader by fake {
                         override fun ensureSegment(file: File) {
-                            enteredLatch.countDown()
                             fake.ensureSegment(file)
+                            // Signal only after the old FD/inode is bound;
+                            // otherwise the swap can precede the proof itself.
+                            enteredLatch.countDown()
                         }
 
                         override fun readAt(buffer: ByteArray, off: Int, len: Int, position: Long): Int {
@@ -3307,6 +3919,63 @@ class ForeverCascTest {
             assertEquals(34, retired.size)
             assertEquals((0..33).map { "%032x".format(it) }.toSet(), retired.toSet())
             assertEquals("every registration balanced by exactly one retire", 0, counted.get())
+        }
+    }
+
+    @Test
+    fun exactOverlapAcknowledgementsDoNotRetireLexicallyInterleavedKeysEarly() {
+        val keys = (0..3).map { "%032x".format(it) }
+        val retired = java.util.concurrent.CopyOnWriteArrayList<String>()
+        val outstanding = java.util.concurrent.atomic.AtomicInteger(0)
+        val coordinator = CascOverlapCoordinator(
+            retirePrefixRaw = { key -> retired += key; outstanding.decrementAndGet() },
+            wantedKeys = keys.toSet(),
+        )
+        fun register(key: String) {
+            outstanding.incrementAndGet()
+            if (coordinator.registerRawKey(key)) {
+                retired += key
+                outstanding.decrementAndGet()
+            }
+        }
+
+        // The first physical archive group contains keys 0 and 2, while key 1
+        // belongs to a later group and lies inside their lexical min/max range.
+        register(keys[0])
+        register(keys[1])
+        coordinator.ackGroupExact(2, setOf(keys[0], keys[2]), 20L)
+        assertEquals(listOf(keys[0]), retired.toList())
+        assertEquals("a range ack would retire this later-group key too soon", 1, outstanding.get())
+
+        // Registration can race behind the exact ack and still retire once.
+        register(keys[2])
+        assertEquals(listOf(keys[0], keys[2]), retired.toList())
+
+        // Individual proof wins for key 1; the later group ack must not claim
+        // it again. Key 3 is likewise registered after its group ack.
+        assertTrue(coordinator.tryClaim(keys[1]))
+        retired += keys[1]
+        outstanding.decrementAndGet()
+        coordinator.ackGroupExact(2, setOf(keys[1], keys[3]), 30L)
+        register(keys[3])
+
+        assertEquals(setOf(keys[0], keys[1], keys[2], keys[3]), retired.toSet())
+        assertEquals(4, retired.size)
+        assertEquals(0, outstanding.get())
+        assertEquals(4L, coordinator.ackedObjects.get())
+        assertEquals(50L, coordinator.ackedBytes.get())
+        assertFalse(coordinator.tryClaim(keys[0]))
+
+        val ackedBeforeOversizedInput = coordinator.ackedObjects.get()
+        org.junit.Assert.assertThrows(IllegalArgumentException::class.java) {
+            coordinator.ackGroupExact(1, List(35) { keys[0] }, 1L)
+        }
+        assertEquals(ackedBeforeOversizedInput, coordinator.ackedObjects.get())
+        org.junit.Assert.assertThrows(IllegalArgumentException::class.java) {
+            CascOverlapCoordinator(
+                retirePrefixRaw = { },
+                wantedKeys = (0..34).map { "%032x".format(it) }.toSet(),
+            )
         }
     }
 

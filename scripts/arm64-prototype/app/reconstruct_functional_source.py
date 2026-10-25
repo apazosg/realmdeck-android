@@ -58,6 +58,20 @@ C138_DISPOSITION_SHA256 = "c198e20f582b90e5bc691e3e4712e8b2b1ecf33434bf1f86232c3
 # Set only after the frozen C138 inputs produce the reviewed provenance payload.
 # Until then, C138 sanitization fails closed rather than admitting a dynamic hash.
 C138_PROVENANCE_SHA256 = "5254e4a33471f7c9600140a7c5f0ab6e6f90be493c85d1824b386b6723acda35"
+# Exact current recipe/provenance pair after admitting the reviewed Home/Wi-Fi
+# Provisioner overlay delta. The historical C138 pins above remain immutable.
+REVIEWED_CANDIDATE_RECIPE_SHA256 = "385e1c4c443aa4a192a14769caacc4af959d2a2ee498e82485fb9eb6cbc4e151"
+REVIEWED_CANDIDATE_PROVENANCE_SHA256 = "aa8f0dc18cda8f92e2a6dac73349a36845d67493a2c2cf712f622b9594d10a20"
+REVIEWED_CANDIDATE_PROVISIONER_SHA256 = "98c25790d3d126ec9bbf2ead1eb2ba976abece91dfa11511c77d09ed4082122d"
+# Exact current recipe/provenance pair after admitting the reviewed storage
+# revalidation diagnostics source. The preceding reviewed pair remains frozen.
+REVIEWED_STORAGE_RECIPE_SHA256 = "df97574d8c5dce73ea53b535cf52e1bd28d556bcb2bcef0eef92f5704a5060df"
+REVIEWED_STORAGE_PROVENANCE_SHA256 = "867d8d4a51b86865d6232d14c7b746f8117bdb7022addbd86eb840eb9e2b1efa"
+REVIEWED_STORAGE_SOURCE_SHA256 = "9497a0aa068f93c3be0d2a64e5ef2b4eab3fbf22510d1510e6ae9df63c622443"
+# Approved heavy/light cadence; all preceding recipe/provenance pairs stay frozen.
+REVIEWED_LIGHT_STORAGE_RECIPE_SHA256 = "79cd0e885609de7e2e5b86e925119e2cd8001e8916b39f2e7334aa01570ce2c2"
+REVIEWED_LIGHT_STORAGE_PROVENANCE_SHA256 = "13a494f47301abfc241b4a4d7cdcfc524dee292d5f743ebf5c3612d6a3963fc5"
+REVIEWED_LIGHT_STORAGE_SOURCE_SHA256 = "23aabcabc3eda09705ed19c433ce565f64baffddf9188f4caa3ba28b391f8189"
 INTERRUPTED_DISPOSITION_MEMBER = "assets/forever/wine-interrupted-run-disposition-contract.json"
 CODE_PROVENANCE_MEMBER = "assets/forever/provenance.json"
 NEW_CONTROLLER_SOURCE = APP_ROOT / "overlay/ForeverLaunchController.kt"
@@ -96,10 +110,10 @@ PINNED_UPDATER_CASC_PREIMAGES = {
     "ForeverCasc.kt": "b482531fb4970ba279448fac22ea69c470093fc8b09917c5b1ec0dd7a9ad57e4",
     "ForeverCascTest.kt": "19cb155b99ea60b3620259974e0fa40694ccd170149b7ce48287ada34c63194f",
 }
-# C122: reviewed native V7 empty-update reserve and matching space estimate/tests.
+# Native V7 reserve, durable commit groups and exact recovery membership; frames unchanged.
 PINNED_UPDATER_CASC_POSTIMAGES = {
-    "ForeverCasc.kt": "c3ef147fe64e85d3e4adc96d8c008a1d04e2abb4eb46e08fd82687906ea249d0",
-    "ForeverCascTest.kt": "f4c887891f5c9b3a3e21ef636951bbd6dadadd39cc316d8372907203d02b48d2",
+    "ForeverCasc.kt": "1bc233849e3a73a46d68c9a3d61b334eadc8b852da86eb8b237b55a64439c971",
+    "ForeverCascTest.kt": "217e5c2d7fc8647585378bd840bc8e891279ff354056eea44917bc5d5d1d1d53",
 }
 # Reviewed reconstruction edit (2026-10-18): TACT-encrypted ('E') BLTE frames are
 # verified without decryption for CASC reconstruction consumers; strict decode is
@@ -117,7 +131,7 @@ BRIDGE_TARGET = Path("app/src/main/java/com/wowforever/launcher/ForeverPatchBrid
 CODE64_NATIVE_MEMBER = "lib/arm64-v8a/libforever_patcher_jni.so"
 FUNCTIONAL_MARKER_MEMBER = "assets/forever/functional-poc/provenance.json"
 SOURCE_VERSION = (62, "0.2.38-automated")
-CANDIDATE_VERSION = (141, "0.2.117-eligible-scan")
+CANDIDATE_VERSION = (146, "0.2.122-performance-preview")
 FUNCTIONAL_OVERLAY_NAMES = (
     "ForeverFunctionalPoc.kt",
     "ForeverFunctionalPocActivity.kt",
@@ -191,12 +205,15 @@ BRANDING_ICON = "@mipmap/forever_ic_launcher"
 BRANDING_SPLASH_THEME = "@style/Theme.ForeverFunctionalSplash"
 UPDATER_GATE_ROOT = APP_ROOT / "updater-gate"
 UPDATER_GATE_MAIN_NAMES = (
+    "ForeverWifiDownloads.kt",
+    "ForeverClientDownloadRate.kt",
     "ForeverClientManagement.kt",
     "ForeverClientOperationLease.kt",
     "ForeverClientRuntimeGate.kt",
     "ForeverClientTargetBuild.kt",
     "ForeverClientCatalogResolver.kt",
     "ForeverClientUpdateCatalog.kt",
+    "ForeverClientArchiveOrder.kt",
     "ForeverClientUpdateService.kt",
     "ForeverClientUpdateTransaction.kt",
     "ForeverClientUpdateForegroundService.kt",
@@ -210,6 +227,8 @@ UPDATER_GATE_MAIN_NAMES = (
     "ForeverClientMetadataTransport.kt",
 )
 UPDATER_GATE_TEST_NAMES = (
+    "ForeverWifiDownloadsTest.kt",
+    "ForeverClientDownloadRateTest.kt",
     "ForeverClientOperationLeaseTest.kt",
     "ForeverClientRuntimeGateTest.kt",
     "ForeverClientTargetBuildTest.kt",
@@ -308,6 +327,21 @@ class ReconstructionBlocked(ReconstructionError):
     def __init__(self, report: Path):
         super().__init__(f"reconstruction blocked; review report: {report}")
         self.report = report
+
+
+def privacy_provenance_pin_for_recipe(recipe_sha256: str) -> str:
+    """Return only a frozen historical or exact reviewed-candidate privacy pin."""
+    if C138_PROVENANCE_SHA256 == "UNFROZEN_AFTER_SOURCE_FREEZE":
+        raise ReconstructionError("C138 provenance SHA-256 pin is unfrozen; refusing privacy payload parity")
+    pairs = {
+        C138_RECIPE_SHA256: C138_PROVENANCE_SHA256,
+        REVIEWED_CANDIDATE_RECIPE_SHA256: REVIEWED_CANDIDATE_PROVENANCE_SHA256,
+        REVIEWED_STORAGE_RECIPE_SHA256: REVIEWED_STORAGE_PROVENANCE_SHA256,
+        REVIEWED_LIGHT_STORAGE_RECIPE_SHA256: REVIEWED_LIGHT_STORAGE_PROVENANCE_SHA256,
+    }
+    if recipe_sha256 not in pairs:
+        raise ReconstructionError("recipe SHA-256 has no frozen privacy provenance pair")
+    return pairs[recipe_sha256]
 
 
 @dataclass(frozen=True)
@@ -782,13 +816,9 @@ def validate_sanitized_c138_payloads(
     source: Path,
     inputs: AuthenticatedInputs,
 ) -> dict[str, object]:
-    """Admit only the pinned serial-redacted contract and frozen provenance."""
-    if C138_PROVENANCE_SHA256 == "UNFROZEN_AFTER_SOURCE_FREEZE":
-        raise ReconstructionError("C138 provenance SHA-256 pin is unfrozen; refusing privacy payload parity")
-
+    """Admit the exact serial redaction with a frozen historical or candidate provenance pair."""
     recipe_sha = sha256_file(APPLY_OVERLAY, "C138 recipe")
-    if recipe_sha != C138_RECIPE_SHA256:
-        raise ReconstructionError("C138 recipe SHA-256 changed")
+    provenance_sha = privacy_provenance_pin_for_recipe(recipe_sha)
 
     with zipfile.ZipFile(inputs.code64_apk) as archive:
         old_contract_bytes = _read_zip_member(archive, INTERRUPTED_DISPOSITION_MEMBER)
@@ -820,7 +850,7 @@ def validate_sanitized_c138_payloads(
         raise ReconstructionError("packaged C138 disposition differs from its authenticated source")
 
     pinned_after = {
-        CODE_PROVENANCE_MEMBER: C138_PROVENANCE_SHA256,
+        CODE_PROVENANCE_MEMBER: provenance_sha,
         INTERRUPTED_DISPOSITION_MEMBER: C138_DISPOSITION_SHA256,
     }
     current_payloads = {INTERRUPTED_DISPOSITION_MEMBER: contract}
@@ -1309,6 +1339,35 @@ def _replace_authenticated_preimage(
     }
 
 
+def stage_wifi_runtime_backend(source: Path) -> dict[str, object]:
+    """Bind the existing shared runtime/preload downloader, not game sockets."""
+    relative = Path("app/src/main/java/app/gamenative/service/SteamService.kt")
+    old = read_stable_file(source / relative, "runtime download backend")
+    expected = "a9987702c7213e4262bc85b531104ca665fcbf230caead556bcc1188ba7d9743"
+    if sha256_bytes(old) != expected:
+        raise ReconstructionError("runtime download backend preimage is not the reviewed source")
+    text = old.decode("utf-8")
+    patches = (
+        (
+            'val req = Request.Builder().url(url).build()\n                http.newCall(req).execute().use { rsp ->',
+            'val req = Request.Builder().url(url).build()\n                app.gamenative.ForeverWifiDownloads.newCall(http, req).execute().use { rsp ->',
+        ),
+        (
+            'val primaryUrl = "https://downloads.gamenative.app/$fileName"',
+            'app.gamenative.ForeverWifiDownloads.initialize(context)\n            val primaryUrl = "https://downloads.gamenative.app/$fileName"',
+        ),
+    )
+    for before, after in patches:
+        if text.count(before) != 1:
+            raise ReconstructionError("runtime Wi-Fi patch anchor differs from reviewed source")
+        text = text.replace(before, after, 1)
+    data = text.encode("utf-8")
+    return _replace_authenticated_preimage(
+        source, relative, data, expected,
+        sha256_bytes(data), "repo-wifi-runtime-backend",
+    )
+
+
 def stage_updater_gate_sources(source: Path) -> list[dict[str, object]]:
     """Stage only the explicitly admitted updater sources; preserve the historic CASC bindings."""
     try:
@@ -1510,9 +1569,8 @@ def compare_code64_payloads(
     for key in update_members:
         expected[key] = update_pins[key].sha256
     if allow_sanitized_privacy_delta:
-        if C138_PROVENANCE_SHA256 == "UNFROZEN_AFTER_SOURCE_FREEZE":
-            raise ReconstructionError("C138 provenance SHA-256 pin is unfrozen; refusing privacy payload parity")
-        expected[CODE_PROVENANCE_MEMBER] = C138_PROVENANCE_SHA256
+        recipe_sha = sha256_file(APPLY_OVERLAY, "privacy recipe")
+        expected[CODE_PROVENANCE_MEMBER] = privacy_provenance_pin_for_recipe(recipe_sha)
         expected[INTERRUPTED_DISPOSITION_MEMBER] = C138_DISPOSITION_SHA256
     if candidate_native_sha256 is not None:
         expected[CODE64_NATIVE_MEMBER] = candidate_native_sha256
@@ -1734,6 +1792,7 @@ def reconstruct(args: argparse.Namespace) -> Path:
     transforms.extend(stage_branding_resources(source))
     transforms.extend(stage_provider_validation(source))
     transforms.extend(stage_updater_gate_sources(source))
+    transforms.append(stage_wifi_runtime_backend(source))
     transforms.extend(stage_pinned_update_assets(source))
     transforms.append(stage_client_target_asset(source, inputs.client_target_bytes, inputs.client_target_manifest))
     parity = compare_code64_payloads(

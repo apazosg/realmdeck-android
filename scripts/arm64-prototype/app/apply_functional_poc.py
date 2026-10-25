@@ -106,7 +106,6 @@ POC_ACTIVITY_MANIFEST = '''        <!-- FOREVER_FUNCTIONAL_POC: explicit GUI lau
         <activity
             android:name="app.gamenative.ForeverFunctionalPocActivity"
             android:exported="true"
-            android:permission="android.permission.DUMP"
             android:screenOrientation="portrait"
             android:configChanges="orientation|screenSize|keyboard|keyboardHidden|navigation"
             android:windowSoftInputMode="adjustNothing"
@@ -254,13 +253,25 @@ def transform_manifest(text: str) -> str:
         raise OverlayError("MainActivity manifest insertion anchor changed")
     if "ForeverFunctionalPocActivity" not in text:
         text = text.replace(marker, POC_ACTIVITY_MANIFEST + marker, 1)
-    elif POC_ACTIVITY_MANIFEST not in text:
-        # The previous functional candidate predates the explicit IME policy.
-        # It is still an app-owned entry, so update only that activity block.
+    else:
+        # Migrate only the known functional launcher block. DUMP on this
+        # user-facing entry prevents ordinary launcher apps from opening it.
+        # Diagnostic activities retain their separate permission policy.
         activity_name = 'android:name="app.gamenative.ForeverFunctionalPocActivity"'
+        if text.count(activity_name) != 1:
+            raise OverlayError("functional PoC activity anchor is not unique")
         activity_start = text.index(activity_name)
         activity_end = text.index('</activity>', activity_start) + len('</activity>')
         activity = text[activity_start:activity_end]
+
+        dump_permission = 'android:permission="android.permission.DUMP"'
+        if activity.count(dump_permission) > 1:
+            raise OverlayError("functional PoC permission anchor is not unique")
+        if dump_permission in activity:
+            activity = activity.replace(dump_permission, '', 1)
+        elif 'android:permission=' in activity:
+            raise OverlayError("functional PoC activity has an unexpected permission")
+
         if 'android:windowSoftInputMode=' not in activity:
             config_anchor = '            android:configChanges="orientation|screenSize|keyboard|keyboardHidden|navigation"'
             if activity.count(config_anchor) != 1:
@@ -270,28 +281,25 @@ def transform_manifest(text: str) -> str:
                 config_anchor + '\n            android:windowSoftInputMode="adjustNothing"',
                 1,
             )
-            text = text[:activity_start] + activity + text[activity_end:]
-            activity_end = text.index('</activity>', activity_start) + len('</activity>')
-        if POC_ACTIVITY_MANIFEST not in text:
-            # Confirm the old block is still the fixed explicit activity before
-            # allowing an owned migration; unrelated manifest drift is rejected.
-            required = (
-                'android:exported="true"',
-                'android:permission="android.permission.DUMP"',
-                'android:windowSoftInputMode="adjustNothing"',
-                'android:theme="@style/Theme.Pluvia"',
+
+        if 'android:screenOrientation="landscape"' in activity:
+            activity = activity.replace(
+                'android:screenOrientation="landscape"',
+                'android:screenOrientation="portrait"',
+                1,
             )
-            if any(value not in activity for value in required):
-                raise OverlayError("existing functional PoC manifest entry differs")
-            if 'android:screenOrientation="landscape"' in activity:
-                activity = activity.replace(
-                    'android:screenOrientation="landscape"',
-                    'android:screenOrientation="portrait"',
-                    1,
-                )
-                text = text[:activity_start] + activity + text[activity_end:]
-            elif 'android:screenOrientation="portrait"' not in activity:
-                raise OverlayError("functional PoC screen orientation anchor is missing")
+        required = (
+            'android:exported="true"',
+            'android:windowSoftInputMode="adjustNothing"',
+            'android:screenOrientation="portrait"',
+        )
+        allowed_themes = (
+            'android:theme="@style/Theme.Pluvia"',
+            'android:theme="@style/Theme.ForeverFunctionalSplash"',
+        )
+        if any(value not in activity for value in required) or not any(theme in activity for theme in allowed_themes):
+            raise OverlayError("existing functional PoC manifest entry differs")
+        text = text[:activity_start] + activity + text[activity_end:]
 
     if "app.gamenative.ForeverClientUpdateForegroundService" not in text:
         close = '    </application>'

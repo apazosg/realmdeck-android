@@ -17,16 +17,17 @@ import java.security.MessageDigest
 import java.util.Locale
 import java.util.concurrent.CancellationException
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicLong
 import java.util.logging.Logger
 import javax.net.ssl.HttpsURLConnection
 
-/** Resumable transfer of a single catalog-pinned encoded CASC object. */
+/** Resumable transfer of catalog-pinned encoded CASC objects. */
 class ForeverClientUpdateTransfer internal constructor(
     private val connectionFactory: (String) -> HttpURLConnection,
 ) {
     constructor() : this(::openOfficialConnection)
 
-    /** Diagnostic per-object phase clocks (c105): nullable, allocated only for sampled keys. */
+    /** Per-invocation phase clocks; aggregate on completion, log only sparse samples. */
     private class FetchTimings {
         var headersWaitNanos = 0L
         var bodyReadNanos = 0L
@@ -35,6 +36,10 @@ class ForeverClientUpdateTransfer internal constructor(
         var progressNanos = 0L
         var verifyNanos = 0L
         var publishNanos = 0L
+        var authNanos = 0L
+        var privateWriteNanos = 0L
+        var privateForceNanos = 0L
+        var cacheHit = false
     }
 
     private val diagnostics = Logger.getLogger("ForeverClientUpdate")
@@ -47,12 +52,26 @@ class ForeverClientUpdateTransfer internal constructor(
         cancelled: () -> Boolean,
         progress: (Long) -> Unit,
     ): File {
+        val timings = FetchTimings()
+        return try {
+            fetchInternal(record, workDir, cancelled, progress, timings)
+        } finally {
+            diagnosticAccumulate(timings)
+        }
+    }
+
+    private fun fetchInternal(
+        record: ForeverClientUpdateCatalog.ObjectRecord,
+        workDir: File,
+        cancelled: () -> Boolean,
+        progress: (Long) -> Unit,
+        timings: FetchTimings,
+    ): File {
         validateRecord(record)
         val deadlineStarted = System.nanoTime()
         // Sparse sampling: only EKeys ending in 00 (~1/256 for uniform hashes)
         // allocate clocks and emit one INFO line. All other objects run the exact
         // same operations with two null checks per clock site and no logging.
-        val timings = if (isSampledForTimings(record)) FetchTimings() else null
         val directory = validateWorkDirectory(workDir)
         val output = directory.resolve("${record.ekey}.blte")
         val part = directory.resolve("${record.ekey}.part")
@@ -132,6 +151,155 @@ class ForeverClientUpdateTransfer internal constructor(
         throw IllegalStateException("unreachable encoded-object verification flow")
     }
 
+    /**
+     * One exact archive range, streamed into the individual owned partials.
+     * The caller reserves EVERY member before calling (including retained raws).
+     * No aggregate spool is created. Existing progress uses the single-object
+     * resume path rather than being discarded to obtain a grouped request.
+     */
+    @Synchronized
+    internal fun fetchBatch(
+        members: List<ForeverClientUpdateCatalog.ObjectRecord>,
+        workDir: File,
+        cancelled: () -> Boolean,
+        progress: (String, Long) -> Unit,
+    ): List<File> {
+        val timings = FetchTimings()
+        return try {
+            fetchBatchInternal(members, workDir, cancelled, progress, timings)
+        } finally {
+            diagnosticAccumulate(timings)
+        }
+    }
+
+    private fun fetchBatchInternal(
+        members: List<ForeverClientUpdateCatalog.ObjectRecord>,
+        workDir: File,
+        cancelled: () -> Boolean,
+        progress: (String, Long) -> Unit,
+        timings: FetchTimings,
+    ): List<File> {
+        val records = members.take(MAX_BATCH_OBJECTS + 1)
+        require(records.size in 1..MAX_BATCH_OBJECTS) { "archive batch exceeds its object bound" }
+        if (records.size == 1) return listOf(fetch(records.single(), workDir, cancelled) { progress(records.single().ekey, it) })
+        val first = records.first()
+        var next = first.sourceOffset
+        var bytes = 0L
+        val keys = HashSet<String>(records.size)
+        records.forEach { record ->
+            validateRecord(record)
+            require(record.sourceKind == "range" && record.sourceHash.equals(first.sourceHash, true) && record.sourceOffset == next) {
+                "archive batch is not an exact contiguous range of one archive"
+            }
+            require(keys.add(record.ekey.lowercase(Locale.ROOT))) { "archive batch contains duplicate objects" }
+            next = Math.addExact(next, record.encodedSize)
+            bytes = Math.addExact(bytes, record.encodedSize)
+        }
+        require(bytes <= MAX_BATCH_BYTES) { "archive batch exceeds its byte bound" }
+        val directory = validateWorkDirectory(workDir)
+        var hasProgress = false
+        records.forEach { record ->
+            for (suffix in listOf("blte", "part")) {
+                val path = directory.resolve("${record.ekey}.$suffix")
+                checkOwnedFileState(path, "archive batch object")
+                if (Files.exists(path, LinkOption.NOFOLLOW_LINKS)) hasProgress = true
+            }
+        }
+        if (hasProgress) {
+            diagnosticFallbackGroups.incrementAndGet()
+            diagnosticFallbackMembers.addAndGet(records.size.toLong())
+            return records.map { record ->
+                fetch(record, workDir, cancelled) { progress(record.ekey, it) }
+            }
+        }
+
+        val started = System.nanoTime()
+        checkActive(cancelled, started)
+        val end = Math.subtractExact(next, 1L)
+        val connection = connectionFactory(sourceUrl(first))
+        var drained = false
+        diagnosticHttpStarted(grouped = true)
+        try {
+            connection.instanceFollowRedirects = false
+            connection.connectTimeout = CONNECT_TIMEOUT_MS
+            connection.readTimeout = READ_TIMEOUT_MS
+            connection.requestMethod = "GET"
+            connection.useCaches = false
+            connection.setRequestProperty("Accept-Encoding", "identity")
+            connection.setRequestProperty("Range", "bytes=${first.sourceOffset}-$end")
+            checkActive(cancelled, started)
+            val headersStarted = System.nanoTime()
+            val status = try { connection.responseCode }
+            finally { timings.headersWaitNanos += System.nanoTime() - headersStarted }
+            require(status == HttpURLConnection.HTTP_PARTIAL) { "official CDN returned an unexpected archive batch status" }
+            require(connection.contentEncoding == null || connection.contentEncoding.equals("identity", true)) {
+                "official CDN returned a transformed archive batch body"
+            }
+            validateContentRange(connection, first.sourceOffset, end, null)
+            require(connection.contentLengthLong == bytes) { "official CDN archive batch Content-Length mismatch" }
+            BufferedInputStream(connection.inputStream, BUFFER_SIZE).use { input ->
+                val buffer = ByteArray(BUFFER_SIZE)
+                records.forEach { record ->
+                    checkActive(cancelled, started)
+                    val part = directory.resolve("${record.ekey}.part")
+                    // CREATE_NEW also rejects an object appearing after preflight.
+                    FileChannel.open(part, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS).use { channel ->
+                        try {
+                            var received = 0L
+                            while (received < record.encodedSize) {
+                                checkActive(cancelled, started)
+                                val readStarted = System.nanoTime()
+                                val count = try {
+                                    input.read(buffer, 0, minOf(buffer.size.toLong(), record.encodedSize - received).toInt())
+                                } finally { timings.bodyReadNanos += System.nanoTime() - readStarted }
+                                if (count < 0) throw IOException("official CDN archive batch was truncated")
+                                if (count == 0) continue
+                                val chunk = ByteBuffer.wrap(buffer, 0, count)
+                                while (chunk.hasRemaining()) {
+                                    checkActive(cancelled, started)
+                                    val writeStarted = System.nanoTime()
+                                    val written = try { channel.write(chunk) }
+                                    finally { timings.privateWriteNanos += System.nanoTime() - writeStarted }
+                                    if (written <= 0) throw IOException("could not write archive batch partial")
+                                }
+                                received = Math.addExact(received, count.toLong())
+                                progress(record.ekey, received)
+                            }
+                        } finally {
+                            val forceStarted = System.nanoTime()
+                            try { channel.force(true) }
+                            finally { timings.privateForceNanos += System.nanoTime() - forceStarted }
+                        }
+                    }
+                }
+                checkActive(cancelled, started)
+                val drainStarted = System.nanoTime()
+                try { require(input.read() < 0) { "official CDN returned bytes beyond the requested archive batch" } }
+                finally { timings.bodyReadNanos += System.nanoTime() - drainStarted }
+                drained = true
+            }
+        } finally {
+            try { if (!drained) connection.disconnect() }
+            finally { diagnosticHttpActive.decrementAndGet() }
+        }
+        // Nothing is published before the full response interval/EOF is proven.
+        // Members authenticate independently: a corrupt member never authenticates
+        // its neighbours, and already verified publications are safe to reuse.
+        return records.map { record ->
+            val part = directory.resolve("${record.ekey}.part")
+            val authStarted = System.nanoTime()
+            val verified = try { isVerified(part.toFile(), record, cancelled, started, null) }
+            finally { timings.authNanos += System.nanoTime() - authStarted }
+            if (!verified) {
+                deleteOwnedRegularFile(part)
+                throw IllegalStateException("archive batch object failed EKey, BLTE, CKey, or size verification")
+            }
+            val publishStarted = System.nanoTime()
+            try { publishVerifiedPart(part, directory.resolve("${record.ekey}.blte"), record, cancelled, started, null) }
+            finally { timings.publishNanos += System.nanoTime() - publishStarted }
+        }
+    }
+
     private fun streamObject(
         record: ForeverClientUpdateCatalog.ObjectRecord,
         sourceUrl: String,
@@ -158,6 +326,7 @@ class ForeverClientUpdateTransfer internal constructor(
         checkActive(cancelled, deadlineStarted)
         val connection = connectionFactory(sourceUrl)
         var keepAliveCandidate = false
+        diagnosticHttpStarted(grouped = false)
         try {
             connection.instanceFollowRedirects = false
             connection.connectTimeout = CONNECT_TIMEOUT_MS
@@ -172,8 +341,8 @@ class ForeverClientUpdateTransfer internal constructor(
             // HTTP headers, not pure network. Timed separately so the serial
             // per-object wait can be split from payload streaming.
             val headersWaitStarted = if (timings != null) System.nanoTime() else 0L
-            val status = connection.responseCode
-            if (timings != null) timings.headersWaitNanos += System.nanoTime() - headersWaitStarted
+            val status = try { connection.responseCode }
+            finally { if (timings != null) timings.headersWaitNanos += System.nanoTime() - headersWaitStarted }
             val expectedStatus = if (ranged) HttpURLConnection.HTTP_PARTIAL else HttpURLConnection.HTTP_OK
             require(status == expectedStatus) { "official CDN returned an unexpected HTTP status for encoded object" }
             val contentEncoding = connection.contentEncoding
@@ -205,16 +374,17 @@ class ForeverClientUpdateTransfer internal constructor(
                         // bodyRead wraps only input.read: socket stall + TLS +
                         // decode wait, excluding the channel write below.
                         val readStarted = if (timings != null) System.nanoTime() else 0L
-                        val count = input.read(buffer, 0, minOf(buffer.size.toLong(), expectedNetworkBytes - received).toInt())
-                        if (timings != null) timings.bodyReadNanos += System.nanoTime() - readStarted
+                        val count = try {
+                            input.read(buffer, 0, minOf(buffer.size.toLong(), expectedNetworkBytes - received).toInt())
+                        } finally { if (timings != null) timings.bodyReadNanos += System.nanoTime() - readStarted }
                         if (count < 0) throw IOException("official CDN encoded-object range was truncated")
                         if (count == 0) continue
                         val bytes = ByteBuffer.wrap(buffer, 0, count)
                         while (bytes.hasRemaining()) {
                             checkActive(cancelled, deadlineStarted)
                             val writeStarted = if (timings != null) System.nanoTime() else 0L
-                            val written = channel.write(bytes)
-                            if (timings != null) timings.channelWriteNanos += System.nanoTime() - writeStarted
+                            val written = try { channel.write(bytes) }
+                            finally { if (timings != null) timings.channelWriteNanos += System.nanoTime() - writeStarted }
                             if (written <= 0) throw IOException("could not write encoded-object partial")
                         }
                         received = Math.addExact(received, count.toLong())
@@ -252,7 +422,8 @@ class ForeverClientUpdateTransfer internal constructor(
             // fully drained; disconnect only after a failure avoids leaking an
             // unterminated socket. Diagnosed 2026-10-18: per-object TLS
             // handshakes dominated the serial download (c98 performance fix).
-            if (!keepAliveCandidate) connection.disconnect()
+            try { if (!keepAliveCandidate) connection.disconnect() }
+            finally { diagnosticHttpActive.decrementAndGet() }
         }
     }
 
@@ -467,8 +638,10 @@ class ForeverClientUpdateTransfer internal constructor(
         attempts: Int,
         cacheHit: Boolean,
     ) {
-        // Only sampled keys log; every other object returns above with timings null.
+        // Only sampled keys log; every invocation still contributes its phases to process totals.
         if (timings == null) return
+        timings.cacheHit = cacheHit
+        if (!isSampledForTimings(record)) return
         // Best-effort diagnostic: a throwing logging backend must never turn a
         // valid publication into a failure. This catches only the diagnostic
         // call itself, never operation, cancellation, or hash errors. Non-fatal.
@@ -497,6 +670,53 @@ class ForeverClientUpdateTransfer internal constructor(
             (bytes[offset + 3].toLong() and 0xff)
 
     companion object {
+        // Diagnostic process-lifetime aggregates, not per-run or wire-byte totals.
+        private val diagnosticHttpActive = AtomicLong()
+        private val diagnosticHttpPeak = AtomicLong()
+        private val diagnosticSingleRequests = AtomicLong()
+        private val diagnosticGroupedRequests = AtomicLong()
+        private val diagnosticFallbackGroups = AtomicLong()
+        private val diagnosticFallbackMembers = AtomicLong()
+        private val diagnosticRequests = AtomicLong()
+        private val diagnosticCacheHits = AtomicLong()
+        private val diagnosticHeadersNanos = AtomicLong()
+        private val diagnosticBodyNanos = AtomicLong()
+        private val diagnosticWriteNanos = AtomicLong()
+        private val diagnosticForceNanos = AtomicLong()
+        private val diagnosticAuthNanos = AtomicLong()
+        private val diagnosticPublishNanos = AtomicLong()
+
+        private fun diagnosticAccumulate(timings: FetchTimings) {
+            diagnosticRequests.incrementAndGet()
+            if (timings.cacheHit) diagnosticCacheHits.incrementAndGet()
+            diagnosticHeadersNanos.addAndGet(timings.headersWaitNanos)
+            diagnosticBodyNanos.addAndGet(timings.bodyReadNanos)
+            diagnosticWriteNanos.addAndGet(timings.channelWriteNanos + timings.privateWriteNanos)
+            diagnosticForceNanos.addAndGet(timings.channelForceNanos + timings.privateForceNanos)
+            diagnosticAuthNanos.addAndGet(timings.verifyNanos + timings.authNanos)
+            diagnosticPublishNanos.addAndGet(timings.publishNanos)
+        }
+
+        private fun diagnosticHttpStarted(grouped: Boolean) {
+            if (grouped) diagnosticGroupedRequests.incrementAndGet() else diagnosticSingleRequests.incrementAndGet()
+            val active = diagnosticHttpActive.incrementAndGet()
+            diagnosticHttpPeak.accumulateAndGet(active) { current, next -> maxOf(current, next) }
+        }
+
+        internal fun diagnosticSnapshot(): String =
+            "httpScope=process httpActive=${diagnosticHttpActive.get()} httpPeak=${diagnosticHttpPeak.get()} " +
+                "httpSingles=${diagnosticSingleRequests.get()} httpGroups=${diagnosticGroupedRequests.get()} " +
+                "fallbackGroups=${diagnosticFallbackGroups.get()} fallbackMembers=${diagnosticFallbackMembers.get()} " +
+                "phaseScope=processConcurrent invocations=${diagnosticRequests.get()} cacheHits=${diagnosticCacheHits.get()} " +
+                "headersNanos=${diagnosticHeadersNanos.get()} bodyReadNanos=${diagnosticBodyNanos.get()} " +
+                "privateWriteNanos=${diagnosticWriteNanos.get()} privateForceNanos=${diagnosticForceNanos.get()} " +
+                "authNanos=${diagnosticAuthNanos.get()} publishNanos=${diagnosticPublishNanos.get()} " +
+                "headersMs=${diagnosticHeadersNanos.get() / 1_000_000} bodyReadMs=${diagnosticBodyNanos.get() / 1_000_000} " +
+                "privateWriteMs=${diagnosticWriteNanos.get() / 1_000_000} privateForceMs=${diagnosticForceNanos.get() / 1_000_000} " +
+                "authMs=${diagnosticAuthNanos.get() / 1_000_000} publishMs=${diagnosticPublishNanos.get() / 1_000_000}"
+
+        internal const val MAX_BATCH_OBJECTS = 16
+        internal const val MAX_BATCH_BYTES = 1L shl 20
         private const val VERIFY_ATTEMPTS = 3
         private const val OFFICIAL_HOST = "us.cdn.blizzard.com"
         private const val CONNECT_TIMEOUT_MS = 30_000
@@ -520,7 +740,7 @@ class ForeverClientUpdateTransfer internal constructor(
             require(uri.scheme == "https" && uri.host == OFFICIAL_HOST && uri.userInfo == null &&
                 uri.port == -1 && uri.rawQuery == null && uri.rawFragment == null
             ) { "encoded-object URL is outside the official HTTPS CDN" }
-            return URL(value).openConnection() as? HttpsURLConnection
+            return ForeverWifiDownloads.open(URL(value)) as? HttpsURLConnection
                 ?: throw IllegalStateException("encoded-object connection is not HTTPS")
         }
     }

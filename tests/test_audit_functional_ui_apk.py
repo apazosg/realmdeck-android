@@ -19,6 +19,43 @@ sys.modules[HELPER_SPEC.name] = helper
 HELPER_SPEC.loader.exec_module(helper)
 
 
+def test_auditor_requires_permission_free_functional_entry_only():
+    manifest_dump = '''E: manifest
+  E: application
+    E: activity
+      A: android:name(0x01010003)="app.gamenative.ForeverFunctionalPocActivity" (Raw: "app.gamenative.ForeverFunctionalPocActivity")
+      A: android:exported(0x01010010)=(type 0x12)0xffffffff
+      E: intent-filter
+        A: android:name(0x01010003)="android.intent.action.MAIN"
+    E: activity
+      A: android:name(0x01010003)="app.gamenative.ForeverWineSupervisorActivity"
+      A: android:permission(0x01010006)="android.permission.DUMP"
+'''
+    module.check_functional_entry_permission(manifest_dump)
+
+    inherited_permission = manifest_dump.replace(
+        '  E: application\n',
+        '  E: application\n    A: android:permission(0x01010006)="android.permission.DUMP"\n',
+    )
+    with pytest.raises(ValueError, match='application requires a caller permission'):
+        module.check_functional_entry_permission(inherited_permission)
+
+    protected_entry = manifest_dump.replace(
+        '      A: android:exported',
+        '      A: android:permission(0x01010006)="android.permission.DUMP"\n      A: android:exported',
+    )
+    with pytest.raises(ValueError, match='functional entry Activity requires'):
+        module.check_functional_entry_permission(protected_entry)
+
+    ambiguous = manifest_dump.replace(
+        '    E: activity\n      A: android:name(0x01010003)="app.gamenative.ForeverWineSupervisorActivity"',
+        '    E: activity\n      A: android:name(0x01010003)="app.gamenative.ForeverFunctionalPocActivity"\n'
+        '    E: activity\n      A: android:name(0x01010003)="app.gamenative.ForeverWineSupervisorActivity"',
+    )
+    with pytest.raises(ValueError, match='missing or ambiguous'):
+        module.check_functional_entry_permission(ambiguous)
+
+
 def test_descriptor_delta_accepts_ui_but_rejects_unrelated_classes():
     module.check_descriptor_delta({'Lapp/gamenative/ForeverClientProcStatus;'}, set())
     with pytest.raises(ValueError, match='unapproved DEX descriptor'):
@@ -82,6 +119,44 @@ def test_pasted_source_descriptors_are_admitted_by_exact_name_only():
         module.check_descriptor_delta({f'Lapp/gamenative/{name};'}, set())
         with pytest.raises(ValueError, match='unapproved DEX descriptor'):
             module.check_descriptor_delta({f'Lapp/gamenative/{name}Unexpected;'}, set())
+
+
+def test_fetch_pipeline_diagnostic_descriptor_is_exact():
+    admitted = {'Lapp/gamenative/FetchPipelineDiagnostics;'} | {
+        f'Lapp/gamenative/FetchPipelineDiagnostics$$ExternalSyntheticLambda{number};'
+        for number in range(6)
+    }
+    module.check_descriptor_delta(admitted, set())
+    with pytest.raises(ValueError, match='unapproved DEX descriptor'):
+        module.check_descriptor_delta(admitted | {'Lapp/gamenative/FetchPipelineDiagnosticsUnexpected;'}, set())
+    with pytest.raises(ValueError, match='unapproved DEX descriptor'):
+        module.check_descriptor_delta(admitted | {'Lapp/gamenative/FetchPipelineDiagnostics$$ExternalSyntheticLambda6;'}, set())
+
+
+def test_archive_order_descriptors_are_admitted_by_exact_name_only():
+    root = 'Lapp/gamenative/ForeverClientArchiveOrder'
+    module.check_descriptor_delta({f'{root};', f'{root}$Companion;', f'{root}$Companion$CacheIdentity;',
+                                   f'{root}$withObjects$1$1;',
+                                   f'{root}$Companion$$ExternalSyntheticLambda0;',
+                                   f'{root}$Companion$$ExternalSyntheticLambda1;'}, set())
+    for neighbor in (f'{root}Unexpected;', f'{root}$Unreviewed;',
+                     f'{root}$Companion$$ExternalSyntheticLambda2;'):
+        with pytest.raises(ValueError, match='unapproved DEX descriptor'):
+            module.check_descriptor_delta({neighbor}, set())
+
+
+def test_wifi_and_rate_descriptors_are_admitted_by_exact_name_only():
+    wifi = 'Lapp/gamenative/ForeverWifiDownloads'
+    rate = 'Lapp/gamenative/ForeverClientDownloadRate'
+    module.check_descriptor_delta({
+        f'{wifi};', f'{wifi}$$ExternalSyntheticLambda0;', f'{wifi}$BoundClient;',
+        f'{wifi}$Unavailable;', f'{wifi}$callback$1;', f'{rate};',
+        f'{rate}$Companion;', f'{rate}$Estimate;', f'{rate}$Sample;',
+    }, set())
+    for neighbor in (f'{wifi}Unexpected;', f'{wifi}$Unreviewed;',
+                     f'{wifi}$$ExternalSyntheticLambda1;', f'{rate}$Unreviewed;'):
+        with pytest.raises(ValueError, match='unapproved DEX descriptor'):
+            module.check_descriptor_delta({neighbor}, set())
 
 
 def test_gated_observer_and_apply_descriptors_are_admitted_by_exact_name_only():
@@ -223,14 +298,19 @@ def test_payload_inventory_admits_only_the_reviewed_candidate_native():
                                        candidate_native_member=native)
 
 
-def _c138_privacy_case(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+def _c138_privacy_case(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *, candidate: bool = False):
     contract_member = helper.INTERRUPTED_DISPOSITION_MEMBER
     provenance_member = helper.CODE_PROVENANCE_MEMBER
     old_contract = json.dumps({'device': {'serial': 'private-device'}}).encode()
     new_contract = json.dumps({'device': {'serial': 'DEVICE_SERIAL'}}).encode()
     contract_sha = helper.sha256_bytes(new_contract)
+    recipe = tmp_path / 'apply_overlay.py'
+    recipe.write_text('reviewed audit recipe\n' if candidate else 'historical audit recipe\n')
+    recipe_sha = helper.sha256_file(recipe)
+    monkeypatch.setattr(helper, 'APPLY_OVERLAY', recipe)
+    monkeypatch.setattr(helper, 'REVIEWED_CANDIDATE_RECIPE_SHA256' if candidate else 'C138_RECIPE_SHA256', recipe_sha)
     provenance = json.dumps({
-        'recipeSha256': helper.C138_RECIPE_SHA256,
+        'recipeSha256': recipe_sha,
         'interruptedRunDisposition': {
             'sha256': contract_sha,
             'sourceSha256': contract_sha,
@@ -238,7 +318,7 @@ def _c138_privacy_case(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     }, sort_keys=True).encode()
     provenance_sha = helper.sha256_bytes(provenance)
     monkeypatch.setattr(helper, 'C138_DISPOSITION_SHA256', contract_sha)
-    monkeypatch.setattr(helper, 'C138_PROVENANCE_SHA256', provenance_sha)
+    monkeypatch.setattr(helper, 'REVIEWED_CANDIDATE_PROVENANCE_SHA256' if candidate else 'C138_PROVENANCE_SHA256', provenance_sha)
 
     source = tmp_path / 'source'
     source_inventory = {}
@@ -261,7 +341,7 @@ def _c138_privacy_case(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
             'status': 'PASS_EXACT_DEVICE_SERIAL_REDACTION',
             'changedField': 'device.serial',
             'replacement': 'DEVICE_SERIAL',
-            'recipeSha256': helper.C138_RECIPE_SHA256,
+            'recipeSha256': recipe_sha,
             'payloads': {
                 contract_member: {
                     'beforeSha256': baseline_payloads[contract_member],
@@ -278,9 +358,10 @@ def _c138_privacy_case(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
             {contract_member: contract_sha, provenance_member: provenance_sha})
 
 
-def test_c138_privacy_payloads_require_exact_receipt_source_and_packaged_pins(tmp_path, monkeypatch):
+@pytest.mark.parametrize('candidate', [False, True])
+def test_c138_privacy_payloads_require_exact_receipt_source_and_packaged_pins(tmp_path, monkeypatch, candidate):
     (receipt, source, inventory, payloads, baseline, old_contract, pins) = _c138_privacy_case(
-        tmp_path, monkeypatch,
+        tmp_path, monkeypatch, candidate=candidate,
     )
     admitted = module.validate_c138_privacy_sanitization(
         receipt, source, inventory, payloads, baseline, old_contract, helper,
@@ -327,6 +408,11 @@ def test_c138_privacy_payloads_require_exact_receipt_source_and_packaged_pins(tm
         module.check_payload_inventory(
             payloads, baseline, helper.FUNCTIONAL_MARKER_MEMBER, {},
             c138_privacy_payload_pins={helper.INTERRUPTED_DISPOSITION_MEMBER: pins[helper.INTERRUPTED_DISPOSITION_MEMBER]},
+        )
+    helper.APPLY_OVERLAY.write_text('unreviewed audit recipe\n')
+    with pytest.raises(ValueError, match='no admitted provenance pair'):
+        module.validate_c138_privacy_sanitization(
+            receipt, source, inventory, payloads, baseline, old_contract, helper,
         )
 
 

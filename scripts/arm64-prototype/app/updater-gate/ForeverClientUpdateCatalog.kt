@@ -132,6 +132,33 @@ class ForeverClientUpdateCatalog @JvmOverloads constructor(
         }
     }
 
+    /** Resolve one bounded key block using this already-authenticated catalog connection. */
+    internal fun objectsByKeys(keys: List<String>, cancelled: () -> Boolean): List<ObjectRecord> {
+        ensureOpen()
+        require(keys.size in 1..MAX_OBJECT_KEYS_PER_QUERY) { "client catalog key batch is outside its bound" }
+        checkCancelled(cancelled)
+        val normalized = keys.map { normalizeHex(it, "encoding key") }
+        require(normalized.toSet().size == normalized.size) { "client catalog key batch contains duplicates" }
+        val requested = normalized.toHashSet()
+        val literals = normalized.joinToString(",") { "X'$it'" }
+        val records = HashMap<String, ObjectRecord>(normalized.size)
+        database.rawQuery(
+            "SELECT ekey, ckey, encoded_size, decoded_size, source_kind, source_hash, source_offset, source_length " +
+                "FROM objects WHERE ekey IN ($literals)",
+            null,
+        ).use { cursor ->
+            while (cursor.moveToNext()) {
+                checkCancelled(cancelled)
+                val record = readObjectRecord(cursor)
+                check(record.ekey in requested) { "client catalog key query returned an unrequested object" }
+                check(records.put(record.ekey, record) == null) { "client catalog key query returned duplicate objects" }
+            }
+        }
+        checkCancelled(cancelled)
+        check(records.size == normalized.size) { "client catalog is missing an object from the requested key batch" }
+        return normalized.map { records.getValue(it) }
+    }
+
     /** The reviewed client build has only a small loose-file set; refuse growth beyond the bound. */
     fun looseFiles(): List<LooseFile> {
         ensureOpen()
@@ -697,6 +724,7 @@ class ForeverClientUpdateCatalog @JvmOverloads constructor(
         const val MAX_SUPPORTED_DECODED_OBJECT_BYTES = 536_870_912L
 
         private const val MAX_CATALOG_BYTES = 256L * 1024 * 1024
+        internal const val MAX_OBJECT_KEYS_PER_QUERY = 256
         private const val MAX_OBJECTS = 2_000_000L
         private const val MAX_LOOSE_FILES = 4_096
         private const val MAX_PATH_CHARS = 4_096

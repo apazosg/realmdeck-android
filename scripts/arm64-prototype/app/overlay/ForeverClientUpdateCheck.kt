@@ -295,7 +295,7 @@ object ForeverClientUpdateCheck {
                 "refusing a non-official metadata endpoint"
             }
             checkCancelled(cancelled)
-            val connection = (url.openConnection() as? HttpsURLConnection)
+            val connection = (ForeverWifiDownloads.open(url) as? HttpsURLConnection)
                 ?: throw IllegalStateException("metadata endpoint is not HTTPS")
             connection.connectTimeout = CONNECT_TIMEOUT_MS
             connection.readTimeout = READ_TIMEOUT_MS

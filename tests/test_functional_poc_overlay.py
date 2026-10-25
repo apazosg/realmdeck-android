@@ -27,15 +27,18 @@ def _fixture(tmp_path: Path) -> Path:
         encoding="utf-8",
     )
     (source / "app/src/main/AndroidManifest.xml").write_text(
-        """<application>
+        """<manifest>
+        <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+        <application>
         <activity android:name="app.gamenative.ForeverWineSupervisorActivity"
-            android:exported="true" android:enabled="true" />
+            android:exported="true" android:enabled="true" android:permission="android.permission.DUMP" />
         <activity-alias android:name="app.gamenative.ForeverWineSupervisorLauncher"
-            android:enabled="true"></activity-alias>
+            android:enabled="true" android:permission="android.permission.DUMP"></activity-alias>
         <!--
          android:windowSoftInputMode must always be in the activity block.
         -->
         </application>
+        </manifest>
         """,
         encoding="utf-8",
     )
@@ -124,6 +127,15 @@ def test_recipe_applies_and_is_idempotent(tmp_path: Path) -> None:
         source / recipe.BUILD
     ).read_text()
     assert recipe.DIRECT_ROUTE in (source / recipe.XSERVER).read_text()
+    manifest = (source / recipe.MANIFEST).read_text()
+    functional = manifest.split('android:name="app.gamenative.ForeverFunctionalPocActivity"', 1)[1].split('</activity>', 1)[0]
+    assert 'android:permission=' not in functional
+    assert 'android:permission="android.permission.DUMP"' in manifest.split(
+        'android:name="app.gamenative.ForeverWineSupervisorActivity"', 1
+    )[1].split('/>', 1)[0]
+    assert 'android:permission="android.permission.DUMP"' in manifest.split(
+        'android:name="app.gamenative.ForeverWineSupervisorLauncher"', 1
+    )[1].split('</activity-alias>', 1)[0]
     assert (source / recipe.MARKER).is_file()
     import json
     marker = json.loads((source / recipe.MARKER).read_text())
@@ -168,11 +180,13 @@ def test_server_profile_field_is_independent_of_version_and_idempotent() -> None
 
 
 def test_existing_code64_manifest_migrates_landscape_poc_to_portrait() -> None:
-    manifest = """<application>
+    manifest = """<manifest>
+        <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+        <application>
         <activity android:name="app.gamenative.ForeverWineSupervisorActivity"
-            android:exported="true" android:enabled="false" />
+            android:exported="true" android:enabled="false" android:permission="android.permission.DUMP" />
         <activity-alias android:name="app.gamenative.ForeverWineSupervisorLauncher"
-            android:enabled="false"></activity-alias>
+            android:enabled="false" android:permission="android.permission.DUMP"></activity-alias>
         <activity android:name="app.gamenative.ForeverFunctionalPocActivity"
             android:exported="true"
             android:permission="android.permission.DUMP"
@@ -187,12 +201,66 @@ def test_existing_code64_manifest_migrates_landscape_poc_to_portrait() -> None:
         <!--
          android:windowSoftInputMode must always be in the activity block.
         -->
-    </application>
+        </application>
+    </manifest>
     """
     transformed = recipe.transform_manifest(manifest)
     assert 'android:screenOrientation="portrait"' in transformed
     assert 'android:screenOrientation="landscape"' not in transformed
     assert 'android:windowSoftInputMode="adjustNothing"' in transformed
+    functional = transformed.split('android:name="app.gamenative.ForeverFunctionalPocActivity"', 1)[1].split('</activity>', 1)[0]
+    assert 'android:permission=' not in functional
+    assert 'android:permission="android.permission.DUMP"' in transformed.split(
+        'android:name="app.gamenative.ForeverWineSupervisorActivity"', 1
+    )[1].split('/>', 1)[0]
+    assert 'android:permission="android.permission.DUMP"' in transformed.split(
+        'android:name="app.gamenative.ForeverWineSupervisorLauncher"', 1
+    )[1].split('</activity-alias>', 1)[0]
+    assert recipe.transform_manifest(transformed) == transformed
+
+    branded = transformed.replace(
+        'android:theme="@style/Theme.Pluvia"',
+        'android:theme="@style/Theme.ForeverFunctionalSplash"',
+    )
+    assert recipe.transform_manifest(branded) == branded
+
+
+@pytest.mark.parametrize("permission", [
+    'android:permission="com.example.UNREVIEWED"',
+    'android:permission="android.permission.DUMP" android:permission="android.permission.DUMP"',
+])
+def test_functional_entry_migration_rejects_unknown_or_duplicated_permission(permission: str) -> None:
+    manifest = """<manifest><application>
+        <activity android:name="app.gamenative.ForeverWineSupervisorActivity" android:enabled="false" />
+        <activity-alias android:name="app.gamenative.ForeverWineSupervisorLauncher" android:enabled="false"></activity-alias>
+        <activity android:name="app.gamenative.ForeverFunctionalPocActivity" android:exported="true"
+            PERMISSION
+            android:screenOrientation="portrait" android:configChanges="orientation|screenSize|keyboard|keyboardHidden|navigation"
+            android:windowSoftInputMode="adjustNothing" android:theme="@style/Theme.Pluvia">
+            <intent-filter><action android:name="android.intent.action.MAIN" /></intent-filter>
+        </activity>
+        <!--
+         android:windowSoftInputMode must always be in the activity block.
+        -->
+        </application></manifest>""".replace("PERMISSION", permission)
+    with pytest.raises(recipe.OverlayError, match="permission"):
+        recipe.transform_manifest(manifest)
+
+
+def test_functional_entry_migration_rejects_ambiguous_activity() -> None:
+    manifest = """<manifest><application>
+        <activity android:name="app.gamenative.ForeverWineSupervisorActivity" android:enabled="false" />
+        <activity-alias android:name="app.gamenative.ForeverWineSupervisorLauncher" android:enabled="false"></activity-alias>
+        <activity android:name="app.gamenative.ForeverFunctionalPocActivity" android:exported="true"
+            android:screenOrientation="portrait" android:configChanges="orientation|screenSize|keyboard|keyboardHidden|navigation"
+            android:windowSoftInputMode="adjustNothing" android:theme="@style/Theme.Pluvia"></activity>
+        <activity android:name="app.gamenative.ForeverFunctionalPocActivity"></activity>
+        <!--
+         android:windowSoftInputMode must always be in the activity block.
+        -->
+        </application></manifest>"""
+    with pytest.raises(recipe.OverlayError, match="not unique"):
+        recipe.transform_manifest(manifest)
 
 
 def test_route_contract_is_fixed_and_unmanaged() -> None:

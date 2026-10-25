@@ -531,7 +531,7 @@ object ForeverClientProvisioner {
     private fun openHttp(value: String, start: Long, end: Long, ranged: Boolean): HttpURLConnection {
         val uri = URI(value)
         requireOfficialAuthority(uri)
-        val connection = URL(value).openConnection() as HttpURLConnection
+        val connection = ForeverWifiDownloads.open(URL(value))
         connection.instanceFollowRedirects = false
         connection.connectTimeout = CONNECT_TIMEOUT_MS
         connection.readTimeout = READ_TIMEOUT_MS
