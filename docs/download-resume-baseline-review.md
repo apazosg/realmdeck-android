@@ -321,6 +321,35 @@ nuevos. La construcción y actualización posteriores se registran a continuaci�
   preparación desde proceso fresco hasta el resumen, sin confirmar descarga ni
   equipararla a la reanudación del mismo proceso de la baseline C146.
 
+### Primera preparación C147 desde proceso fresco
+
+- Una sola acción «Continuar», Enter a las **18:28:14.889773 UTC**. Primera muestra
+  a +2,722 s: «Consultando versión…» y «Pausar». No hubo otra pulsación para hacer
+  avanzar la preparación. Esta muestra acredita respuesta antes de 2,722 s, no
+  latencia subsegundo medida ni prueba de doble toque deliberado.
+- Tras treinta muestras, resumen visible a **+509,206 s**: destino Unidad USB,
+  versión `1.60.1.70532`, descarga pendiente **63,0 GiB**, espacio adicional
+  **65,2 GiB**. La muestra anterior era de preparación; el intervalo entre muestras
+  incluye quince segundos de espera y el coste del dump. No es tiempo a primer byte.
+- Logs del inspector: comienzo +199,530 s, fin +378,663 s, duración **179.133 ms**,
+  **cero rehashes**. Conteo visible: 1.144.978 objetos. La primera pasada C146 duró
+  223.012 ms y la segunda 166.107 ms, ambas con seis rehashes. El tiempo C147 cae
+  entre esas dos medidas: **no acredita por sí solo una reducción causal de latencia
+  Android**. Sí confirma que la candidata elimina el trabajo de crecimiento de esa
+  tabla en dispositivo, coherente con la comparación host controlada.
+- C146 se midió como Resume del mismo proceso; aquí se reconstruye el plan tras
+  actualizar/reabrir el proceso. No hay control de caché, cohorte ni calentamiento,
+  y los 509,206 s hasta el resumen no son comparables al límite de observación de
+  C146 hasta transferencia. No se extrapola un porcentaje a toda la preparación.
+- Artefactos filtrados externos: `/tmp/opencode/c147-startup-trial/initial-summary.json`
+  y `casc-events.json`. Sin capturas de cuenta, identificadores del dispositivo ni
+  valores de configuración privada en el repositorio.
+
+El usuario confirmó después **«Confirmar y probar»** para el plan concreto de
+63,0/65,2 GiB y destino/versión indicados: ejecución y una reanudación, acabando en
+pausa normal, con carga útil limitada a la ventana de prueba de dos minutos. No
+autoriza dejar descargando todo el cliente ni aceptar otro plan de costes.
+
 ## Auditoría del objetivo (cierre pendiente)
 
 | Entregable | Evidencia | Pendiente |

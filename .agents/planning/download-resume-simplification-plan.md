@@ -221,7 +221,10 @@ costes y la reanudación con una sola acción cuando el plan siga siendo válido
   a 17:56:10 UTC; estado final «En pausa». Dos inspecciones actuales: 223,012 y
   166,107 s, con seis rehashes cada una (41,579 y 26,521 s dentro de esos totales).
   No sumar estos relojes anidados ni atribuir el intervalo entero a esas tablas.
-  No hay aún primer byte medido ni comparación física con C147.
+  No hay aún primer byte medido. Primera preparación C147: una acción «Continuar»,
+  respuesta visible antes de 2,722 s, resumen a 509,206 s; inspector 179,133 s y cero
+  rehashes. Está entre ambas duraciones C146: confirma menos trabajo, no una mejora
+  causal del tiempo total. Proceso fresco C147 y Resume vivo C146 no son A/B.
 - C147 local instalada: `fff17ac`, 56 tests de reconstrucción/auditoría aprobados,
   build ModernDebug offline SUCCESS y auditoría fuente/payload PASS. Entre receipts
   C146/C147 solo cambian tres fuentes productivas, dos tests, versión y marcador de
@@ -233,12 +236,17 @@ costes y la reanudación con una sola acción cuando el plan siga siendo válido
   y «Descargar cliente», sin ejecutar juego. Esto no prueba pérdida del checkpoint
   de una instalación aún no publicada; verificar el recorrido antes de transferir.
 - Se acredita reducción de trabajo del inspector host (commit `c1bc7a1`, 4/4
-  regresiones focales); no reducción global ni física. La compilación integrada
+  regresiones focales) y cero rehashes en el inspector C147 físico; no reducción
+  global de latencia Android. La compilación integrada
   Modern y los diez tests del servicio pasaron con la fuente final de UI y updater
   (coincidencia comprobada por `cmp`). La copia parcial Legacy seguía incompleta;
   los focales de capacidad y costes del árbol Modern también pasaron (un test por
   clase, cero fallos/errores/omitidos, XML 2026-10-25T16:52:04), sin atribuir los
   problemas de staging al producto. La UI está versionada en `633329e`.
+- El usuario autorizó «Confirmar y probar» el plan visible C147: Unidad USB,
+  `1.60.1.70532`, 63,0 GiB pendientes y 65,2 GiB adicionales. Ejecución y una
+  reanudación con observación acotada, pausa final y progreso conservado; no dejar
+  descargando el cliente entero ni aceptar costes distintos por esa autorización.
 - Consentimiento persistente tras muerte del proceso y pausa viva son cambios de
   producto fuera del primer alcance. Si resultan necesarios, presentar decisión;
   conservar checkpoint no autoriza a descargar automáticamente.
