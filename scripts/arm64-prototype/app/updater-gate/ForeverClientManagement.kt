@@ -89,10 +89,15 @@ fun ForeverClientManagementDialog(
     val scope = rememberCoroutineScope()
     val alive = remember { AtomicBoolean(true) }
     val cancel = remember { AtomicBoolean(false) }
+    // Single-flight before recomposition: rapid repeated taps must not start
+    // duplicate qualify/plan/handoff chains while the buttons are still drawn.
+    // This changes no guard: the admitted operation still qualifies, plans and
+    // executes fully; only the redundant twin chain is omitted.
+    val dialogSingleFlight = remember { AtomicBoolean(false) }
     val progressFlow = remember { MutableStateFlow("") }
     val progress by progressFlow.collectAsState()
     val missingHome = if (inline) initialMissingStorageLabel else null
-    var busy by remember { mutableStateOf(missingHome == null && !ForeverClientUpdateExecution.busy.value) }
+    var busy by remember { mutableStateOf(missingHome == null && !ForeverClientUpdateExecution.busy.value && ForeverClientUpdateExecution.pendingPlan == null) }
     var details by remember { mutableStateOf(false) }
     var applying by remember { mutableStateOf(false) }
     // Presentation only: never use this snapshot to admit, plan or execute a
@@ -106,12 +111,24 @@ fun ForeverClientManagementDialog(
 
     val execution = remember { ForeverClientUpdateExecution }
     val executionBusy by execution.busy.collectAsState()
+    // A handed-off plan is pending execution while the foreground service
+    // has not marked itself busy yet. Read synchronously wherever admission
+    // or presentation is decided; recomposition is driven by busy/progress
+    // changes around the handoff, so no new observable state is introduced.
+    val executionPendingHandoff = execution.pendingPlan != null
     val executionApplying by execution.applying.collectAsState()
     val executionProgress by execution.progress.collectAsState()
 
     fun failureMessage(failure: Exception): String = ForeverFunctionalUiText.userMessage(failure)
 
     fun runOperation(title: String, work: (ForeverClientUpdateService) -> Unit) {
+        // A handed-off plan counts as pending execution even though the
+        // foreground service has not marked itself busy yet: startForeground
+        // delivery is asynchronous. A second tap must not start another
+        // qualify/plan chain that can only fail in resetFor. The dialog's own
+        // in-flight operation is still serialized by the single-flight gate.
+        if (execution.busy.value || execution.pendingPlan != null) return
+        if (!dialogSingleFlight.compareAndSet(false, true)) return
         busy = true
         error = null
         cancel.set(false)
@@ -128,6 +145,7 @@ fun ForeverClientManagementDialog(
                 Log.w("ForeverClientUpdate", "client operation failed", failure)
                 if (alive.get()) error = failureMessage(failure)
             } finally {
+                dialogSingleFlight.set(false)
                 if (alive.get()) { busy = false; applying = false }
             }
         }
@@ -173,8 +191,9 @@ fun ForeverClientManagementDialog(
 
     LaunchedEffect(Unit) {
         // While a foreground download owns the service lease, reopening the dialog
-        // must not collide with it; the hub flows already describe the state.
-        if (!execution.busy.value && missingHome == null) inspectLocal()
+        // must not collide with it; the hub flows already describe the state. A
+        // handed-off plan counts as owned even before the service marks busy.
+        if (!execution.busy.value && execution.pendingPlan == null && missingHome == null) inspectLocal()
     }
     LaunchedEffect(Unit) {
         execution.outcome.collect { outcome ->
@@ -306,15 +325,19 @@ fun ForeverClientManagementDialog(
                     if (!inline || details) Text(current.installedVersion?.let { "Instalado: $it" } ?: if (current.clientPresent)
                         "Hay archivos del cliente, pero no se pudo identificar la instalación." else "Cliente no instalado.")
                 }
-                if (busy || executionBusy) {
+                if (busy || executionBusy || executionPendingHandoff) {
                     val detail by execution.detail.collectAsState()
                     val fraction = if (executionBusy) ForeverFunctionalUiText.downloadFraction(detail) else null
                     if (fraction != null) LinearProgressIndicator(progress = { fraction }, modifier = Modifier.fillMaxWidth())
                     else LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-                    Text(if (executionBusy) executionProgress else progress)
+                    Text(if (executionBusy || executionPendingHandoff) executionProgress else progress)
                     ForeverClientDownloadEstimate()
                     TextButton(enabled = !applying && !executionApplying, onClick = {
-                        if (executionBusy) {
+                        // During a pending handoff the service owns the plan even
+                        // though it has not marked itself busy yet: pausing must go
+                        // to the service, not to the dialog-local cancel flag that
+                        // only dialog-owned qualify/plan work observes.
+                        if (execution.busy.value || execution.pendingPlan != null) {
                             context.startService(
                                 Intent(context, ForeverClientUpdateForegroundService::class.java)
                                     .setAction(ForeverClientUpdateForegroundService.ACTION_PAUSE),

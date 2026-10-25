@@ -6,6 +6,8 @@ import android.content.Intent
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertSame
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -127,5 +129,72 @@ class ForeverClientUpdateForegroundServiceTest {
             assertTrue(ForeverClientUpdateExecution.applying.value)
             assertEquals(ForeverClientUpdateProgress.Phase.APPLYING, ForeverClientUpdateExecution.detail.value?.phase)
         } finally { controller.destroy() }
+    }
+
+    private fun pendingPlanFixture(planId: String = "pending-plan"): ForeverClientUpdatePlan =
+        ForeverClientUpdatePlan(
+            planId = planId,
+            version = "1.60.1.70425",
+            downloadBytes = 10,
+            privateWorkBytes = 10,
+            destinationBytes = 10,
+            peakAdditionalBytes = 20,
+            privateWorkAvailableBytes = 100,
+            destinationAvailableBytes = 100,
+            privateAndDestinationShareFileStore = false,
+            hasEnoughSpace = true,
+            totalObjects = 1,
+            reusableObjects = 0,
+            missingObjects = 1,
+            looseChanges = emptyList(),
+            transactionFileCount = 1,
+            updaterToken = "token",
+            storageId = "storage",
+            destinationPath = "destination",
+            sourceRevision = "revision",
+            snapshotHash = "snapshot",
+            cascNewSegmentBytes = 0,
+            cascIndexBytes = 0,
+            cascNewSegmentCount = 0,
+            looseChangePaths = emptySet(),
+        )
+
+    @Test
+    fun resetForPublishesPendingPlanBeforeServiceStart() {
+        val plan = pendingPlanFixture()
+        ForeverClientUpdateExecution.resetFor(plan)
+        // The service has not marked itself busy yet, but the handed-off plan
+        // is already pending: the dialog must treat this as executing work.
+        assertSame(plan, ForeverClientUpdateExecution.pendingPlan)
+        assertSame(plan, ForeverClientUpdateExecution.resumePlan)
+        assertFalse(ForeverClientUpdateExecution.busy.value)
+        assertFalse(ForeverClientUpdateExecution.cancel.get())
+        assertEquals("Iniciando descarga…", ForeverClientUpdateExecution.progress.value)
+    }
+
+    @Test
+    fun secondResetForWhilePendingIsRejected() {
+        val first = pendingPlanFixture("first")
+        ForeverClientUpdateExecution.resetFor(first)
+        assertThrows(IllegalStateException::class.java) {
+            ForeverClientUpdateExecution.resetFor(pendingPlanFixture("second"))
+        }
+        assertSame(first, ForeverClientUpdateExecution.pendingPlan)
+    }
+
+    @Test
+    fun serviceStartConsumesPendingPlan() {
+        val controller = Robolectric.buildService(ForeverClientUpdateForegroundService::class.java).create()
+        try {
+            val service = controller.get()
+            val plan = pendingPlanFixture()
+            ForeverClientUpdateExecution.resetFor(plan)
+            assertEquals(Service.START_NOT_STICKY, service.onStartCommand(Intent(), 0, 7))
+            assertFalse(shadowOf(service).isStoppedBySelf)
+            assertTrue(ForeverClientUpdateExecution.busy.value)
+            assertEquals(null, ForeverClientUpdateExecution.pendingPlan)
+        } finally {
+            controller.destroy()
+        }
     }
 }
