@@ -58,6 +58,20 @@ prediction of the final speedup is not a prerequisite for a small proven fix.
 
 ## Open Issues
 
+### Next bounded storage experiment
+
+The first source inspection identifies a same-point `exists(NOFOLLOW_LINKS)` /
+directory-type pair in candidate inspection. Replace only that pair with one
+no-follow attribute read: a missing root remains admissible for an empty target,
+an existing non-directory/link is not trusted, and other attribute errors fail
+closed. Keep the later directory check after the safety walk, all path walks,
+marker/identity/mount checks and per-object validation frequency unchanged.
+This is a measured-cost experiment within the approved storage work, not proof
+that those other checks are redundant or that a speedup has been achieved.
+Validate absent/file/link roots and existing update guards, independently review
+the safety change and exact source admission, then measure the physical profile
+before retaining it as a performance improvement.
+
 The latest measured candidate averages about 1.516 MB/s, below both the reported
 1.6-MB/s reference and the 3.2-MB/s target. Different sequential object cohorts
 are not a controlled A/B comparison. See the
