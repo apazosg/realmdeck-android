@@ -58,6 +58,26 @@ prediction of the final speedup is not a prerequisite for a small proven fix.
 
 ## Open Issues
 
+### Requested review of validation frequency
+
+The user asks to evaluate whether checks are excessive and whether their number
+or frequency can be reduced as a performance/risk trade-off. This authorizes
+analysis, not an arbitrary time cache or an unreviewed reduction in protection.
+For each expensive check, document its measured cost, failure it detects, what
+can change between checks, and whether another retained guard detects that change
+before a consequential write. Separate genuinely redundant work from checks at
+different observation points. Compare same-point consolidation, per-object and
+bounded-batch policies; do not presume a descriptor-based alternative is supported
+by the existing Android APIs or requires no new complexity.
+
+Present estimated savings with uncertainty and the concrete residual risks
+(disconnect/remount, path substitution, links, ownership and stale selection).
+Then obtain approval for any changed safety/UC-AC contract and derive affected
+requirements/tests before implementation. The current same-point attribute
+experiment may continue, but all other validation cadence remains unchanged
+while that decision is pending. No new option, configuration switch, quota or
+checkpoint-format change is implied by this evaluation.
+
 ### Next bounded storage experiment
 
 The first source inspection identifies a same-point `exists(NOFOLLOW_LINKS)` /
