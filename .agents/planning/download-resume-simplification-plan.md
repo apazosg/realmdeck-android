@@ -1,31 +1,29 @@
 ---
 id: download-resume-simplification-2026-10-25
-state: draft
+state: in-progress
 date: 2026-10-25
 ---
 
 ## Summary
 
-**Límite vigente de esta sesión — observación pasiva:** el usuario reanuda el
-goal únicamente para pasos 3/4 con evidencia existente y logs accesibles en lectura.
-No pausar/reanudar descarga, operar app, instalar/reiniciar/borrar ni cambiar código,
-contratos o garantías. Si falta línea base de inicio por requerir interacción,
-documentar el bloqueo y detenerse sin pedir más permiso. Mantener `draft` y no
-cerrar goal sin aceptación medida. Las aprobaciones locales y resultados descritos
-abajo son antecedentes de trabajo intervenido mientras esta sesión estaba pausada,
-no permiso para continuar esa implementación en este turno. Cambios locales previos
-en Management y su test se conservan sin tocar.
+**Alcance vigente (2026-10-25):** tras la ventana anterior de lectura pasiva, el
+usuario autorizó pruebas locales y Android por ADB Wi-Fi, pausa/reanudación normal,
+control mediante scrcpy y «Autorizar C147 local». Se puede preparar/auditar C147 y
+actualizar conservando datos tras confirmar pausa; no publicar, desinstalar,
+reiniciar, borrar progreso ni cambiar seguridad/garantías. No aceptar costes nuevos
+sin consultarlos. Estas autorizaciones posteriores sustituyen el límite pasivo de
+aquel turno, no sus resultados ni sus limitaciones.
 
-Resultado de lectura pasiva:
+Antecedente de lectura pasiva:
 [observación del log retenido](../../docs/download-passive-log-observation.md).
 Se mide la transferencia en curso, no el tiempo desde intención a primer byte;
-paso 3 sigue incompleto sin esas marcas. No se inicia otra prueba para obtenerlas.
+aquella observación no cubría el paso 3. La prueba activa posterior se registra abajo.
 
 Objetivo solicitado: simplificar descarga y reanudación, reducir interacciones
 repetidas y tiempo hasta transferencia real, revisar comprobaciones previas sin
 debilitar las garantías acordadas y resolver cuellos con medidas antes/después.
 Este plan continúa la investigación existente; no reabre la publicación C146 ni
-autoriza otra entrega pública. **Aprobación vigente (2026-10-25):** el usuario
+autoriza otra entrega pública. **Aprobación local inicial (2026-10-25):** el usuario
 eligió «Aprobar trabajo local» y confirmó «adelante». Se autorizan diagnóstico,
 cambios mínimos de código/UI y pruebas locales (pasos 2–6 y documentación del 8),
 sin operar el teléfono ni publicar una APK. Los cambios de garantías/contrato
@@ -34,7 +32,8 @@ siguen requiriendo propuesta y aprobación explícitas.
 Ampliación autorizada: el usuario permite pruebas locales y con Android mediante
 ADB Wi-Fi y, al detectarse servicio foreground activo en C146, eligió «Observar y
 pausar normalmente»: leer progreso, pausa cooperativa por UI y medir reanudación
-de la versión instalada. No autoriza todavía sustituir la app con una candidata.
+de la versión instalada. Posteriormente autorizó preparar, auditar e instalar C147
+local conservando datos y progreso, solo con pausa confirmada.
 
 Solicitud renovada mediante objetivo el 2026-10-25: «Reducir el tiempo de
 preparación inicial al iniciar o restaurar una descarga. mejorar la ui UX para
@@ -117,7 +116,7 @@ costes y la reanudación con una sola acción cuando el plan siga siendo válido
 - Fuerza de datos → fuerza de checkpoint → acknowledgement/retiro de raw; sin reset,
   migración, borrado de staging o reparación/descarga extra implícita.
 
-### Ventana física propuesta — pendiente de autorización separada
+### Ventana física autorizada — solo prueba local
 
 - Comprobar primero, de forma no destructiva, dispositivo, destino, espacio y si
   hay juego/transferencia activos; si los hay, detener la intervención y consultar,
@@ -132,6 +131,12 @@ costes y la reanudación con una sola acción cuando el plan siga siendo válido
 - No resetear/borrar cliente o staging, matar un juego, reiniciar el dispositivo ni
   cambiar consentimiento entre procesos. Comparar fases/cohortes disponibles y
   declarar diferencias de caché/progreso; no prometer un A/B causal si no lo es.
+- Candidata física autorizada mediante «Autorizar C147 local»: **C147 /
+  `0.2.123-download-startup-test`**, solo local. Cambiar únicamente la identidad de
+  candidata y sus expectativas de test; reconstruir con inputs autenticados y
+  auditar el APK exacto. Instalar como actualización conservando datos solo tras
+  pausa cooperativa confirmada. Sin desinstalar, publicar,
+  subir, cambiar firmas ni forzar un downgrade si la actualización no es compatible.
 
 ### Medición y aceptación
 
@@ -164,7 +169,8 @@ costes y la reanudación con una sola acción cuando el plan siga siendo válido
 
 - [x] 1. Registrar objetivo e inspeccionar contratos, evidencia y puntos de entrada.
 - [x] 2. Aprobar este plan y resolver decisiones que cambien garantías antes de código.
-  Aprobado el alcance local; no se autoriza modificar garantías ni operar el móvil.
+  Aprobados alcance local, ventana Android y candidata C147 local. No se autoriza
+  modificar garantías ni aceptar costes desconocidos.
 - [ ] 3. Reproducir recorrido y obtener línea base por fases/acciones con entradas
   controladas; usar instrumentación agregada existente antes de añadir otra.
 - [x] 4. Elegir el cuello prioritario demostrado; documentar qué detecta cada chequeo,
@@ -180,8 +186,11 @@ costes y la reanudación con una sola acción cuando el plan siga siendo válido
   Optimización `c1bc7a1` y UI `633329e`; cuatro focales host y diez tests del servicio
   aprobados. La interacción física y el recorrido completo siguen pendientes.
 - [x] 6. Revisar independientemente límites sensibles; reconstruir/auditar candidata
-   solo si hace falta prueba física. No repetir checks exitosos sin cambio relevante.
-  Review de algoritmo y concurrencia realizada; no se ha preparado una APK.
+    solo si hace falta prueba física. No repetir checks exitosos sin cambio relevante.
+  Review de algoritmo y concurrencia realizada. C147 reconstruida y auditada;
+  instalada como actualización tras pausa confirmada, sin borrar datos. La revisión
+  adicional del retag no pudo arrancar por variante de worker no disponible;
+  identidad/pins y diff inspeccionados por el responsable, auditoría automática PASS.
 - [ ] 7. Con autorización y estado fresco del dispositivo, medir antes/después sin
   perder progreso ni interferir con un juego/descarga activos; registrar limitaciones.
 - [ ] 8. Reconciliar notas vigentes, revisar staged diff, commits atómicos solo de la
@@ -201,10 +210,21 @@ costes y la reanudación con una sola acción cuando el plan siga siendo válido
   La aprobación del plan no implica
   permiso para detener una partida o transferencia, instalar, reiniciar ni confirmar
    costes desconocidos; coordinar la ventana física antes de esas operaciones.
-- Actualización física autorizada: ADB Wi-Fi disponible, C146 con descarga activa.
-  UI 17:26–17:27 UTC: 8.0 GiB/71.4 GiB y 0.3 MB/s redondeados. Un único intento de
-  pulsar «Pausar» fue rechazado por Android (`INJECT_EVENTS`); no se ha pausado ni
-  instalado nada. Se requiere pulsación manual para continuar esa medición.
+- Control físico: el intento ADB input fue rechazado por `INJECT_EVENTS`; scrcpy
+  UHID ya permitió pausa normal sin cambiar seguridad. Reanudación C146 única a
+  17:35:31 UTC, observación acotada sin fase visible de transferencia y pausa final
+  a 17:56:10 UTC; estado final «En pausa». Dos inspecciones actuales: 223,012 y
+  166,107 s, con seis rehashes cada una (41,579 y 26,521 s dentro de esos totales).
+  No sumar estos relojes anidados ni atribuir el intervalo entero a esas tablas.
+  No hay aún primer byte medido ni comparación física con C147.
+- C147 local instalada: `fff17ac`, 56 tests de reconstrucción/auditoría aprobados,
+  build ModernDebug offline SUCCESS y auditoría fuente/payload PASS. Entre receipts
+  C146/C147 solo cambian tres fuentes productivas, dos tests, versión y marcador de
+  procedencia. No se cambian los inputs históricos ni sus pins. Antes de actualizar:
+  «En pausa», sin servicio updater ni ejecutable guest observado; `adb install -r`
+  devolvió Success, versión instalada 147. Tras actualización la app no está en
+  primer plano: abrirla manualmente desde el icono para seguir con guardas UHID,
+  sin usar otro método de control UI ni iniciar el juego.
 - Se acredita reducción de trabajo del inspector host (commit `c1bc7a1`, 4/4
   regresiones focales); no reducción global ni física. La compilación integrada
   Modern y los diez tests del servicio pasaron con la fuente final de UI y updater

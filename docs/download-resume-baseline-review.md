@@ -213,9 +213,9 @@ la comprobación Gradle integrada usa JDK 17, no se confunden ambos entornos.
   admisión pending validada; ajustes de Pausar y apertura pending inspeccionados
   por el responsable tras la corrección, sin prueba de pulsaciones en dispositivo.
 
-Optimización versionada en `c1bc7a1` y corrección UI en `633329e`; no APK, operación
-de dispositivo ni mejora física acreditada. La aceptación del recorrido completo
-sigue abierta.
+Optimización versionada en `c1bc7a1` y corrección UI en `633329e`. La medición
+posterior de C146 se describe abajo; todavía no acredita mejora física de estos
+cambios ni aceptación del recorrido completo.
 
 ### Observación física C146 — 2026-10-25
 
@@ -230,11 +230,89 @@ paquete `com.wowforever.arm64probe`, C146 / `0.2.122-performance-preview`.
 - Se intentó una sola pulsación normal de «Pausar» mediante ADB. Android la rechazó
   con `SecurityException`: falta `INJECT_EVENTS`. La UI posterior seguía descargando;
   no se envió una alternativa de pausa por servicio, ni se cambió seguridad,
-  instaló, mató o reinició nada. La pausa/reanudación queda pendiente de interacción
-  manual del usuario o de su decisión sobre los permisos de entrada del dispositivo.
+  instaló, mató o reinició nada. Ese bloqueo se resolvió después con scrcpy UHID
+  autorizado, sin modificar permisos ni ajustes de seguridad.
 - Esta sesión instalada no contiene los cambios nuevos. No se atribuyen a ellos
   sus cifras ni se presenta esta observación como A/B. No hay todavía tiempos a
   consentimiento/primer byte ni medición de la candidata en Android.
+
+### Reanudación activa C146 mediante scrcpy — 17:35–17:56 UTC
+
+El usuario pidió scrcpy. Se reutilizó el servidor local fijado y se verificó su hash,
+solo teclado UHID de navegación, sin vídeo/audio/portapapeles/texto ni cambios de
+seguridad. La sesión valida app propia en primer plano y ausencia de campos
+editables antes de cada tecla; activa la etiqueta exacta una sola vez tras enfocar.
+La pausa inicial mostró «En pausa»/«Reanudar».
+
+- **Una acción Reanudar**, Enter enviado a las **17:35:31.349 UTC**. La UI mostró
+  «Comprobando descarga pendiente…» a +2,915 s. No se repitió la acción ni se
+  confirmó un coste nuevo.
+- 69 muestras de UI entre +2,915 y +1.194,746 s, cadencia de 15 s más coste de dump.
+  Se observaron comprobación de 1.144.978 archivos, recuperación y otra comprobación;
+  no se observó fase «Descargando». No equivale a medir exactamente primer byte ni
+  a demostrar ausencia de cualquier tráfico auxiliar entre muestras.
+- Logs CASC numéricos retenidos del mismo proceso, filtrados sin datos privados:
+
+  | Inspección sin fuente | Comienzo / fin desde Enter | Duración registrada | Rehashes | Tiempo rehash, incluido en duración |
+  |---|---|---|---|---|
+  | Primera | +187,265 / +410,277 s | 223,012 s | 6 | 41,579 s |
+  | Segunda | +737,339 / +903,447 s | 166,107 s | 6 | 26,521 s |
+
+  Los rehashes pasan de capacidad 32.768 a 2.097.152. No sumar sus 68,100 s otra
+  vez a los 389,119 s de inspección, ni adjudicar a esas tablas toda la preparación.
+  Hay también rehashes posteriores fuera de las dos inspecciones: no están
+  eliminados por la pista de capacidad del inspector ni se incluyen en esa suma.
+- Tras alcanzar el límite de observación, **una pausa normal**, Enter a
+  **17:56:10.000 UTC**, confirmó «En pausa»/«Reanudar». La navegación/limpieza añade
+  tiempo al límite nominal de veinte minutos. No se mató proceso, borró progreso,
+  instaló ni reinició durante esta medición.
+- Artefactos filtrados: `/tmp/opencode/c146-resume-baseline/{summary,casc-events}.json`;
+  script de prueba `/tmp/opencode/c146-resume-baseline.py`. La app aún era C146,
+  por lo que esta evidencia no acredita los cambios nuevos. Caché no controlada,
+  descarga previa en torno a 8,3 GiB; no constituye un A/B causal de latencia total.
+
+Después el usuario autorizó **C147 local / `0.2.123-download-startup-test`**:
+reconstruir con inputs autenticados, auditar e instalar como actualización solo con
+pausa confirmada, preservando datos/progreso, sin publicar ni confirmar costes
+nuevos. La construcción y actualización posteriores se registran a continuación.
+
+### C147 local: reconstrucción, auditoría y actualización
+
+- Identidad/pins en `fff17ac`. La primera reconstrucción y su test fallaron de forma
+  cerrada ante los hashes de salida C146 obsoletos. Se actualizaron únicamente los
+  dos postimages CASC a los blobs exactos revisados de `c1bc7a1`, cotejados con Git;
+  preimages históricos y pins de inputs externos intactos. No se omite el gate.
+- `uv run --offline pytest tests/test_reconstruct_functional_source.py
+  tests/test_audit_functional_ui_apk.py -q`: **56 passed**, 2,51 s tras esa corrección.
+- Reconstrucción autenticada en
+  `/home/adrian/wowforever-artifacts/work/download-startup-c147-authenticated-20261025/`.
+  El primer build requería `local.properties`; se añadió solo la ubicación SDK en
+  la copia externa, sin secretos ni cambios al código. `:app:assembleModernDebug
+  --offline --no-daemon --max-workers=2`, JDK17: **BUILD SUCCESSFUL**, 5 min 2 s,
+  68 tareas. No se repiten los tests JVM ya aprobados por un retag.
+- `audit_functional_ui_apk.py --receipt … --apk … --output …`:
+  **PASS_SOURCE_BUILD_AND_PAYLOAD_AUDIT**, 2.226 fuentes sin cambios respecto al
+  receipt y 178 payloads. APK 484.904.119 bytes, SHA-256
+  `1291a0718bd40c974edf383c525870d15adb43d8a852a87562d0067493548f5c`.
+- Comparación de inventarios de receipts C146/C147: **siete diferencias** exactas:
+  build/version, marcador de procedencia, `ForeverCasc`, `ForeverClientUpdater`,
+  `ForeverClientManagement` y los tests `ForeverCascTest`/servicio foreground.
+  Las cinco fuentes/tests críticos cotejados también coinciden byte a byte con repo.
+- La revisión independiente previa de algoritmo/concurrencia se mantiene. Un nuevo
+  intento de revisión del retag no arrancó por variante de worker no disponible;
+  no se afirma una revisión adicional realizada. El responsable inspeccionó los
+  seis cambios de línea de identidad/pins/tests y los resultados de auditoría.
+- Comprobación inmediatamente anterior: UI «En pausa»/«Reanudar», ningún servicio
+  updater activo ni ejecutable Wine/box64/WoW observado. Un primer filtro demasiado
+  amplio confundía «wow» del paquete propio con un ejecutable guest; se corrigió a
+  nombres de ejecutables antes de intervenir, sin matar nada.
+- Actualización autorizada mediante `adb install -r`: **Success**. PackageManager
+  confirma C147 / `0.2.123-download-startup-test`, minSdk29/targetSdk36 como C146.
+  Sin desinstalar, borrar, publicar, reboot ni cambios de seguridad. No se afirma
+  verificación integral de los datos conservados ni mejora física todavía.
+- Tras actualizar, la app no estaba en primer plano. Para continuar con las guardas
+  de control UHID se requiere abrirla desde el icono, sin iniciar juego. No se usa
+  otra vía de control UI para sortear la guarda ni se confirma un coste nuevo.
 
 ## Auditoría del objetivo (cierre pendiente)
 
@@ -243,4 +321,4 @@ paquete `com.wowforever.arm64probe`, C146 / `0.2.122-performance-preview`.
 | Menor preparación al iniciar/reanudar | Menos rehashes y tiempos host del inspector sin fuente; `c1bc7a1`, cuatro focales PASS | Recorrido completo y primer byte Android, sin confundir pausa viva y proceso muerto |
 | Primera pulsación efectiva, sin repetir | Guard síncrono y pending handoff revisados; conserva flujo habitual 3/1 acciones; diez tests del servicio PASS; `633329e` | Prueba real de interacción, sin equipararla a tests del protocolo |
 | Garantías intactas | Review independiente de capacidad/cotas; qualify, replan, consentimiento, crypto, Wi-Fi y durabilidad no eliminados; compilación Modern y focales de capacidad/costes aprobados | No se ejecutó toda la suite; verificación física de la candidata pendiente |
-| Entrega versionada y honesta | Optimización, UI y notas en commits separados; sin APK ni operación física | No cerrar objetivo/plan por el ahorro de un subcomponente |
+| Entrega versionada y honesta | Optimización, UI y notas en commits separados; baseline física C146; C147 local construida/auditada/actualizada sin reset | Interacción y medición C147 pendientes; no cerrar por ahorro de un subcomponente |
