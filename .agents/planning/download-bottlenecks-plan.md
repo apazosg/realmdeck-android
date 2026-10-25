@@ -78,7 +78,12 @@ experiment may continue, but all other validation cadence remains unchanged
 while that decision is pending. No new option, configuration switch, quota or
 checkpoint-format change is implied by this evaluation.
 
-#### Concrete lighter policy — pending approval
+#### Concrete lighter policy — approved, implementation in progress
+
+The user approved this exact trade-off on 2026-10-25. US-007 AC-05/FR-005 and
+US-008 AC-04/FR-004 now record it, with TC-008 and TC-019 respectively tracing
+the changed boundaries and retained-source failure behavior. Implementation,
+independent review, exact source admission and physical measurement remain gates.
 
 The proposed experiment for directed sourceless installs is:
 
@@ -103,27 +108,22 @@ forcing its original output descriptor. Neither the current full root validation
 nor the proposed lightweight check proves that both descriptors refer to the same
 file under every concurrent path substitution. The proposed experiment leaves
 that existing narrow race unchanged, rather than claiming to solve it or adding
-an unproven descriptor abstraction. Acceptance must explicitly include this limit;
+an unproven descriptor abstraction. Acceptance explicitly includes this limit;
 if same-file descriptor binding is required, settle that as a separate prerequisite.
 
-Proposed UC/AC decision: allow deferred full destination checks and intermediate
+Approved UC/AC decision: allow deferred full destination checks and intermediate
 staging writes under this policy; require stopping without group acknowledgement
-or raw retirement on a detected lightweight/full-check failure. Reconcile US-007
-AC-05/FR-005 and US-008 AC-04/FR-004 after approval. Test root/base substitution,
+or raw retirement on a detected lightweight/full-check failure. US-007
+AC-05/FR-005 and US-008 AC-04/FR-004 have been reconciled. Test root/base substitution,
 selection change, partial flush, rollover and resume, and explicitly verify that
 marker-only changes are detected at the next full boundary, not falsely at each
-group. No cadence implementation has been made.
+group. Cadence implementation is in progress; no changed APK has been activated.
 
-After discussing the drawbacks, the user requests a policy lighter even than
-one full check per four-object group. The next design therefore separates heavy
-admission checks from a minimal identity check at durable writer boundaries.
-Evaluate full checks at initial/resumed admission, new segment opens and activation,
-with lightweight root/base/selection identity checks per commit group. This is
-directional approval to develop a more aggressive trade-off, not evidence that
-the lighter check already binds the open segment to the file being forced.
-Resolve that binding and document deferred marker/ancestor/mount-metadata checks
-before approving the concrete contract or implementing changed cadence. Do not
-introduce an arbitrary timer or claim unchanged protection for deferred checks.
+The earlier directional request for lighter checks has now been superseded by
+approval of the explicit split policy and its deferred-check and descriptor-race
+limits above. Implementation and measured acceptance, not contract approval,
+remain pending. Do not introduce an arbitrary timer or claim equivalent coverage
+for deferred marker/ancestor/mount-metadata checks.
 
 The HTTP batch is not a storage transaction. Current source callbacks revalidate
 before waiting for a fetched object; CASC then verifies the private source, appends
@@ -137,8 +137,8 @@ Therefore a fetch-batch counter is not an adequate replacement for a writer hook
 | Conservative batching | At the first append of each durable group and again before its durable acknowledgement, plus segment opens | Roughly two full checks per four objects when groups fill; detects a mid-group change before acknowledging, but not necessarily before every staging append. |
 | Balanced candidate | Before forcing/checkpointing each durable group, plus initial staging access, segment opens, resume and final activation | Roughly one full check per four objects when groups fill; accepts delayed detection during up to one unacknowledged group. No claim that intermediate staging writes are prevented. |
 
-The balanced candidate above is the earlier comparison; the lighter split policy
-now proposed supersedes it for approval. Neither is implemented.
+The balanced candidate above is the earlier comparison; the approved lighter
+split policy supersedes it. Neither has yet been activated.
 Keep per-object payload authentication, cancellation, safe owned-file opens,
 existing force/checkpoint order and raw retention until durable acknowledgement.
 Do not use disconnect notifications as the sole guard: they may arrive late.
@@ -152,9 +152,9 @@ recorded 185.5 s). Segment opens, partial groups and unchanged file-level checks
 reduce that saving. This is not a throughput prediction or proof of the 3.2-MB/s
 goal; timing scopes and object cohorts differ.
 
-Before implementation, approve the explicit permission for staging writes within
-an unchecked group, reconcile US-007 AC-05/FR-005 and US-008 recovery criteria as
-needed, and review writer hooks in both sourced and sourceless paths. Focused tests
+Permission for staging writes within an unchecked group and the reconciled
+US-007/US-008 contract are approved. Review writer hooks in both sourced and
+sourceless paths before acceptance. Focused tests
 must change/remount/replace the destination after an intermediate append and
 before commit, verify no group acknowledgement or premature raw retirement,
 cover segment rollover/partial flush and resume, and preserve existing integrity
