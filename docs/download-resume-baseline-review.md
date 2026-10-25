@@ -350,11 +350,40 @@ El usuario confirmó después **«Confirmar y probar»** para el plan concreto d
 pausa normal, con carga útil limitada a la ventana de prueba de dos minutos. No
 autoriza dejar descargando todo el cliente ni aceptar otro plan de costes.
 
+### Confirmación y pausa/reanudación C147
+
+- Un solo «Descargar», Enter **18:41:45.562202 UTC**. Primera muestra a +3,012 s:
+  «Comprobando almacenamiento…»/«Pausar». La transferencia fue visible a
+  **+984,696 s**: «Descargando 33.9 MiB de 63.0 GiB». Es una cota de observación
+  mediante UI, no el instante exacto del primer byte de red.
+- Inspector del ejecutor: +225,735 a +359,140 s, **133.405 ms, cero rehashes**.
+  Después, la carga del checkpoint de **355.973 objetos** tardó **164.885 ms**;
+  cinco rehashes observados fuera del inspector siguen presentes. No se afirma
+  que la pista de capacidad elimine esos trabajos de recuperación.
+- Primer pedido de fuente registrado a +974,979 s, con verificación de prefijo
+  solapada: 41.404 objetos verificados y 314.569 pendientes. Un pedido puede
+  reutilizar datos privados: no demuestra por sí solo primer byte nuevo de red.
+- Una pausa normal, Enter **18:58:38.215912 UTC**, confirmó «En pausa»/«Reanudar».
+  Commit final: **128 objetos, 60.552.826 bytes escritos**; no son necesariamente
+  bytes nuevos de red. La pausa llegó unos 28 s después de la primera muestra de
+  transferencia, sin dejar descargando el cliente completo.
+- Un solo «Reanudar», Enter **18:59:09.282172 UTC**; respuesta de preparación
+  observada a +2,774 s. Su inspector duró **177.388 ms, cero rehashes**.
+  A **+526,058 s** volvió al resumen con **62,9 GiB / 65,1 GiB** y «Descargar».
+  **No se confirmó otra vez**. No se ha validado todavía Resume en una acción:
+  hay que distinguir una invalidación incorrecta de un presupuesto por volumen
+  legítimamente mayor, aunque el pico combinado redondeado haya bajado.
+- Artefacto filtrado: `/tmp/opencode/c147-startup-trial/download-resume-summary.json`.
+  El diagnóstico posterior con debugger, si consigue leer los argumentos de la
+  guarda, no se considerará una medición de rendimiento. No se elimina ninguna
+  comparación de identidad, revisión, espacio o consentimiento para hacer avanzar
+  el flujo.
+
 ## Auditoría del objetivo (cierre pendiente)
 
 | Entregable | Evidencia | Pendiente |
 |---|---|---|
-| Menor preparación al iniciar/reanudar | Menos rehashes y tiempos host del inspector sin fuente; `c1bc7a1`, cuatro focales PASS | Recorrido completo y primer byte Android, sin confundir pausa viva y proceso muerto |
-| Primera pulsación efectiva, sin repetir | Guard síncrono y pending handoff revisados; conserva flujo habitual 3/1 acciones; diez tests del servicio PASS; `633329e` | Prueba real de interacción, sin equipararla a tests del protocolo |
-| Garantías intactas | Review independiente de capacidad/cotas; qualify, replan, consentimiento, crypto, Wi-Fi y durabilidad no eliminados; compilación Modern y focales de capacidad/costes aprobados | No se ejecutó toda la suite; verificación física de la candidata pendiente |
-| Entrega versionada y honesta | Optimización, UI y notas en commits separados; baseline física C146; C147 local construida/auditada/actualizada sin reset | Interacción y medición C147 pendientes; no cerrar por ahorro de un subcomponente |
+| Menor preparación al iniciar/reanudar | Menos rehashes y tiempos host; tres inspectores C147 físicos sin rehashes; transferencia visible tras una confirmación | Reducción causal de latencia total y primer byte exacto no acreditados |
+| Primera pulsación efectiva, sin repetir | Flujo físico abrir/Continuar/Descargar completado sin acciones extra; diez tests del servicio PASS; `633329e` | Resume volvió a pedir confirmación; diagnosticar la guarda antes de atribuir defecto o aceptar costes |
+| Garantías intactas | Review y focales; checkpoint recuperado y pausa normal con commit durable; ninguna guarda eliminada | No se ejecutó toda la suite; reconexión UI durante transferencia y Resume válido pendientes |
+| Entrega versionada y honesta | Commits separados; baseline C146 y C147 auditada/instalada/probada sin reset | Resolver reanudación y aceptación global; no cerrar por ahorro de un subcomponente |

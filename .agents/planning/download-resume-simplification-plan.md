@@ -247,6 +247,12 @@ costes y la reanudación con una sola acción cuando el plan siga siendo válido
   `1.60.1.70532`, 63,0 GiB pendientes y 65,2 GiB adicionales. Ejecución y una
   reanudación con observación acotada, pausa final y progreso conservado; no dejar
   descargando el cliente entero ni aceptar costes distintos por esa autorización.
+- Ejecución física C147: una confirmación → transferencia visible a +984,696 s;
+  pausa cooperativa, checkpoint recuperado y commit final de 128 objetos. Resume
+  único → a +526,058 s volvió a pedir «Descargar» (62,9/65,1 GiB). No se aceptó otra
+  confirmación. Diagnosticar la condición exacta de `canResume`: los presupuestos
+  privados/destino se comparan separadamente y no basta un pico combinado menor
+  para demostrar que el consentimiento sigue válido. No relajar la guarda.
 - Consentimiento persistente tras muerte del proceso y pausa viva son cambios de
   producto fuera del primer alcance. Si resultan necesarios, presentar decisión;
   conservar checkpoint no autoriza a descargar automáticamente.
