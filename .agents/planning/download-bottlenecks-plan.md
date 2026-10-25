@@ -80,6 +80,17 @@ checkpoint-format change is implied by this evaluation.
 
 #### Concrete cadence choices — pending approval
 
+After discussing the drawbacks, the user requests a policy lighter even than
+one full check per four-object group. The next design therefore separates heavy
+admission checks from a minimal identity check at durable writer boundaries.
+Evaluate full checks at initial/resumed admission, new segment opens and activation,
+with lightweight root/base/selection identity checks per commit group. This is
+directional approval to develop a more aggressive trade-off, not evidence that
+the lighter check already binds the open segment to the file being forced.
+Resolve that binding and document deferred marker/ancestor/mount-metadata checks
+before approving the concrete contract or implementing changed cadence. Do not
+introduce an arbitrary timer or claim unchanged protection for deferred checks.
+
 The HTTP batch is not a storage transaction. Current source callbacks revalidate
 before waiting for a fetched object; CASC then verifies the private source, appends
 to staging, and forces segment/checkpoint data in groups of at most four objects.
