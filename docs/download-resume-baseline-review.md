@@ -310,9 +310,16 @@ nuevos. La construcción y actualización posteriores se registran a continuaci�
   confirma C147 / `0.2.123-download-startup-test`, minSdk29/targetSdk36 como C146.
   Sin desinstalar, borrar, publicar, reboot ni cambios de seguridad. No se afirma
   verificación integral de los datos conservados ni mejora física todavía.
-- Tras actualizar, la app no estaba en primer plano. Para continuar con las guardas
-  de control UHID se requiere abrirla desde el icono, sin iniciar juego. No se usa
-  otra vía de control UI para sortear la guarda ni se confirma un coste nuevo.
+- Tras actualizar, la app no estaba en primer plano. El bloqueo de apertura manual
+  quedó obsoleto al permitir las reglas vigentes el control completo del dispositivo
+  de desarrollo. En la continuación aprobada se comprobó de nuevo C147 instalada,
+  ausencia de ejecutables guest y auditoría retenida PASS; la actividad se abrió
+  mediante ADB sin reinstalar, reiniciar ni iniciar juego.
+- Home mostró «Cliente no instalado»/«Descargar cliente», compatible con un cliente
+  parcial todavía no publicado; no demuestra pérdida de progreso. Una pulsación de
+  «Descargar cliente» mostró «Destino: Unidad USB» y «Continuar». Se mide ahora una
+  preparación desde proceso fresco hasta el resumen, sin confirmar descarga ni
+  equipararla a la reanudación del mismo proceso de la baseline C146.
 
 ## Auditoría del objetivo (cierre pendiente)
 

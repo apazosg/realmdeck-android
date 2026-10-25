@@ -14,6 +14,11 @@ reiniciar, borrar progreso ni cambiar seguridad/garantías. No aceptar costes nu
 sin consultarlos. Estas autorizaciones posteriores sustituyen el límite pasivo de
 aquel turno, no sus resultados ni sus limitaciones.
 
+Continuación aprobada mediante «sí, adelante»: conservar todo el trabajo anterior
+y completar su validación. Las reglas vigentes del dispositivo permiten también
+lanzar actividades por ADB: ya se abrió C147 directamente, sin intervención manual,
+reinstalación ni juego. Se mantienen privacidad, progreso y consulta de costes nuevos.
+
 Antecedente de lectura pasiva:
 [observación del log retenido](../../docs/download-passive-log-observation.md).
 Se mide la transferencia en curso, no el tiempo desde intención a primer byte;
@@ -222,9 +227,11 @@ costes y la reanudación con una sola acción cuando el plan siga siendo válido
   C146/C147 solo cambian tres fuentes productivas, dos tests, versión y marcador de
   procedencia. No se cambian los inputs históricos ni sus pins. Antes de actualizar:
   «En pausa», sin servicio updater ni ejecutable guest observado; `adb install -r`
-  devolvió Success, versión instalada 147. Tras actualización la app no está en
-  primer plano: abrirla manualmente desde el icono para seguir con guardas UHID,
-  sin usar otro método de control UI ni iniciar el juego.
+  devolvió Success, versión instalada 147. El bloqueo de apertura manual quedó
+  obsoleto tras actualizar las reglas de control. En la continuación aprobada ya se
+  abrió la actividad directamente mediante ADB: Home muestra «Cliente no instalado»
+  y «Descargar cliente», sin ejecutar juego. Esto no prueba pérdida del checkpoint
+  de una instalación aún no publicada; verificar el recorrido antes de transferir.
 - Se acredita reducción de trabajo del inspector host (commit `c1bc7a1`, 4/4
   regresiones focales); no reducción global ni física. La compilación integrada
   Modern y los diez tests del servicio pasaron con la fuente final de UI y updater
