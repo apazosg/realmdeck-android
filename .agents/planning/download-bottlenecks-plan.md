@@ -78,7 +78,41 @@ experiment may continue, but all other validation cadence remains unchanged
 while that decision is pending. No new option, configuration switch, quota or
 checkpoint-format change is implied by this evaluation.
 
-#### Concrete cadence choices — pending approval
+#### Concrete lighter policy — pending approval
+
+The proposed experiment for directed sourceless installs is:
+
+- Full validation at admission/resume, before accessing staging and opening a new
+  CASC segment, and before final activation. Do not repeat it for every source.
+- Before each durable group (including partial flushes), check the current
+  selection/revision and root/base identities using fresh no-follow attributes.
+  Missing, linked, wrong-type or changed identities stop the operation before
+  the group's force/checkpoint acknowledgement and raw retirement.
+- Keep individual payload authentication, cancellation, safe owned-file opens,
+  commit-group size, quotas and durable ordering unchanged. Other install/update
+  paths keep their existing full validation until separately evaluated.
+
+This deliberately defers full ancestor walks, marker reads and fresh volume/
+namespace metadata to the full-validation boundaries. Changes detectable only by
+those checks may remain undetected through multiple groups within one segment.
+Staging writes may have occurred before a failed group check; there is no fixed
+byte/time bound for four objects. This is reduced checking, not equivalent safety.
+
+The existing writer forces a segment by reopening its pathname rather than by
+forcing its original output descriptor. Neither the current full root validation
+nor the proposed lightweight check proves that both descriptors refer to the same
+file under every concurrent path substitution. The proposed experiment leaves
+that existing narrow race unchanged, rather than claiming to solve it or adding
+an unproven descriptor abstraction. Acceptance must explicitly include this limit;
+if same-file descriptor binding is required, settle that as a separate prerequisite.
+
+Proposed UC/AC decision: allow deferred full destination checks and intermediate
+staging writes under this policy; require stopping without group acknowledgement
+or raw retirement on a detected lightweight/full-check failure. Reconcile US-007
+AC-05/FR-005 and US-008 AC-04/FR-004 after approval. Test root/base substitution,
+selection change, partial flush, rollover and resume, and explicitly verify that
+marker-only changes are detected at the next full boundary, not falsely at each
+group. No cadence implementation has been made.
 
 After discussing the drawbacks, the user requests a policy lighter even than
 one full check per four-object group. The next design therefore separates heavy
@@ -103,7 +137,8 @@ Therefore a fetch-batch counter is not an adequate replacement for a writer hook
 | Conservative batching | At the first append of each durable group and again before its durable acknowledgement, plus segment opens | Roughly two full checks per four objects when groups fill; detects a mid-group change before acknowledging, but not necessarily before every staging append. |
 | Balanced candidate | Before forcing/checkpointing each durable group, plus initial staging access, segment opens, resume and final activation | Roughly one full check per four objects when groups fill; accepts delayed detection during up to one unacknowledged group. No claim that intermediate staging writes are prevented. |
 
-The balanced candidate is the proposed experiment, not an implemented policy.
+The balanced candidate above is the earlier comparison; the lighter split policy
+now proposed supersedes it for approval. Neither is implemented.
 Keep per-object payload authentication, cancellation, safe owned-file opens,
 existing force/checkpoint order and raw retention until durable acknowledgement.
 Do not use disconnect notifications as the sole guard: they may arrive late.
