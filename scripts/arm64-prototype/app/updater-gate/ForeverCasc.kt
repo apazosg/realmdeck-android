@@ -984,12 +984,19 @@ object ForeverCasc {
      * method returns normally and the user has approved the completed estimate.
      * The only writes are bounded index/hint scratch and one transient verified
      * object file under workDirectory; the workspace is removed on every exit.
+     *
+     * [targetObjectCountHint] is an admitted total-object count used only to
+     * pre-size the disk-backed target table and skip rehash pauses. It is
+     * clamped to the bounded record limit, never raises any quota, and never
+     * changes find/put results, callbacks, packing, or any verification: a
+     * wrong hint only pre-sizes more or less, exactly like the source estimate.
      */
     internal fun inspectTarget(
         sourceDataFiles: File?,
         workDirectory: File,
         objects: Sequence<IncrementalObjectSpec>,
         cancelled: () -> Boolean,
+        targetObjectCountHint: Int = 0,
         onObject: (IncrementalObjectSpec, Boolean) -> Unit,
     ): TargetScanResult {
         val inspectionStarted = System.nanoTime()
@@ -1007,7 +1014,10 @@ object ForeverCasc {
             }
             val table = DiskIndexTable(
                 File(workDirectory, "target-records.bin"),
-                source?.initialRecordEstimate ?: 0,
+                maxOf(
+                    source?.initialRecordEstimate ?: 0,
+                    targetObjectCountHint.coerceIn(0, MAX_TOTAL_INDEX_ENTRIES),
+                ),
                 cancelled,
             )
             var candidates: CandidateHintStore? = null

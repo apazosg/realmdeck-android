@@ -961,12 +961,17 @@ class ForeverClientUpdater(
                     }
                     // Physical archive order is not EKey order. Use the generic
                     // bounded inspector so packing and quota estimates match ingestion.
+                    // The archive order already admitted the complete target count:
+                    // pass it as a capacity-only hint so the disk-backed target
+                    // table pre-sizes once instead of rehashing mid-scan. The hint
+                    // never changes results, callbacks, packing, or verifications.
                     ForeverCasc.inspectTarget(
                         null,
                         File(inspectionWork, "scan"),
                         specs,
                         cancelled,
-                        onScannedObject,
+                        targetObjectCountHint = archiveOrder.objectCount.coerceIn(0L, Int.MAX_VALUE.toLong()).toInt(),
+                        onObject = onScannedObject,
                     )
                 }
             } else {
@@ -1013,7 +1018,7 @@ class ForeverClientUpdater(
                             File(inspectionWork, "scan"),
                             specs,
                             cancelled,
-                            onScannedObject,
+                            onObject = onScannedObject,
                         )
                         if (stagedNext != null) throw IllegalStateException("resumable CASC checkpoint has an object outside the complete target cursor")
                         inspected

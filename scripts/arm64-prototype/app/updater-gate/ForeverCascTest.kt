@@ -1722,6 +1722,88 @@ class ForeverCascTest {
     }
 
     @Test
+    fun targetInspectionCapacityHintKeepsIdenticalPlanAndRejections() {
+        val root = tempDir()
+        try {
+            // Small source with verified reuse plus one missing object: the
+            // hint only pre-sizes the disk-backed target table, so every hint
+            // variant must report the identical plan and callback rows.
+            val sourceData = File(root, "source/Data/data")
+            val existing = (0 until 9).map { index ->
+                val decoded = "hint-existing-$index".toByteArray()
+                val raw = blteRaw(decoded)
+                val rawFile = file(root, "encoded/hint-existing-$index.blte", raw)
+                val ekey = encodedEkey(raw)
+                val spec = ForeverCasc.IncrementalObjectSpec(ekey, md5Hex(decoded), raw.size.toLong(), decoded.size.toLong())
+                val record = JSONObject().put("encoding_keys", JSONArray().put(ekey))
+                    .put("decoded_size", decoded.size).put("content_key", md5Hex(decoded))
+                spec to ForeverCasc.RuntimeObject(record, rawFile)
+            }
+            ForeverCasc.materialize(
+                File(root, "source"), "hint-plan\n".toByteArray(), emptyList(), emptyList(),
+                existing.map { it.second }, { false },
+            )
+            val newDecoded = "hint-new-object".toByteArray()
+            val newRaw = blteRaw(newDecoded)
+            val newEkey = encodedEkey(newRaw)
+            val newSpec = ForeverCasc.IncrementalObjectSpec(newEkey, md5Hex(newDecoded), newRaw.size.toLong(), newDecoded.size.toLong())
+            val target = existing.map { it.first } + newSpec
+            val sourceBefore = directFileHashes(sourceData)
+            val workParent = File(root, "app-cache").also { assertTrue(it.mkdirs()) }
+
+            fun planWithHint(hint: Int): Pair<ForeverCasc.TargetScanResult, List<Pair<String, Boolean>>> {
+                val callbacks = mutableListOf<Pair<String, Boolean>>()
+                val plan = ForeverCasc.inspectTarget(
+                    sourceData,
+                    File(workParent, "hinted-$hint"),
+                    target.asSequence(),
+                    { false },
+                    targetObjectCountHint = hint,
+                ) { spec, verified -> callbacks += spec.ekey to verified }
+                assertFalse(File(workParent, "hinted-$hint").exists())
+                return plan to callbacks
+            }
+
+            val (unhinted, unhintedCallbacks) = planWithHint(0)
+            assertEquals(10L, unhinted.totalObjects)
+            assertEquals(9L, unhinted.verifiedObjects)
+            assertEquals(1L, unhinted.missingObjects)
+            // Exact, undersized, and oversized hints must all agree row-for-row.
+            listOf(1, 10, 100_000).forEach { hint ->
+                val (hinted, hintedCallbacks) = planWithHint(hint)
+                assertEquals("hint $hint changes the plan", unhinted, hinted)
+                assertEquals("hint $hint changes callback rows", unhintedCallbacks, hintedCallbacks)
+            }
+            assertEquals(sourceBefore, directFileHashes(sourceData))
+
+            // Duplicate and short-prefix collisions are still rejected with a hint.
+            val duplicate = target.first()
+            val duplicateError = org.junit.Assert.assertThrows(IllegalArgumentException::class.java) {
+                ForeverCasc.inspectTarget(
+                    null, File(workParent, "hinted-duplicate"), sequenceOf(duplicate, duplicate), { false },
+                    targetObjectCountHint = target.size,
+                ) { _, _ -> }
+            }
+            assertTrue(duplicateError.message.orEmpty().contains("duplicate EKey"))
+            assertFalse(File(workParent, "hinted-duplicate").exists())
+
+            val flipped = if (duplicate.ekey[18] == '0') '1' else '0'
+            val collision = duplicate.copy(ekey = duplicate.ekey.substring(0, 18) + flipped + duplicate.ekey.substring(19))
+            val collisionError = org.junit.Assert.assertThrows(IllegalStateException::class.java) {
+                ForeverCasc.inspectTarget(
+                    null, File(workParent, "hinted-collision"), sequenceOf(duplicate, collision), { false },
+                    targetObjectCountHint = target.size,
+                ) { _, _ -> }
+            }
+            assertTrue(collisionError.message.orEmpty().contains("short EKey prefix collision"))
+            assertFalse(File(workParent, "hinted-collision").exists())
+            assertEquals(sourceBefore, directFileHashes(sourceData))
+        } finally {
+            delete(root)
+        }
+    }
+
+    @Test
     fun targetInspectionCancellationRemovesOnlyItsOwnedScratch() {
         val root = tempDir()
         try {
