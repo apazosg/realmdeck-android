@@ -78,6 +78,42 @@ experiment may continue, but all other validation cadence remains unchanged
 while that decision is pending. No new option, configuration switch, quota or
 checkpoint-format change is implied by this evaluation.
 
+#### Concrete cadence choices — pending approval
+
+The HTTP batch is not a storage transaction. Current source callbacks revalidate
+before waiting for a fetched object; CASC then verifies the private source, appends
+to staging, and forces segment/checkpoint data in groups of at most four objects.
+A new segment and a forced partial group can introduce additional boundaries.
+Therefore a fetch-batch counter is not an adequate replacement for a writer hook.
+
+| Policy | Full destination validation | Trade-off |
+|---|---|---|
+| Current | Per requested object | Smallest object-count detection window, with repeated expensive root walks; the existing fetch wait can still separate the check from the write. |
+| Conservative batching | At the first append of each durable group and again before its durable acknowledgement, plus segment opens | Roughly two full checks per four objects when groups fill; detects a mid-group change before acknowledging, but not necessarily before every staging append. |
+| Balanced candidate | Before forcing/checkpointing each durable group, plus initial staging access, segment opens, resume and final activation | Roughly one full check per four objects when groups fill; accepts delayed detection during up to one unacknowledged group. No claim that intermediate staging writes are prevented. |
+
+The balanced candidate is the proposed experiment, not an implemented policy.
+Keep per-object payload authentication, cancellation, safe owned-file opens,
+existing force/checkpoint order and raw retention until durable acknowledgement.
+Do not use disconnect notifications as the sole guard: they may arrive late.
+Do not change quotas, commit-group size, checkpoint format or activation consent.
+Unknown storage identity or a failed group check must stop without acknowledging
+or discarding the retained raws; no automatic repair of the changed destination.
+
+Under the measured per-call cost, reducing four full validations to one could
+avoid at most approximately 75% of that validation component (about 139 s of the
+recorded 185.5 s). Segment opens, partial groups and unchanged file-level checks
+reduce that saving. This is not a throughput prediction or proof of the 3.2-MB/s
+goal; timing scopes and object cohorts differ.
+
+Before implementation, approve the explicit permission for staging writes within
+an unchecked group, reconcile US-007 AC-05/FR-005 and US-008 recovery criteria as
+needed, and review writer hooks in both sourced and sourceless paths. Focused tests
+must change/remount/replace the destination after an intermediate append and
+before commit, verify no group acknowledgement or premature raw retirement,
+cover segment rollover/partial flush and resume, and preserve existing integrity
+tests. If this requires a new recovery guarantee or format, stop for that decision.
+
 ### Next bounded storage experiment
 
 The first source inspection identifies a same-point `exists(NOFOLLOW_LINKS)` /
