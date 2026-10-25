@@ -6,6 +6,26 @@ date: 2026-10-25
 
 # Download performance work
 
+## Proposed next implementation — pending approval
+
+Stop adding diagnostic-only releases for the force helper. The measured next
+candidate is increasing the maximum durable CASC commit group from four to sixteen
+objects, retaining pressure/rollover/end partial flushes. Keep the 34-key/1-GiB
+raw budget and sixteen fetch workers unchanged. Data force and checkpoint force
+must still succeed before acknowledgement or raw retirement. Existing checkpoint
+format and identity remain unchanged; verify legacy resume and budget-pressure
+liveness with focused regressions before an audited candidate.
+
+This deliberately allows up to sixteen objects in an unacknowledged group and
+reduces the frequency of its light storage check; it does not bound bytes or time.
+Full admission, segment-open, resume and activation checks remain. A crash may
+require more unacknowledged staging work to be replayed, not loss of acknowledged
+progress. Sixteen is a proposed maximum, not a promise that every flush reaches
+that size. Fewer forces are expected, but wall-time savings are not guaranteed.
+Obtain approval of this trade-off and reconcile affected storage/recovery specs
+before implementation. Then make the change and perform one validation run;
+further profiling is not a prerequisite to trying this measured, bounded change.
+
 ## Latest append diagnosis
 
 C144 completed a 608.682-second observation and paused normally. Its force helper
