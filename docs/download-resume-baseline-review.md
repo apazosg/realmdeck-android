@@ -594,9 +594,11 @@ Preparación observada de C149:
   hasta el resumen con los 948/1.454 s posteriores a Descargar/Resume de C148.
   Falta medir el inicio real de transferencia con el plan C149 autorizado.
 
-El nuevo plan se presentó para confirmación al usuario; todavía no se registra
-una aprobación ni se pulsa «Descargar». La reconexión completa al gestor también
-queda pendiente. Los artefactos C149 están en `physical-trial/prepare-summary.json`.
+El usuario respondió después **«Confirmar y medir»** para ese plan exacto. Se
+lanzó una única prueba de Descargar/pausa/Resume/reapertura, con transferencia
+breve y pausa final; no autoriza otros costes ni descargar todo el cliente. El
+resultado completo y la reconexión todavía están pendientes. Los artefactos C149
+están en `physical-trial/prepare-summary.json` y `download-resume-summary.json`.
 
 ### Retención de evidencia
 

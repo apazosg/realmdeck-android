@@ -165,6 +165,28 @@ aceptación. Antes de otra candidata:
   la reapertura al gestor con el botón real «Ver descarga». No repetir toda una
   descarga únicamente para corregir una expectativa errónea del guion.
 
+Amortización adicional dentro de las garantías aprobadas: los lectores de
+checkpoint posteriores conservan la resolución escalar de metadatos/ordinales
+por frame. La prueba física C149 usa su APK congelada; el trabajo local siguiente
+es independiente y no debe sustituir esa medición:
+
+- Usar el mismo catálogo autoritativo y ordinales en lotes de hasta 256 también
+  en inspección, carga y verificación del prefijo sellado. Mantener todas las
+  comparaciones por frame y los controles globales; la ruta legacy sin membresía
+  y la ruta con fuente no cambian de contrato.
+- Validar CRC/tipo antes de acumular; resolver y validar el lote antes de aplicar
+  sus registros, finalizar o truncar una cola incompleta. Un fallo no puede perder
+  progreso que antes se conservaba. No cambiar formatos, ownership ni orden durable.
+- Respetar `cpByteEnd` y comprobaciones frescas por grupo del verificador. Los lotes
+  son locales a cada lector; nada de caché compartida ni confianza entre leases.
+- **No** anticipar el stream de entrada del escritor: su callback escalar y sus
+  límites de prefetch/raw permanecen intactos, evitando dependencias de backpressure.
+- Exigir equivalencia/rechazos, cancelación, cola parcial y prefijo solapado en
+  pruebas focales e inspección independiente. Si no se preservan esas propiedades
+  con una modificación acotada, detener ese ajuste para decisión, no relajar una
+  guarda. No generar otra candidata hasta acabar las pruebas/revisión; C149 continúa
+  su ensayo independiente sin aceptar automáticamente costes nuevos.
+
 - Registrar versión/hash, dispositivo/destino, build/catálogo, tamaño del prefijo,
   cachés frías/calientes, red compartida, objetos/tamaños, bytes útiles y reintentos.
   Artefactos/capturas fuera del repo; publicar solo resúmenes sin información privada.
@@ -335,9 +357,10 @@ aceptación. Antes de otra candidata:
   reconstrucción/build final y auditoría fuente/payload PASS, actualización local
   verificada sin reset. Primera preparación única: respuesta +2,963 s, inspector
   178,687 s desde +113,067 s, resumen +440,830 s. Plan visible 70532/Unidad USB,
-  descarga 62,8 GiB y adicional 65,0 GiB (app/cliente 1,7/63,2). No se ha confirmado
-  payload: se solicitó aprobación de ese plan para medir el tiempo total y reabrir
-  el gestor. No dar por terminada la optimización por la reducción host de consultas.
+  descarga 62,8 GiB y adicional 65,0 GiB (app/cliente 1,7/63,2). El usuario respondió
+  «Confirmar y medir» y se lanzó una prueba única y acotada, con pausa final. Esperar
+  su resultado completo para comparar y verificar reapertura; no dar por terminada
+  la optimización por la reducción host de consultas ni repetir la prueba en curso.
 - La extensión de lotes a otros lectores requiere preservar CRC/layout/ordinales,
   tail recuperable y límite congelado `cpByteEnd`. No adelantar el stream de entrada
   del escritor sin analizar backpressure de las cotas raw: no es un cambio aprobado
