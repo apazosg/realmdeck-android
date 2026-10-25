@@ -9,22 +9,22 @@ RealmDeck Android is the project and repository brand; existing in-app names and
 the Android package ID are unchanged.
 
 > **Experimental preview, not a general release.** A user reported a successful
-> first login on C141 on one device. C142 has not been installed or visually tested
-> on a device. There is no evidence of long-session stability, measured performance,
+> first login on C141 on one device. C146 has one-device upgrade and launcher-entry
+> evidence, not full-client or gameplay acceptance. There is no evidence of long-session stability,
 > broad device support, or a one-click install. The proprietary game client is not
 > included or redistributed here.
 
 ## Current status
 
-Evidence snapshot: **2026-10-23**. The latest published launcher is C142,
-version `0.2.118-apk-update-notice` (version code 142). The latest positive
-device report is for C141: the user reported a successful first login. That result
-does not validate C142.
+Evidence snapshot: **2026-10-25**. The experimental launcher is C146,
+version `0.2.122-performance-preview` (version code 146). The earlier C141 first-login
+report does not establish gameplay acceptance for this build.
 
 The evidence remains deliberately narrow:
 
-- C142 has not been installed or visually tested on a physical device. No measured
-  performance or long-session result is reported.
+- C146 was audited, upgraded without resetting progress and opened through the
+  ordinary launcher on one phone. Download results vary; no general speed promise
+  or long-session result is established.
 - No multi-device compatibility matrix or general product release has been
   validated. The ARM64 launcher remains experimental.
 - A successful first login is not evidence of sustained gameplay, performance,
@@ -38,9 +38,9 @@ client pipeline are separate: the host tool's current contract targets Windows
 
 ## Android preview release
 
-[RealmDeck Android 0.2.118 · Preview (C142)](https://github.com/apazosg/realmdeck-android/releases/tag/c142-0.2.118-test)
+[RealmDeck Android 0.2.122 · Preview (C146)](https://github.com/apazosg/realmdeck-android/releases/tag/c146-0.2.122-test)
 is available as a manual APK download. It is an experimental, debug-signed ARM64
-build; review its [release notes](docs/releases/c142-0.2.118.md) and installation
+build; review its [release notes](docs/releases/c146-0.2.122.md) and installation
 limitations before trying it. The app does not provide a reliable automatic update
 path after the repository rename.
 

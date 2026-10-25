@@ -54,7 +54,8 @@ this plan, including public integration, push and prerelease publication, on
 - [x] Approve scope, prerelease channel and proposed C146 identity.
 - [x] Complete and document the C145 trial and normal final Pause. The observed
   0.401 MB/s does not establish a performance improvement: force-helper cost per
-  object fell, while source-readiness waits grew. Public acceptance is on hold.
+  object fell, while source-readiness waits grew. The user subsequently approved
+  publishing C146 experimentally with these limitations, not as a demonstrated win.
 - [x] Verify current remote refs and authenticated access: public `main` remains
   at `457056e`; authenticated read-only checks confirm the repository account has
   push access. No remote mutation has been attempted and no credential is logged.
@@ -63,11 +64,15 @@ this plan, including public integration, push and prerelease publication, on
   Commit `26a61d2` restores the known launcher entry; focused manifest/auditor tests
   pass, including inherited application-permission rejection. Actual APK auditing
   and ordinary launcher-icon access remain separate pending gates below.
-- [ ] Prepare English release notes and current-status documentation, with known
+- [x] Prepare English release notes and current-status documentation, with known
   baseline test failures and measured-device limitations stated honestly.
-- [ ] Build/audit C146 and verify normal launcher-icon access, upgrade without
+- [x] Build/audit C146 and verify normal launcher-icon access, upgrade without
   reset and preserved progress; do not interfere with the active C145 trial.
-- [ ] Audit asset privacy, source provenance, redistribution scope and checksums.
+- [x] Audit asset privacy, source provenance, redistribution scope and checksums.
+  The receipt-bound source whitelist and public text received independent review;
+  actual archive entries and all five asset checksums were checked locally. The
+  archive explicitly excludes signing material and private captures, and states
+  its partial runtime-source/build-input coverage.
 - [ ] Push the reviewed public branch, integrate via the permitted public-main
   workflow and tag the exact approved source commit; never import private history.
 - [ ] Publish the prerelease and verify its public metadata and asset hashes.
@@ -78,9 +83,10 @@ this plan, including public integration, push and prerelease publication, on
   remaining gates is still required before publication.
 - C145 completed normally but measured 0.401 MB/s on a different object cohort.
   Do not publish the group16 policy as a demonstrated end-to-end improvement.
-  Resolve the performance decision before public integration/publication. C146's
-  own source/build/payload audit passes; ordinary icon launch, upgrade proof and
-  source-attachment review remain pending and cannot be inherited from C145.
+  The user's subsequent instruction to proceed resolves this as an experimental
+  publication with explicit non-improvement caveats. C146's own audit and upgrade
+  fingerprint checks pass; a MAIN/LAUNCHER start from the ordinary launcher UID
+  was recorded after installation. Asset review and publication verification remain.
 - Authenticated read-only checks succeeded; public `main` is not protected.
   Final diff/asset review and all remaining release gates still precede any push.
 - On 2026-10-25 the user explicitly reconfirmed permission to redistribute the
