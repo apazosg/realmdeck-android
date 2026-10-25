@@ -20,11 +20,10 @@ verified. The ten-minute throughput trial was on C145, however, and must not be
 presented as a C146 performance result.
 
 The user confirmed that the public checkout has the latest tested code and
-approved making it the canonical active checkout. Treat
-`realmdeck-performance` as the canonical active checkout. The internal checkout
-is not another independent clone: its `.git` is currently the common Git
-directory for both worktrees. Treat it as a legacy archive until a separately
-verified metadata migration is approved. The user subsequently authorized
+approved making it the canonical active checkout, then explicitly requested
+unification. `realmdeck-performance` now has an independent `.git` directory.
+The old checkout has been retired into a private recovery archive; it is no
+longer a second active repository. The user subsequently authorized
 deleting the legacy 16-GiB client and clarified that retaining the old internal
 history is not a requirement. Preserve signing material and the inputs actually
 needed by the current build; do not keep duplicate working trees merely as a
@@ -34,9 +33,9 @@ maintenance precaution. Do not sweep large directories by age or name.
 
 | Area | Observed size/state | Initial disposition |
 |---|---:|---|
-| Public performance checkout | 23 MiB; `perf/download-bottlenecks` is one docs-only commit ahead of public `main`; C146 was released from this code line | Canonical active checkout; preserve the local planning commit |
-| Legacy internal checkout | 18 GiB; separate internal history; shares `.git` with public worktree | Preserve internal history and local data; do not delete or merge histories |
-| Legacy client installation | 16 GiB under the internal checkout | User authorized deletion; verify exact path and no active game/client processes before the separate removal |
+| Public performance checkout | Independent `.git`; current public source and three pre-existing local planning commits preserved | Only active checkout |
+| Legacy internal checkout | Retired into the private recovery area; `.git` renamed as archival metadata, not an active checkout | One recovery bundle/archive; no internal history imported into the public clone |
+| Legacy client installation | Previously 16 GiB | Explicitly authorized removal completed after no-game/process/path checks; phone installation untouched |
 | Legacy Rust `target` | 937 MiB ignored build output | Potential cleanup candidate only after dependency/process checks and explicit approval |
 | Legacy `.venv`, Android build/cache and pytest caches | At least 46 MiB plus generated build outputs | Recreate only when needed; list exact paths before any cleanup |
 | External artifact root | 348 GiB; includes 234 GiB `arm64-prototype`, 89 GiB `work`, runtime/toolchains, client snapshots, release evidence and Git-recovery backup | Preserve pending item-by-item classification |
@@ -45,10 +44,11 @@ maintenance precaution. Do not sweep large directories by age or name.
 | 62 `app/build` trees under `arm64-prototype/*/source/GameNative-…` | 105.08 GiB total: `intermediates` 77.48 GiB, `tmp` 2.90 GiB, `.transforms` 1.06 GiB, `kspCaches` 1.04 GiB, `kotlin` 0.87 GiB; `outputs` 21.67 GiB | Proposed removal limited to 296 generated subdirectories (83.36 GiB); preserve all `outputs` (48 trees contain APKs), reports, test results, receipts and source/assets |
 | Internal Rust/Python/Android generated data | `target` 937 MiB; `.venv` 46 MiB; `.pytest_cache` 2.8 MiB; Android Gradle cache 408 KiB/build 17 MiB; diagnostics `node_modules` 39 MiB and `dist` 288 KiB | Candidate only after checking required local environments/processes; preserve the private tree and all tracked files |
 
-Repository facts: public HEAD is a descendant of public `origin/main`; the
-internal `main` history is unrelated and must not be merged into the public
-history. The public worktree's `.git` file points into the internal checkout's
-`.git/worktrees` directory. The internal tree contains ignored `client/`,
+Initial repository facts: public HEAD was a descendant of public `origin/main`;
+the internal `main` history was unrelated. The public worktree's `.git` file
+pointed into the internal checkout's `.git/worktrees` directory. This dependency
+has now been removed without changing source files or public commits. The
+internal tree contained ignored `client/`,
 `target/`, `.venv/`, caches, logs and private data. A running local service and
 long-lived Gradle daemons were observed; do not stop them or remove their
 directories without establishing ownership and quiescence.
@@ -56,9 +56,9 @@ An untracked resume-plan document was observed during the initial inventory.
 Later checks show a clean internal checkout and a separate public planning
 commit; this task did not move, stage or delete that document.
 
-The public checkout also has one local commit not yet in public `main`:
-`a6a2135 docs: plan measured download and resume simplification`. Preserve it;
-this cleanup does not authorize pushing or dropping that commit.
+Before independence, the public checkout contained three local commits beyond
+public `main`, including concurrent planning work. All three were preserved,
+including HEAD `561adcb`. No commits were pushed or dropped by the consolidation.
 
 The current application reconstruction recipe has hard-coded dependencies in
 the external artifact root, including the upstream archive, recipe bundle,
@@ -132,11 +132,12 @@ the recipe is deliberately migrated and verified in a separate change.
   immediately before cleanup.
 - [x] Confirm that one independent public-based repository is the desired final
   layout; keeping two active repositories is not the objective.
-- [ ] Review the Git-metadata cutover procedure before changing either checkout.
-- [ ] Build a minimal pinned-input/signing-material map and validate one-copy
-  reconstruction before removing input duplicates.
-- [ ] Remove the explicitly authorized legacy client only after path/quiescence
+- [x] Independently review and execute the standalone Git-metadata cutover.
+- [x] Map and authenticate the current pinned input files and directories;
+  preserve signing material. Input relocation/deduplication remains separate.
+- [x] Remove the explicitly authorized legacy client after path/quiescence
   validation, without touching the installed phone client.
+- [x] Retire the old active checkout into one private archive and verified bundle.
 - [x] Present exact cleanup candidates and obtain approval to clean them.
 - [x] Quarantine only approved regenerable artifacts, then verify before deletion.
 - [x] Remove the verified 296-directory quarantine: 89,502,289,506 bytes
@@ -164,7 +165,39 @@ Evidence remains outside Git in the dated cleanup directory: candidate manifest,
 quarantine journal, scripts, purge log and post-cleanup fsck output. Four selected
 host reconstruction/admission tests passed (36 deselected); no full build or
 whole-suite result is claimed. Standalone Git migration, input deduplication and
-the separately authorized legacy-client deletion are not completed by this step.
+the separately authorized legacy-client deletion were not completed by that
+first step; their later status is recorded below.
+
+## Standalone public repository verification
+
+The user explicitly requested unification. A new single-branch clone transferred
+the public branch through Git's object transport, with no hardlink/alternate
+dependency on the internal object store. It retained public `main` and all three
+local public commits. The internal HEAD commit is absent from the new object
+database. A complete local legacy bundle was created and verified separately.
+
+Independent review found no blocking cutover issue; the final script also checks
+public branch refs and rejects the internal commit before the swap. The old
+`.git` pointer was saved, the new standalone `.git` installed, and 888 versioned
+file hashes, HEAD and clean status verified. `git fsck --full` exits 0. Effective
+author identity was retained without copying credentials or private branch refs.
+
+After confirming no host game processes or descriptors/current directories under
+the old checkout, its explicitly authorized client was removed. The remaining
+legacy checkout was moved into private recovery storage and its `.git` renamed
+as archival metadata. The original working-directory path no longer exists.
+Ignored private files were preserved without opening their contents.
+
+The canonical reconstruction input authentication succeeds from the independent
+checkout. Ten pinned external files match their exact SHA-256 pins; admitted
+probe/update directories also pass the recipe's existing checks. Those files
+remain in their current private artifact locations: no historical hashes were
+rewritten and no new APK/release/phone mutation occurred. Moving or deduplicating
+those input files still requires a separately validated recipe change.
+
+The external `git-independence` receipts record the before/after file hashes,
+standalone cutover, verified input map, client removal and legacy retirement.
+See [workspace guidance](../../docs/development-workspace.md) for routine use.
 
 ## Open Issues
 
@@ -177,9 +210,9 @@ the separately authorized legacy-client deletion are not completed by this step.
   The user approved this exact cleanup; quarantine, verification and permanent
   removal are complete. No other historical build or artifact was deleted.
 - The final layout is one independent public-based checkout. The technical
-  cutover and input relocation still require verification; retaining the old
-  internal checkout indefinitely is not the proposed maintenance solution.
-- The public branch has one local plan commit not yet in public `main`; this
-  cleanup plan does not authorize pushing or merging it.
+  Git cutover is verified and the old checkout is retired. Input relocation
+  and further historical-artifact deduplication are not completed here.
+- The public branch retains local planning commits not yet in public `main`;
+  this cleanup does not authorize pushing or merging them.
 - The cause of previous host reboots and empty Git/cache artifacts remains
   unestablished; cleanup must not be described as fixing it.
