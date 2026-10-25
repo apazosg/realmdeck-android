@@ -2,7 +2,8 @@
 
 ## Alcance y calidad de la evidencia
 
-Solo pasos 3/4 del [plan](../.agents/planning/download-resume-simplification-plan.md)
+**Corte histórico anterior a la aprobación del trabajo local.** Solo pasos 3/4
+del [plan](../.agents/planning/download-resume-simplification-plan.md) estaban
 autorizados. Inspección del árbol limpio `a4c0f4e`, sin ejecutar app, tests, red de
 cliente ni comandos sobre móvil. No hay modificación de código/contratos/garantías.
 El recorrido siguiente es una **traza estática**, no reproducción dinámica ni una
@@ -101,5 +102,103 @@ que sean una línea base actual ni comparación controlada. Si los logs no separ
 qualify/plan, declarar esa limitación y pedir autorización de instrumentación
 antes de introducirla. No se solicita ni presupone permiso de código en este paso.
 
-Plan sigue draft; pasos3/4 no completos sin reproducción/línea base suficiente y
-decisión de cuello prioritario actual. Goal global abierto, sin aceptación medida.
+En ese corte el plan seguía draft; pasos3/4 no completos sin reproducción/línea
+base suficiente y decisión de cuello prioritario actual.
+
+## Continuación local autorizada — 2026-10-25
+
+El usuario aprobó diagnóstico, cambios mínimos de código/UI y pruebas locales,
+sin operar el teléfono ni publicar una APK. El plan está `in-progress`. La
+inspección estática y las cifras históricas anteriores no se convierten por esa
+aprobación en una línea base física actual. Los resultados nuevos se documentarán
+con su alcance real; no se ha acreditado todavía una mejora de latencia en USB.
+
+### Intervenciones locales seleccionadas
+
+- **Reentrada UI:** `runOperation` no tenía admisión síncrona independiente de la
+  recomposición. Dos callbacks de pulsación podían iniciar dos cadenas; las capas
+  de exclusión inferiores seguían impidiendo una doble ejecución, pero no el
+  trabajo/error innecesario. La revisión detectó además la ventana entre entregar
+  el plan y el arranque asíncrono del servicio. La corrección debe cubrir ambas,
+  sin añadir confirmaciones ni cambiar los límites de acciones de FR-008/011.
+- **Planificación sin fuente:** `ForeverCasc.inspectTarget` iniciaba
+  `target-records.bin` con estimado cero aunque `buildPlan` conoce el conteo
+  admitido. El [perfil host histórico](launcher-app-status.md) documenta crecimientos
+  y rehashes completos de esa tabla. Se ensaya predimensionarla, conservando la
+  misma tabla, inserciones, detección de duplicados, validación por objeto, packing
+y cross-checks. Esto es una optimización de asignación, no una exención de
+  comprobaciones. La medición host actual se resume a continuación.
+
+La segunda planificación del ejecutor, `requireSamePlan`, la calificación fresca,
+el consentimiento y las barreras de almacenamiento/durabilidad no se suprimen.
+No se modifica US-008: son correcciones de implementación dentro del contrato
+aprobado (FR-003/004/008/009/011), no requisitos nuevos.
+
+### Comprobación local de ensamblado y contratos UI
+
+`/home/adrian/.local/bin/uv run --offline pytest
+tests/test_reconstruct_functional_source.py tests/test_functional_launcher_ux.py -q`:
+**59 passed, 1 failed**. La invocación inicial con `uv` no estaba en `PATH`; se
+localizó el ejecutable existente sin instalar dependencias. El fallo es
+`test_account_unavailable_state_cannot_offer_a_destructive_save_as_account_save`:
+espera una cadena de autologin ausente también en `HEAD`. Ni ese test ni
+`overlay/ForeverFunctionalAutologinSettings.kt` cambian en esta tarea. Se registra
+como fallo previo fuera del alcance, no se modifica autologin para hacer pasar la
+suite. Estos tests Python no prueban compilación ni interacción Compose.
+
+### Comparación host del inspector sin fuente
+
+Fixture sintético de **300.000 objetos en orden arbitrario**, no catálogo ni
+almacenamiento del teléfono. Dos ejecuciones por variante en el mismo harness:
+la referencia usa la implementación nueva con pista cero, que conserva el
+dimensionamiento anterior; no son dos APKs. El orden fijo fue referencia → pista
+exacta → pista grande, repetido dos veces (sin aleatorización ni control formal
+de JIT/caché).
+
+| Capacidad inicial | Duraciones `inspectTarget` | Rehashes por ejecución |
+|---|---|---|
+| Anterior: estimado cero | 3.546 / 3.025 ms | 4 |
+| Nueva: conteo exacto 300.000 | 2.119 / 2.016 ms | 0 |
+| Nueva: pista 1.144.978 | 1.794 / 1.829 ms | 0 |
+
+El `TargetScanResult` y las **300.000 filas de callback** coincidieron en las seis
+ejecuciones. Se acredita la eliminación de cuatro reconstrucciones completas de
+la tabla para esa entrada; las dos repeticiones no caracterizan variabilidad ni
+permiten extrapolar un porcentaje al dispositivo o a toda la preparación. La
+pista sobredimensionada también conserva resultados, pero producción usa el
+conteo admitido del orden de archivo, no una constante ajustada al benchmark.
+No se ha medido tiempo a primer byte, reanudación completa ni progreso sostenido.
+La regresión focal y tres vecinas pasaron en el harness host (4/4):
+`targetInspectionCapacityHintKeepsIdenticalPlanAndRejections`,
+`targetInspectionPlansNineVerifiedAndOneMissingObjectWithoutProducingOutput`,
+`targetInspectionRejectsDuplicateAndShortPrefixCollisionAndCleansScratch` y
+`targetInspectionRejectsArchiveIdOverflowBeforeRequestingTheNextObject`.
+Compilación host de `ForeverBlte.kt`, `ForeverCasc.kt`, `ForeverCascTest.kt` y
+`Bench.kt`: exit 0. Esto **no** acredita compilación completa de Updater ni UI.
+
+Auditoría del harness: `/tmp/opencode/opt-harness/Bench.kt`, semilla fija
+`0xC10C4A5C`, generación y barajado previos al cronómetro, sin red ni ADB. Comprueba
+limpieza del scratch, cuenta logs `disk index rehash begin` y compara resultado
+completo y callbacks. Kotlin compiler embeddable 2.1.21, host OpenJDK 21.0.12.1+1;
+la comprobación Gradle integrada usa JDK 17, no se confunden ambos entornos.
+
+### Estado de la comprobación integrada
+
+- El primer intento Gradle Legacy en la copia aislada
+  `/home/adrian/dev/realmdeck-opt/GameNative` falló en compilación: el staging
+  parcial de updater omitió `overlay/ForeverClientUpdateCheck.kt`, que sí existe
+  en el repositorio. **No es un defecto acreditado del producto ni de la
+  optimización.** Se corrigió el diagnóstico del worker y se solicitó completar
+  esa dependencia antes del siguiente intento; resultado pendiente.
+- La suite `ForeverClientUpdateForegroundServiceTest` se lanzó offline con JDK17
+  en otra copia aislada bajo
+  `/home/adrian/wowforever-artifacts/work/download-resume-gate-20261025/GameNative`.
+  No se ha recibido todavía resultado del test de la fuente final. Sus tres
+  regresiones nuevas comprueban el protocolo pending/segundo reset/start, no
+  interacción Compose. No se presenta como suite aprobada.
+- Revisión independiente del algoritmo: sin hallazgos bloqueantes. Revisión UI:
+  admisión pending validada; ajustes de Pausar y apertura pending inspeccionados
+  por el responsable tras la corrección, sin prueba de pulsaciones en dispositivo.
+
+Optimización versionada en `c1bc7a1`; no APK, operación de dispositivo ni mejora
+física acreditada. La aceptación integrada y de recorrido completo sigue abierta.

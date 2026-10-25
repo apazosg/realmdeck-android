@@ -1,6 +1,6 @@
 ---
 id: download-resume-simplification-2026-10-25
-state: draft
+state: in-progress
 date: 2026-10-25
 ---
 
@@ -10,10 +10,11 @@ Objetivo solicitado: simplificar descarga y reanudación, reducir interacciones
 repetidas y tiempo hasta transferencia real, revisar comprobaciones previas sin
 debilitar las garantías acordadas y resolver cuellos con medidas antes/después.
 Este plan continúa la investigación existente; no reabre la publicación C146 ni
-autoriza otra entrega pública. **Aprobación parcial vigente:** únicamente pasos 3
-y 4, con instrumentación existente; sin cambios de código, contratos/garantías ni
-operaciones sobre el móvil. El documento permanece en `draft`. Cualquier medida
-que requiera esas operaciones debe detenerse y solicitar autorización.
+autoriza otra entrega pública. **Aprobación vigente (2026-10-25):** el usuario
+eligió «Aprobar trabajo local» y confirmó «adelante». Se autorizan diagnóstico,
+cambios mínimos de código/UI y pruebas locales (pasos 2–6 y documentación del 8),
+sin operar el teléfono ni publicar una APK. Los cambios de garantías/contrato
+siguen requiriendo propuesta y aprobación explícitas.
 
 Solicitud renovada mediante objetivo el 2026-10-25: «Reducir el tiempo de
 preparación inicial al iniciar o restaurar una descarga. mejorar la ui UX para
@@ -126,12 +127,19 @@ costes y la reanudación con una sola acción cuando el plan siga siendo válido
 ## Implementation / Action Items
 
 - [x] 1. Registrar objetivo e inspeccionar contratos, evidencia y puntos de entrada.
-- [ ] 2. Aprobar este plan y resolver decisiones que cambien garantías antes de código.
-  Solo pasos 3/4 aprobados; no aprobación global ni de implementación.
+- [x] 2. Aprobar este plan y resolver decisiones que cambien garantías antes de código.
+  Aprobado el alcance local; no se autoriza modificar garantías ni operar el móvil.
 - [ ] 3. Reproducir recorrido y obtener línea base por fases/acciones con entradas
   controladas; usar instrumentación agregada existente antes de añadir otra.
-- [ ] 4. Elegir el cuello prioritario demostrado; documentar qué detecta cada chequeo,
+- [x] 4. Elegir el cuello prioritario demostrado; documentar qué detecta cada chequeo,
   qué puede cambiar y qué guardas se mantienen. Si cambia contrato, parar y aprobarlo.
+  Intervención local elegida: dimensionamiento inicial de la tabla temporal del
+  inspector sin fuente con el conteo del catálogo ya admitido. El perfil histórico
+  identifica rehashes; se exige comparación host actual antes de aceptar la mejora.
+  Separadamente se corrige reentrada de pulsaciones y arranque foreground pendiente.
+  No se elimina ninguna calificación, recorrido ni replanificación.
+  Benchmark host actual de 300.000 objetos: cuatro rehashes con pista cero y
+  ninguno con conteo exacto; resultados/callbacks idénticos. Véase el informe.
 - [ ] 5. Implementar mejora mínima y regresiones focales; revisar diff y evidencias.
 - [ ] 6. Revisar independientemente límites sensibles; reconstruir/auditar candidata
   solo si hace falta prueba física. No repetir checks exitosos sin cambio relevante.
@@ -142,20 +150,22 @@ costes y la reanudación con una sola acción cuando el plan siga siendo válido
 
 ## Open Issues
 
-- Pendiente de aprobación del alcance local de implementación propuesto arriba.
-  «Restaurar» se trata inicialmente como reanudar una descarga interrumpida,
+- «Restaurar» se trata inicialmente como reanudar una descarga interrumpida,
   distinguiendo pausa del mismo proceso y reapertura tras cierre; no incluye
   restaurar copias de seguridad ni persistir consentimiento entre procesos.
 - Pasos 3/4 parcialmente ejecutados mediante inspección y evidencia histórica:
   [informe de diagnóstico](../../docs/download-resume-baseline-review.md).
-  No se han modificado código/specs, ejecutado suites ni operado dispositivos.
-  La reproducción dinámica y línea base actual requieren autorización adicional;
+  Al iniciar esta fase no se habían modificado código/specs, ejecutado suites ni
+  operado dispositivos. La reproducción local ya está autorizada;
   no se marcan completos los pasos 3/4 con una inspección estática.
 - Acceso/estado actual del teléfono no comprobados. La aprobación del plan no implica
   permiso para detener una partida o transferencia, instalar, reiniciar ni confirmar
   costes desconocidos; coordinar la ventana física antes de esas operaciones.
-- No hay ahorro porcentual ni duplicación segura cuantificados aún. El diagnóstico
-  debe decidir si mantener un chequeo, consolidarlo o proponer otro contrato.
+- Se acredita reducción de trabajo del inspector host (commit `c1bc7a1`, 4/4
+  regresiones focales); no reducción global ni física. La compilación integrada
+  sigue pendiente: el primer intento de staging parcial omitió una dependencia
+  overlay existente y se corrigió ese staging, no el código del producto. El
+  guard UI y sus regresiones aún esperan veredicto Gradle de la fuente final.
 - Consentimiento persistente tras muerte del proceso y pausa viva son cambios de
   producto fuera del primer alcance. Si resultan necesarios, presentar decisión;
   conservar checkpoint no autoriza a descargar automáticamente.
