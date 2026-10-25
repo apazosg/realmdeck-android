@@ -122,11 +122,17 @@ APPROVED_WINE_OVERLAY_DELTAS = {"ForeverRunStore.kt", "ForeverLaunchController.k
 # The historical baseline remains immutable; every other binding still matches it.
 APPROVED_REVIEWED_OVERLAY_DELTAS = {
     "ForeverBoundedLogRetention.kt": "7b92dffd6ed05ae9c6b7ab72f90476cff8c7fcdfe073ed4e49c0f74bca3c03f7",
+    "ForeverClientProvisioner.kt": "98c25790d3d126ec9bbf2ead1eb2ba976abece91dfa11511c77d09ed4082122d",
     "ForeverHostSafetyTest.kt": "4698d034e0f0cacc20528641c4a702db2df51aefa8e08891e93017ccf98c6d45",
     "ForeverLaunchController.kt": "8e89d2b0a79af9c6d6470cbf7897fdcb3941437febac96cd819a48258fdd1dac",
     "ForeverProcessDiagnostics.kt": "8011dfbc1b88751fd655745a76ed888a2d2c8aa80a087d243def776196a9299e",
     "ForeverRunStore.kt": "b6b699cbe5cdca69d08409424bae2b66433a34890ea4af1f386b300a99e9d744",
+    "ForeverFunctionalClientStorage.kt": "9497a0aa068f93c3be0d2a64e5ef2b4eab3fbf22510d1510e6ae9df63c622443",
 }
+REVIEWED_FUNCTIONAL_SOURCE = (
+    "ForeverFunctionalClientStorage.kt",
+    Path("app/src/main/java/app/gamenative/ForeverFunctionalClientStorage.kt"),
+)
 PREVALIDATION_MANIFEST_REPAIR = (
     Path("app/src/main/AndroidManifest.xml"),
     "3a2377c5001323e7dfdcbe79d1eaf161c58137da0100530c9ad49b7737c3c652",
@@ -456,7 +462,7 @@ def _arm64_diagnostics_postimage(data: bytes) -> bytes:
 
 
 def validate_overlay_authority(baseline: dict[str, object]) -> dict[Path, bytes]:
-    """Validate the 63 pinned overlay bindings and produce their exact postimages."""
+    """Validate the pinned baseline bindings and the exact reviewed storage source."""
     root = Path(__file__).parents[3]
     output: dict[Path, bytes] = {}
     bindings = baseline["overlayAuthority"]["bindings"]
@@ -473,7 +479,7 @@ def validate_overlay_authority(baseline: dict[str, object]) -> dict[Path, bytes]
             if source != expected_source or source_digest != approved_delta_sha256:
                 raise ValueError(f"reviewed overlay delta pin mismatch: {name}")
             # Keep the additional semantic checks for the previously approved
-            # Wine Store/controller replacements; the three privacy changes
+            # Wine Store/controller replacements; Home/Wi-Fi and privacy deltas
             # are admitted solely by their exact reviewed content hashes.
             if name in APPROVED_WINE_OVERLAY_DELTAS:
                 text = raw.decode("utf-8")
@@ -491,6 +497,12 @@ def validate_overlay_authority(baseline: dict[str, object]) -> dict[Path, bytes]
         if len(generated) != (binding["generatedBytes"] if binding.get("currentRepoSourceMatchesHistoricalInput", True) else len(raw)) or hashlib.sha256(generated).hexdigest() != expected_digest:
             raise ValueError(f"overlay generated pin mismatch: {binding['name']}")
         output[Path(str(binding["path"]))] = generated
+    storage_name, storage_target = REVIEWED_FUNCTIONAL_SOURCE
+    storage_source = root / "scripts/arm64-prototype/app/overlay" / storage_name
+    storage_data = _source_file(storage_source)
+    if hashlib.sha256(storage_data).hexdigest() != APPROVED_REVIEWED_OVERLAY_DELTAS[storage_name]:
+        raise ValueError(f"reviewed overlay delta pin mismatch: {storage_name}")
+    output[storage_target] = storage_data
     return output
 
 
@@ -1395,8 +1407,9 @@ def main() -> int:
                 "sha256": RETAINED_BASELINE_APK_SHA256},
             "changedFiles": len(baseline["entries"]),
             "changedPathSHA256": {str(entry["path"]): entry["target59SHA256"] for entry in baseline["entries"]},
-            "overlayBindings": {"count": len(baseline["overlayAuthority"]["bindings"]),
-             "sourceInputSHA256": {str(binding["sourceInputPath"]): hashlib.sha256(_source_file(Path(__file__).parents[3] / str(binding["sourceInputPath"]))).hexdigest() for binding in baseline["overlayAuthority"]["bindings"]},
+            "overlayBindings": {"count": len(baseline["overlayAuthority"]["bindings"]) + 1,
+             "sourceInputSHA256": ({str(binding["sourceInputPath"]): hashlib.sha256(_source_file(Path(__file__).parents[3] / str(binding["sourceInputPath"]))).hexdigest() for binding in baseline["overlayAuthority"]["bindings"]} | {
+                 str(Path("scripts/arm64-prototype/app/overlay") / REVIEWED_FUNCTIONAL_SOURCE[0]): hashlib.sha256(_source_file(Path(__file__).parents[3] / "scripts/arm64-prototype/app/overlay" / REVIEWED_FUNCTIONAL_SOURCE[0])).hexdigest()}),
              "approvedWineDeltas": sorted(APPROVED_WINE_OVERLAY_DELTAS),
              "approvedReviewedOverlayDeltas": dict(sorted(APPROVED_REVIEWED_OVERLAY_DELTAS.items())),
              "generatedSHA256": {str(relative): hashlib.sha256(data).hexdigest() for relative, data in overlay_sources.items()}},

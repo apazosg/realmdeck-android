@@ -273,6 +273,9 @@ internal class ForeverClientCatalogResolver @JvmOverloads constructor(
         validateSelectionTags(download, ManifestKind.DOWNLOAD)
         validateSelectionTags(size, ManifestKind.SIZE)
         createWorkTables(db)
+        fun reportBatch(stage: String, rows: Long) {
+            if (rows == 1L || rows % SQL_BATCH_ROWS == 0L) progress(stage, rows, 0L)
+        }
 
         var executable: ForeverTactMetadata.InstallRecord? = null
         val installBatch = SqlBatch<ForeverTactMetadata.InstallRecord>(db) { statement, record ->
@@ -303,10 +306,13 @@ internal class ForeverClientCatalogResolver @JvmOverloads constructor(
             statement.bindLong(2, record.encodedSize)
             statement.executeInsert()
         }
+        progress("parse-download", 0L, 0L)
         val downloadStats = ForeverTactManifests.download(download, cancelled) { record ->
             downloadBatch.add(record)
+            reportBatch("parse-download", downloadBatch.totalRows)
         }
         downloadBatch.finish()
+        progress("parse-download", downloadBatch.totalRows, 0L)
         require(downloadBatch.totalRows == downloadStats.selectedEntries) {
             "download-manifest callback count disagrees with its streaming statistics"
         }
@@ -318,8 +324,13 @@ internal class ForeverClientCatalogResolver @JvmOverloads constructor(
             statement.bindLong(3, record.encodedSize)
             statement.executeInsert()
         }
-        val sizeStats = ForeverTactManifests.size(size, cancelled) { record -> sizeBatch.add(record) }
+        progress("parse-size", 0L, 0L)
+        val sizeStats = ForeverTactManifests.size(size, cancelled) { record ->
+            sizeBatch.add(record)
+            reportBatch("parse-size", sizeBatch.totalRows)
+        }
         sizeBatch.finish()
+        progress("parse-size", sizeBatch.totalRows, 0L)
         require(sizeBatch.totalRows == sizeStats.selectedEntries) {
             "size-manifest callback count disagrees with its streaming statistics"
         }
@@ -338,11 +349,12 @@ internal class ForeverClientCatalogResolver @JvmOverloads constructor(
             statement.bindLong(2, record.encodedSize)
             statement.executeInsert()
         }
+        progress("parse-encoding-content", 0L, 0L)
         val encodingStats = ForeverTactManifests.encoding(
             encoding,
             cancelled,
-            mappingBatch::add,
-            encodingBatch::add,
+            { record -> mappingBatch.add(record); reportBatch("parse-encoding-content", mappingBatch.totalRows) },
+            { record -> encodingBatch.add(record); reportBatch("parse-encoding", encodingBatch.totalRows) },
         )
         mappingBatch.finish()
         encodingBatch.finish()
@@ -663,6 +675,7 @@ internal class ForeverClientCatalogResolver @JvmOverloads constructor(
         var totalIndexBytes = 0L
         for (hash in indexHashes) {
             checkCancelled(cancelled)
+            progress("cdn-indexes", indexNumber, indexHashes.size.toLong())
             val indexFile = source.index(hash, cancelled) { value ->
                 progress("cdn-index-$indexNumber", value, 0L)
             }

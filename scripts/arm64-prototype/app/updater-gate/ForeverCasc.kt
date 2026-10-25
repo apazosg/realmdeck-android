@@ -15,17 +15,15 @@ import java.nio.file.StandardOpenOption
 import java.nio.channels.FileChannel
 import java.security.MessageDigest
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
 import java.util.logging.Logger
 import java.util.zip.CRC32
 import kotlin.math.min
 
 /**
- * Streams the admitted official target objects in manifest order for the
- * verifier's lockstep join with the checkpoint prefix. Implemented by the
- * engine with a dedicated catalog cursor on the verifier thread (never a
- * cursor shared with the producer), faked with an in-memory sequence in
- * core tests. The cursor stays open only for the verifier run; both sides
- * use the same ORDER BY ekey, so the join is positional with O(1) memory.
+ * Legacy verifier input: streams admitted official target objects in manifest
+ * order for a lockstep join with the checkpoint prefix. The membership-based
+ * path uses the bounded exact lookup instead and does not require this cursor.
  */
 internal typealias OverlapOfficialStream = (
     cancelled: () -> Boolean,
@@ -114,8 +112,10 @@ internal class CascOverlapCoordinator(
     private val lock = Any()
     /** Checkpointed keys that still hold a leftover raw; at most 34, ordered. */
     private val rawKeys = java.util.TreeSet<String>()
-    /** Last key of the last acked group; groups ack in checkpoint order. */
+    /** Legacy lexical watermark; used only by the range-based ack API. */
     private var verifiedThrough: String? = null
+    /** Exact acknowledged keys relevant to the bounded wanted-raw set. */
+    private val verifiedKeys = HashSet<String>()
     /** Wanted leftover keys snapshotted at construction; at most 34. */
     private val wanted: Set<String>
     /** Frozen staged-copy locations, published once by the writer at freeze. */
@@ -123,9 +123,14 @@ internal class CascOverlapCoordinator(
     private var rawKeyRecords: Map<String, OverlapRawKeyRecord> = emptyMap()
 
     init {
-        val normalized = wantedKeys.map { it.lowercase(java.util.Locale.ROOT) }.toSet()
-        require(normalized.size <= 34) { "overlap wanted raw-key set exceeds its 34-key recovery quota" }
-        wanted = normalized
+        require(wantedKeys.size <= 34) { "overlap wanted raw-key set exceeds its 34-key recovery quota" }
+        val normalized = HashSet<String>(34)
+        var count = 0
+        for (key in wantedKeys) {
+            if (++count > 34) throw IllegalArgumentException("overlap wanted raw-key set exceeds its 34-key recovery quota")
+            normalized += key.lowercase(java.util.Locale.ROOT)
+        }
+        wanted = normalized.toSet()
     }
 
     /** Snapshot of the wanted set for the single load pass. */
@@ -152,7 +157,7 @@ internal class CascOverlapCoordinator(
     fun registerRawKey(ekey: String): Boolean {
         val key = ekey.lowercase(java.util.Locale.ROOT)
         synchronized(lock) {
-            val done = verifiedThrough != null && key <= verifiedThrough!!
+            val done = key in verifiedKeys || (verifiedThrough != null && key <= verifiedThrough!!)
             if (done) return true
             if (rawKeys.size >= 34) {
                 throw IllegalStateException("overlap prefix raw-key registration exceeds its 34-key recovery quota")
@@ -201,17 +206,9 @@ internal class CascOverlapCoordinator(
     }
 
     /**
-     * Acknowledge one fully verified sealed group by count and key range.
-     * The range is the group's actual minimum/maximum key, so any internal
-     * order verifies exactly: only registered keys inside the verified range
-     * are drained, oldest first. Each claimed key retires exactly once, with
-     * file IO outside this lock. Unregistered keys need no action. A retire
-     * failure aborts the verifier with the failure recorded as primary.
-     *
-     * The production manifest is ekey-ordered (the same ORDER BY ekey cursor
-     * feeds the producer, the checkpoint, and the verifier's official
-     * stream), so groups are contiguous ranges and the drain is exact: a key
-     * is retired only after every object of its own sealed group proved.
+     * Legacy acknowledgement API for an EKey-ordered checkpoint. Production
+     * membership-based verification uses [ackGroupExact], since physical
+     * archive groups need not occupy contiguous lexical EKey ranges.
      */
     fun ackGroup(count: Long, minKey: String, maxKey: String, encodedBytes: Long) {
         require(count > 0) { "overlap group acknowledgement is empty" }
@@ -220,6 +217,49 @@ internal class CascOverlapCoordinator(
             toRetire = rawKeys.subSet(minKey, true, maxKey, true).toList()
             rawKeys.removeAll(toRetire.toSet())
             if (verifiedThrough == null || maxKey > verifiedThrough!!) verifiedThrough = maxKey
+        }
+        for (key in toRetire) {
+            try {
+                retirePrefixRaw(key)
+            } catch (t: Throwable) {
+                failure.compareAndSet(null, t)
+                throw t
+            }
+        }
+        ackedObjects.addAndGet(count)
+        ackedBytes.addAndGet(encodedBytes)
+    }
+
+    /**
+     * Acknowledge a fully verified group by its exact intersection with the
+     * bounded wanted-key set. Unlike the legacy range API, this is correct
+     * when EKeys from different archive groups interleave lexically. The
+     * verifier supplies at most the 34 wanted keys; no group-sized key list is
+     * retained. Keys are claimed under the lock and retired outside it.
+     */
+    fun ackGroupExact(count: Long, verifiedWantedKeys: Collection<String>, encodedBytes: Long) {
+        require(count > 0) { "overlap group acknowledgement is empty" }
+        require(verifiedWantedKeys.size <= 34) {
+            "overlap exact acknowledgement exceeds its 34-key recovery quota"
+        }
+        val normalized = HashSet<String>(34)
+        var countProvided = 0
+        for (key in verifiedWantedKeys) {
+            if (++countProvided > 34) {
+                throw IllegalArgumentException("overlap exact acknowledgement exceeds its 34-key recovery quota")
+            }
+            normalized += key.lowercase(java.util.Locale.ROOT)
+        }
+        require(normalized.all { it in wanted }) {
+            "overlap exact acknowledgement escapes its 34-key recovery quota"
+        }
+        val toRetire: List<String>
+        synchronized(lock) {
+            if (normalized.any { it in verifiedKeys }) {
+                throw IllegalStateException("overlap exact acknowledgement repeats an already verified key")
+            }
+            verifiedKeys.addAll(normalized)
+            toRetire = normalized.sorted().filter { rawKeys.remove(it) }
         }
         for (key in toRetire) {
             try {
@@ -319,6 +359,8 @@ object ForeverCasc {
     private const val INDEX_SORT_BATCH_RECORDS = 8_192
     /** Commit-stage timing cadence: aggregates cover that many new objects. */
     private const val COMMIT_TIMING_BATCH_OBJECTS = 256L
+    /** Small durable batches leave room for lookahead within the unchanged raw-key cap. */
+    internal const val RESUMABLE_COMMIT_GROUP_OBJECTS = 4
     private const val INDEX_MERGE_FAN_IN = 32
     private const val MAX_EKEY_HEADER_SIZE = 16 * 1024 * 1024
     private const val MAX_EKEY_HEADER_CHUNKS = 8_192
@@ -340,6 +382,14 @@ object ForeverCasc {
         val contentKey: String,
         val encodedSize: Long,
         val decodedSize: Long,
+    )
+
+    private data class PendingResumeCommit(
+        val originalSpec: IncrementalObjectSpec,
+        val spec: IncrementalObjectSpec,
+        val raw: File,
+        val archiveId: Int,
+        val offset: Long,
     )
 
     /**
@@ -577,9 +627,9 @@ object ForeverCasc {
 
     /**
      * Canonical target writer with an identity-bound, append-only checkpoint. Completed
-     * objects are kept only in the updater-owned output segments; a retry verifies and
-     * reuses those objects, truncating only an uncheckpointed tail of the last segment.
-     * The checkpoint is deliberately local to this writer rather than a generic cache.
+     * groups are kept only in the updater-owned output segments; a retry verifies and
+     * reuses checkpointed objects, truncating only an uncheckpointed tail of the final
+     * segment. The checkpoint is deliberately local to this writer, not a generic cache.
      */
     internal fun writeTargetIncrementalResumable(
         sourceDataFiles: File?,
@@ -593,6 +643,9 @@ object ForeverCasc {
         replayReaderFactory: ((() -> Boolean) -> CascReplayReader)? = null,
         overlapCoordinator: CascOverlapCoordinator? = null,
         overlapOfficialStream: OverlapOfficialStream? = null,
+        commitFlushRequest: AtomicReference<(() -> Boolean)?>? = null,
+        targetObjectCount: Int = 0,
+        targetMembership: ((String) -> IndexedValue<IncrementalObjectSpec>)? = null,
     ): IncrementalResult = writeIncrementalInternal(
         sourceDataFiles,
         outputDataFiles,
@@ -606,6 +659,9 @@ object ForeverCasc {
         replayReaderFactory = replayReaderFactory,
         overlapCoordinator = overlapCoordinator,
         overlapOfficialStream = overlapOfficialStream,
+        commitFlushRequest = commitFlushRequest,
+        targetObjectCount = targetObjectCount,
+        targetMembership = targetMembership,
     )
 
     /**
@@ -619,7 +675,16 @@ object ForeverCasc {
         objects: Sequence<IncrementalObjectSpec>,
         cancelled: () -> Boolean,
         checkpointIdentity: String,
+        targetObjectCount: Int = 0,
+        targetMembership: ((String) -> IndexedValue<IncrementalObjectSpec>)? = null,
     ): ResumeSummary {
+        require(if (targetMembership == null) targetObjectCount == 0 else
+            targetObjectCount > 0 && targetObjectCount.toLong() <= MAX_SCANNED_INDEX_RECORDS) {
+            "checkpoint membership count is outside its bounded target"
+        }
+        // The lookup must bind to the admitted catalog and a unique stable ordinal
+        // per EKey. The derived ordering hint supplies ordinals, never object data.
+        val seen = if (targetMembership == null) null else java.util.BitSet(targetObjectCount)
         val directory = outputDataFiles.toPath().toAbsolutePath().normalize()
         val checkpointDir = checkpointDirectory.toPath().toAbsolutePath().normalize()
         if (Files.exists(directory, LinkOption.NOFOLLOW_LINKS) &&
@@ -650,7 +715,7 @@ object ForeverCasc {
                 !header.copyOfRange(RESUME_MAGIC.size, RESUME_HEADER_SIZE).contentEquals(identityHash)
             ) throw IllegalStateException("resumable CASC checkpoint belongs to a different target or source revision")
             val target = objects.iterator()
-            var next = if (target.hasNext()) normalizeIncrementalSpec(target.next()) else null
+            var next = if (targetMembership == null && target.hasNext()) normalizeIncrementalSpec(target.next()) else null
             var previous = ""
             var completed = 0L
             var encodedBytes = 0L
@@ -676,7 +741,8 @@ object ForeverCasc {
                         val key = saved.ekey.lowercase()
                         if (!key.matches(Regex("[0-9a-f]{32}")) || !saved.contentKey.matches(Regex("(?i)[0-9a-f]{32}")) ||
                             saved.encodedSize !in 1..(ARCHIVE_LIMIT - SEGMENT_HEADER_SIZE - LOCAL_HEADER_SIZE) ||
-                            saved.decodedSize < 0 || saved.archiveId !in 0..1023 || saved.offset < SEGMENT_HEADER_SIZE || key <= previous
+                            saved.decodedSize < 0 || saved.archiveId !in 0..1023 || saved.offset < SEGMENT_HEADER_SIZE ||
+                            (targetMembership == null && key <= previous)
                         ) throw IllegalStateException("resumable CASC checkpoint object keys or sizes are invalid")
                         if (saved.archiveId != currentArchiveId) {
                             if ((currentArchiveId >= 0 && saved.archiveId != currentArchiveId + 1) ||
@@ -692,13 +758,26 @@ object ForeverCasc {
                         }
                         currentSegmentEnd = Math.addExact(saved.offset, Math.addExact(LOCAL_HEADER_SIZE.toLong(), saved.encodedSize))
                         if (currentSegmentEnd > ARCHIVE_LIMIT) throw IllegalStateException("resumable CASC checkpoint exceeds its segment byte bound")
-                        while (next != null && next!!.ekey < key) next = if (target.hasNext()) normalizeIncrementalSpec(target.next()) else null
-                        val spec = next ?: throw IllegalStateException("resumable CASC checkpoint contains an object outside the admitted target")
+                        val admitted = if (targetMembership == null) null else try {
+                            targetMembership(key).also {
+                                if (it.index !in 0 until targetObjectCount || requireNotNull(seen)[it.index]) {
+                                    throw IllegalStateException("resumable CASC checkpoint repeats an ordinal or exceeds its target")
+                                }
+                            }
+                        } catch (missing: NoSuchElementException) {
+                            throw IllegalStateException("resumable CASC checkpoint contains an object outside the admitted target", missing)
+                        }
+                        if (targetMembership == null) {
+                            while (next != null && next!!.ekey < key) next = if (target.hasNext()) normalizeIncrementalSpec(target.next()) else null
+                        }
+                        val spec = admitted?.value?.let(::normalizeIncrementalSpec) ?: next
+                            ?: throw IllegalStateException("resumable CASC checkpoint contains an object outside the admitted target")
                         if (spec.ekey != key || spec.contentKey != saved.contentKey.lowercase() ||
                             spec.encodedSize != saved.encodedSize || spec.decodedSize != saved.decodedSize
                         ) throw IllegalStateException("resumable CASC checkpoint object does not match the admitted target manifest")
                         previous = key
-                        next = if (target.hasNext()) normalizeIncrementalSpec(target.next()) else null
+                        if (admitted != null) requireNotNull(seen).set(admitted.index)
+                        else next = if (target.hasNext()) normalizeIncrementalSpec(target.next()) else null
                         completed = Math.addExact(completed, 1L)
                         encodedBytes = Math.addExact(encodedBytes, saved.encodedSize)
                     }
@@ -1201,6 +1280,9 @@ object ForeverCasc {
         replayReaderFactory: ((() -> Boolean) -> CascReplayReader)? = null,
         overlapCoordinator: CascOverlapCoordinator? = null,
         overlapOfficialStream: OverlapOfficialStream? = null,
+        commitFlushRequest: AtomicReference<(() -> Boolean)?>? = null,
+        targetObjectCount: Int = 0,
+        targetMembership: ((String) -> IndexedValue<IncrementalObjectSpec>)? = null,
     ): IncrementalResult {
         val writerStarted = System.nanoTime()
         var firstSourceRequested = false
@@ -1210,6 +1292,25 @@ object ForeverCasc {
             validateIncrementalPaths(sourceDataFiles, outputDataFiles)
         } else {
             validateResumableIncrementalPaths(sourceDataFiles, outputDataFiles, requireNotNull(checkpointDirectory))
+        }
+        require(if (targetMembership == null) targetObjectCount == 0 else
+            checkpointIdentity != null && canonicalTarget &&
+                targetObjectCount > 0 && targetObjectCount.toLong() <= MAX_SCANNED_INDEX_RECORDS) {
+            "checkpoint membership count is outside its bounded target"
+        }
+        if (targetMembership != null) {
+            // Authenticate complete existing frames read-only before output
+            // preparation can recover finalizing indexes or discard owned
+            // scratch. The load pass repeats this check against its own FD.
+            inspectResumableCheckpoint(
+                outputDataFiles,
+                requireNotNull(checkpointDirectory),
+                emptySequence(),
+                cancelled,
+                requireNotNull(checkpointIdentity),
+                targetObjectCount,
+                targetMembership,
+            )
         }
         val source = sourceDataFiles?.let { inspectExistingIndexFiles(it, cancelled, allowCandidateHints = canonicalTarget) }
             ?: ExistingIndexSet(emptyList(), LongArray(16), -1, 0)
@@ -1279,9 +1380,9 @@ object ForeverCasc {
         // its storage revalidation plus the prefetch-future wait, never a
         // pure network figure), privateVerifyMs (copy plus EKey/BLTE/content
         // verification into the owned private temporary), appendAndForceMs
-        // (owned segment open when needed, local-header/object append, flush
-        // and force), and checkpointMs (checkpoint-frame append). Plain
-        // monotonic sums of a few Longs; reported every batch below.
+        // (owned segment open, object append and bounded group data force), and
+        // checkpointMs (bounded group frame append/force). Plain monotonic sums
+        // of a few Longs; reported every batch below.
         var newObjectBytes = 0L
         var sourceResolveMs = 0L
         var privateVerifyMs = 0L
@@ -1314,6 +1415,34 @@ object ForeverCasc {
         var checkpoint: ResumableCheckpoint? = null
         var checkpointObjectCount = 0L
         var checkpointObjectsReused = 0L
+        val pendingResumeCommits = ArrayList<PendingResumeCommit>(RESUMABLE_COMMIT_GROUP_OBJECTS)
+        val targetOrdinalsSeen = if (targetMembership == null) null else java.util.BitSet(targetObjectCount)
+        val flushPendingResumeCommits: () -> Boolean = {
+            run {
+                if (pendingResumeCommits.isEmpty()) {
+                    false
+                } else {
+                    val batch = pendingResumeCommits.toList()
+                    val batchArchiveId = batch.first().archiveId
+                    if (batch.size > RESUMABLE_COMMIT_GROUP_OBJECTS || batch.any { it.archiveId != batchArchiveId }) {
+                        throw IllegalStateException("resumable CASC commit group exceeds its object or segment bound")
+                    }
+                    val segment = archive
+                        ?: throw IllegalStateException("resumable CASC commit group has no open segment")
+                    val dataForceStarted = System.nanoTime()
+                    segment.flush()
+                    forceFile(File(outputDataFiles, "data.%03d".format(batchArchiveId)))
+                    appendAndForceMs += (System.nanoTime() - dataForceStarted) / 1_000_000
+
+                    val checkpointStarted = System.nanoTime()
+                    appendResumeObjects(requireNotNull(checkpoint), batch)
+                    checkpointMs += (System.nanoTime() - checkpointStarted) / 1_000_000
+                    pendingResumeCommits.clear()
+                    for (commit in batch) sourceConsumed(commit.originalSpec, commit.raw)
+                    true
+                }
+            }
+        }
         // Sealed-prefix overlap state. Only the writer thread mutates the
         // table and the checkpoint; the verifier thread owns its reader and
         // reports through the coordinator. Both join before finalization.
@@ -1322,17 +1451,21 @@ object ForeverCasc {
         var verifierThread: Thread? = null
         var verifierPeerCancel: AtomicBoolean? = null
         var prefixSkipped = 0L
-        fun joinOverlapVerifier() {
-            val thread = verifierThread ?: return
-            verifierThread = null
-            try {
-                thread.join()
-            } catch (interrupted: InterruptedException) {
-                Thread.currentThread().interrupt()
-                verifierPeerCancel?.set(true)
-                thread.join()
-                throw java.util.concurrent.CancellationException("client provisioning cancelled")
+        fun joinOverlapVerifier(): Boolean {
+            val thread = verifierThread ?: return false
+            var interrupted = Thread.interrupted()
+            if (interrupted) verifierPeerCancel?.set(true)
+            while (thread.isAlive) {
+                try {
+                    thread.join()
+                } catch (_: InterruptedException) {
+                    interrupted = true
+                    verifierPeerCancel?.set(true)
+                }
             }
+            verifierThread = null
+            if (interrupted) Thread.currentThread().interrupt()
+            return interrupted
         }
         try {
             try {
@@ -1357,6 +1490,8 @@ object ForeverCasc {
                         bucketCounts,
                         cancelled,
                         overlapCoordinator?.snapshotWantedKeys() ?: emptySet(),
+                        targetObjectCount,
+                        targetMembership,
                     )
                     diagnostics.info("CASC checkpoint loaded objects=${loaded.objectCount} elapsedMs=${(System.nanoTime() - checkpointStarted) / 1_000_000}")
                     checkpoint = loaded.checkpoint
@@ -1369,14 +1504,15 @@ object ForeverCasc {
                     totalRecords = table.recordCount
                     // Sealed-prefix overlap: sourceless resumable with a
                     // checkpointed prefix and an explicit reader factory. The
-                    // coordinator and the official-tuple lookup must both be
-                    // present; anything else is a wiring error, never a silent
-                    // fallback to the serial replay path. An armed coordinator
-                    // with an empty checkpoint is equally express: the
+                    // coordinator and either the legacy official stream or the
+                    // exact membership lookup must be present; anything else is
+                    // a wiring error, never a silent fallback to serial replay.
+                    // An armed coordinator with an empty checkpoint is equally express: the
                     // eligibility peek runs before any write, so a mismatch
                     // here fails closed instead of downgrading mid-run.
                     if (overlapCoordinator != null || overlapOfficialStream != null) {
-                        if (overlapCoordinator == null || overlapOfficialStream == null ||
+                        if (overlapCoordinator == null ||
+                            (overlapOfficialStream == null && targetMembership == null) ||
                             sourceDataFiles != null || !canonicalTarget || replayReaderFactory == null
                         ) {
                             throw IllegalStateException("overlap CASC run is partially armed; refusing silent fallback to serial replay")
@@ -1417,10 +1553,12 @@ object ForeverCasc {
                                     outputDataFiles,
                                     checkpointFile,
                                     freeze,
-                                    requireNotNull(overlapOfficialStream),
+                                    overlapOfficialStream,
                                     requireNotNull(replayReaderFactory),
                                     coordinator,
                                     { coordinator.peerCancel.get() || cancelled() },
+                                    targetObjectCount,
+                                    targetMembership,
                                 )
                             } catch (t: Throwable) {
                                 coordinator.failure.compareAndSet(null, t)
@@ -1435,11 +1573,20 @@ object ForeverCasc {
                         archive = openAppendArchive(path)
                     }
                 }
+                if (checkpointIdentity != null) commitFlushRequest?.set(flushPendingResumeCommits)
                 for (originalSpec in objects) {
                     checkCancelled(cancelled)
                     if (overlap) overlapCoordinator?.failure?.get()?.let { throw it }
                     val spec = normalizeIncrementalSpec(originalSpec)
                     validateIncrementalSpec(spec)
+                    if (targetOrdinalsSeen != null) {
+                        verifyTargetMembership(
+                            spec,
+                            targetObjectCount,
+                            requireNotNull(targetMembership),
+                            targetOrdinalsSeen,
+                        )
+                    }
                     val ekeyBytes = spec.ekey.hexBytes()
                     val prefix = spec.ekey.substring(0, 18)
                     val bucket = computeBucket(ekeyBytes)
@@ -1641,62 +1788,66 @@ object ForeverCasc {
                     val privateVerifyStarted = System.nanoTime()
                     writeVerifiedSourceToTemporary(raw, temporary, spec, cancelled)
                     privateVerifyMs += (System.nanoTime() - privateVerifyStarted) / 1_000_000
-                    val appendStarted = System.nanoTime()
                     try {
-                        if (plannedSegment != null) {
-                            archive?.close()
-                            archive = null
-                            val openedFile = File(outputDataFiles, "data.%03d".format(plannedId))
-                            if (openedFile.exists() || Files.isSymbolicLink(openedFile.toPath())) {
-                                throw IllegalStateException("incremental CASC output segment already exists")
+                        if (plannedSegment != null && checkpointIdentity != null) flushPendingResumeCommits()
+                        val appendStarted = System.nanoTime()
+                        run {
+                            if (plannedSegment != null) {
+                                archive?.close()
+                                archive = null
+                                val openedFile = File(outputDataFiles, "data.%03d".format(plannedId))
+                                if (openedFile.exists() || Files.isSymbolicLink(openedFile.toPath())) {
+                                    throw IllegalStateException("incremental CASC output segment already exists")
+                                }
+                                val stream = BufferedOutputStream(openOwnedOutput(openedFile, false), BUFFER_SIZE)
+                                archive = stream
+                                stream.write(plannedSegment.first)
+                                stream.flush()
+                                forceFile(openedFile)
+                                plannedSegment.second.forEach { generated ->
+                                    if (!table.put(generated)) throw IllegalStateException("generated CASC segment header EKey already exists")
+                                    val generatedBucket = computeBucket(generated.entry.key, 1)
+                                    bucketCounts[generatedBucket]++
+                                    totalRecords++
+                                }
+                                if (canonicalTarget) outputSegmentHeadersAdded[plannedId] = true
+                                archiveId = plannedId
+                                nextArchiveId = plannedId + 1
+                                offset = SEGMENT_HEADER_SIZE.toLong()
+                                segmentCount++
                             }
-                            val stream = BufferedOutputStream(openOwnedOutput(openedFile, false), BUFFER_SIZE)
-                            archive = stream
-                            stream.write(plannedSegment.first)
-                            stream.flush()
-                            forceFile(openedFile)
-                            plannedSegment.second.forEach { generated ->
-                                if (!table.put(generated)) throw IllegalStateException("generated CASC segment header EKey already exists")
-                                val generatedBucket = computeBucket(generated.entry.key, 1)
-                                bucketCounts[generatedBucket]++
+
+                            val currentArchive = archive ?: throw IllegalStateException("incremental CASC segment was not opened")
+                            val currentId = archiveId
+                            val objectOffset = offset
+                            val localHeader = localHeader(ekeyBytes, total, currentId * ARCHIVE_LIMIT + objectOffset, 0)
+                            currentArchive.write(localHeader)
+                            copyFile(temporary, currentArchive, cancelled)
+                            val entry = IndexEntry(ekeyBytes.copyOfRange(0, 9), currentId, objectOffset, total)
+                            val record = ExistingIndexRecord(spec.ekey, entry, 0, Long.MAX_VALUE, targetSeen = true)
+                            if (table.put(record)) {
+                                bucketCounts[bucket]++
                                 totalRecords++
                             }
-                            if (canonicalTarget) outputSegmentHeadersAdded[plannedId] = true
-                            archiveId = plannedId
-                            nextArchiveId = plannedId + 1
-                            offset = SEGMENT_HEADER_SIZE.toLong()
-                            segmentCount++
-                        }
-
-                        val currentArchive = archive ?: throw IllegalStateException("incremental CASC segment was not opened")
-                        val currentId = archiveId
-                        val localHeader = localHeader(ekeyBytes, total, currentId * ARCHIVE_LIMIT + offset, 0)
-                        currentArchive.write(localHeader)
-                        copyFile(temporary, currentArchive, cancelled)
-                        if (checkpointIdentity != null) {
-                            currentArchive.flush()
-                            forceFile(File(outputDataFiles, "data.%03d".format(currentId)))
-                        }
-                        appendAndForceMs += (System.nanoTime() - appendStarted) / 1_000_000
-                        val entry = IndexEntry(ekeyBytes.copyOfRange(0, 9), currentId, offset, total)
-                        val record = ExistingIndexRecord(spec.ekey, entry, 0, Long.MAX_VALUE, targetSeen = true)
-                        if (table.put(record)) {
-                            bucketCounts[bucket]++
-                            totalRecords++
-                        }
-                        offset += total
-                        written++
-                        newObjectBytes = Math.addExact(newObjectBytes, spec.encodedSize)
-                        if (checkpointIdentity != null) {
-                            val checkpointAppendStarted = System.nanoTime()
-                            appendResumeObject(
-                                requireNotNull(checkpoint),
-                                spec,
-                                currentId,
-                                entry.archiveOffset,
-                            )
-                            checkpointMs += (System.nanoTime() - checkpointAppendStarted) / 1_000_000
-                            sourceConsumed(originalSpec, raw)
+                            offset += total
+                            written++
+                            newObjectBytes = Math.addExact(newObjectBytes, spec.encodedSize)
+                            appendAndForceMs += (System.nanoTime() - appendStarted) / 1_000_000
+                            if (checkpointIdentity != null) {
+                                if (pendingResumeCommits.size >= RESUMABLE_COMMIT_GROUP_OBJECTS) {
+                                    throw IllegalStateException("resumable CASC commit group exceeded its object bound")
+                                }
+                                pendingResumeCommits += PendingResumeCommit(
+                                    originalSpec,
+                                    spec,
+                                    raw,
+                                    currentId,
+                                    entry.archiveOffset,
+                                )
+                                if (pendingResumeCommits.size >= RESUMABLE_COMMIT_GROUP_OBJECTS) {
+                                    flushPendingResumeCommits()
+                                }
+                            }
                         }
                         if (written % COMMIT_TIMING_BATCH_OBJECTS == 0L) {
                             diagnostics.info("CASC commit batch newObjects=$written newBytes=$newObjectBytes sourceResolveMs=$sourceResolveMs privateVerifyMs=$privateVerifyMs appendAndForceMs=$appendAndForceMs checkpointMs=$checkpointMs elapsedMs=${(System.nanoTime() - writerStarted) / 1_000_000}")
@@ -1707,11 +1858,15 @@ object ForeverCasc {
                         }
                     }
                 }
+                if (targetOrdinalsSeen != null && targetOrdinalsSeen.cardinality() != targetObjectCount) {
+                    throw IllegalStateException("incremental manifest does not cover its complete admitted target")
+                }
+                if (checkpointIdentity != null) flushPendingResumeCommits()
                 if (overlap) {
                     val coordinator = requireNotNull(overlapCoordinator)
                     val freeze = requireNotNull(overlapFreeze)
                     val barrierStarted = System.nanoTime()
-                    joinOverlapVerifier()
+                    if (joinOverlapVerifier()) throw java.util.concurrent.CancellationException("client provisioning cancelled")
                     coordinator.failure.get()?.let { throw it }
                     // Joint publish barrier: every frozen prefix object
                     // group-acked by the verifier AND every new object durably
@@ -1733,18 +1888,27 @@ object ForeverCasc {
                     throw IllegalStateException("resumable CASC stage contains objects outside the complete target manifest")
                 }
             } catch (t: Throwable) {
+                var failure = t
+                if (t is java.util.concurrent.CancellationException && checkpointIdentity != null) {
+                    try {
+                        flushPendingResumeCommits()
+                    } catch (flushFailure: Throwable) {
+                        if (flushFailure !== t) flushFailure.addSuppressed(t)
+                        failure = flushFailure
+                    }
+                }
                 if (overlap) {
                     verifierPeerCancel?.set(true)
                     joinOverlapVerifier()
                     val verifierFailure = overlapCoordinator?.failure?.get()
-                    if (verifierFailure != null && verifierFailure !== t &&
+                    if (verifierFailure != null && verifierFailure !== failure &&
                         verifierFailure !is java.util.concurrent.CancellationException
                     ) {
-                        t.addSuppressed(verifierFailure)
+                        failure.addSuppressed(verifierFailure)
                     }
                 }
-                replayFailure = t
-                throw t
+                replayFailure = failure
+                throw failure
             } finally {
                 // Cancel, error, or normal end always runs all three owned
                 // cleanups here, even when the staged prefix was never
@@ -1756,16 +1920,19 @@ object ForeverCasc {
                 // temporary cleanup, and an archive close failure can never
                 // mask the primary outcome either.
                 var cleanupFailure: Throwable? = null
+                commitFlushRequest?.compareAndSet(flushPendingResumeCommits, null)
                 try {
                     closeReplayReader()
                 } catch (closeError: Throwable) {
                     cleanupFailure = closeError
                 }
-                try {
-                    archive?.close()
-                } catch (archiveError: Throwable) {
-                    if (cleanupFailure == null) cleanupFailure = archiveError
-                    else cleanupFailure.addSuppressed(archiveError)
+                run {
+                    try {
+                        archive?.close()
+                    } catch (archiveError: Throwable) {
+                        if (cleanupFailure == null) cleanupFailure = archiveError
+                        else cleanupFailure.addSuppressed(archiveError)
+                    }
                 }
                 try {
                     if (temporary.exists()) temporary.delete()
@@ -2108,6 +2275,8 @@ object ForeverCasc {
         bucketCounts: IntArray,
         cancelled: () -> Boolean,
         wantedRawKeys: Set<String> = emptySet(),
+        targetObjectCount: Int = 0,
+        targetMembership: ((String) -> IndexedValue<IncrementalObjectSpec>)? = null,
     ): ResumeLoadResult {
         val identityHash = MessageDigest.getInstance("SHA-256").digest(identity.toByteArray(Charsets.UTF_8))
         val directory = outputDataFiles.toPath().toAbsolutePath().normalize()
@@ -2122,6 +2291,7 @@ object ForeverCasc {
         val segmentEnd = LongArray(1024) { -1L }
         val segmentSeen = BooleanArray(1024)
         val segmentIds = ArrayList<Int>()
+        val targetOrdinalsSeen = if (targetMembership == null) null else java.util.BitSet(targetObjectCount)
         // Staged-copy locations for the bounded wanted set, collected during
         // this single streaming pass — never a rescan per key later.
         val rawKeyRecords = HashMap<String, OverlapRawKeyRecord>()
@@ -2169,6 +2339,20 @@ object ForeverCasc {
                             record.encodedSize > ARCHIVE_LIMIT - SEGMENT_HEADER_SIZE - LOCAL_HEADER_SIZE ||
                             record.archiveId !in 0..1023 || record.offset < SEGMENT_HEADER_SIZE
                         ) throw IllegalStateException("resumable CASC checkpoint object record is outside supported bounds")
+                        if (targetOrdinalsSeen != null) {
+                            verifyTargetMembership(
+                                IncrementalObjectSpec(
+                                    record.ekey.lowercase(),
+                                    record.contentKey.lowercase(),
+                                    record.encodedSize,
+                                    record.decodedSize,
+                                ),
+                                targetObjectCount,
+                                requireNotNull(targetMembership),
+                                targetOrdinalsSeen,
+                                "resumable CASC checkpoint",
+                            )
+                        }
                         val end = Math.addExact(record.offset, Math.addExact(LOCAL_HEADER_SIZE.toLong(), record.encodedSize))
                         if (record.archiveId != lastArchiveId) {
                             if (record.archiveId != expectedArchiveId || record.offset != SEGMENT_HEADER_SIZE.toLong()) {
@@ -2322,23 +2506,40 @@ object ForeverCasc {
         return ResumeObject(ekey, contentKey, encodedSize, decodedSize, archiveId, offset)
     }
 
-    private fun appendResumeObject(
+    private fun appendResumeObjects(
         checkpoint: ResumableCheckpoint,
-        spec: IncrementalObjectSpec,
-        archiveId: Int,
-        offset: Long,
+        commits: List<PendingResumeCommit>,
     ) {
-        val frame = ByteArray(RESUME_FRAME_SIZE)
-        val buffer = ByteBuffer.wrap(frame).order(ByteOrder.BIG_ENDIAN)
-        frame[0] = RESUME_OBJECT_FRAME.toByte()
-        spec.ekey.hexBytes().copyInto(frame, 8)
-        spec.contentKey.hexBytes().copyInto(frame, 24)
-        buffer.putLong(40, spec.encodedSize)
-        buffer.putLong(48, spec.decodedSize)
-        buffer.putInt(56, archiveId)
-        buffer.putLong(60, offset)
-        putResumeCrc(frame)
-        appendResumeFrame(checkpoint, frame)
+        require(commits.isNotEmpty() && commits.size <= RESUMABLE_COMMIT_GROUP_OBJECTS) {
+            "resumable CASC commit frame batch is outside its object bound"
+        }
+        if (!Files.isRegularFile(checkpoint.file.toPath(), LinkOption.NOFOLLOW_LINKS) || Files.isSymbolicLink(checkpoint.file.toPath())) {
+            throw IllegalStateException("resumable CASC checkpoint changed before append")
+        }
+        val frames = ByteArray(Math.multiplyExact(commits.size, RESUME_FRAME_SIZE))
+        commits.forEachIndexed { index, commit ->
+            val frame = ByteArray(RESUME_FRAME_SIZE)
+            val buffer = ByteBuffer.wrap(frame).order(ByteOrder.BIG_ENDIAN)
+            frame[0] = RESUME_OBJECT_FRAME.toByte()
+            commit.spec.ekey.hexBytes().copyInto(frame, 8)
+            commit.spec.contentKey.hexBytes().copyInto(frame, 24)
+            buffer.putLong(40, commit.spec.encodedSize)
+            buffer.putLong(48, commit.spec.decodedSize)
+            buffer.putInt(56, commit.archiveId)
+            buffer.putLong(60, commit.offset)
+            putResumeCrc(frame)
+            frame.copyInto(frames, index * RESUME_FRAME_SIZE)
+        }
+        FileChannel.open(
+            checkpoint.file.toPath(),
+            StandardOpenOption.WRITE,
+            StandardOpenOption.APPEND,
+            LinkOption.NOFOLLOW_LINKS,
+        ).use { channel ->
+            writeSequential(channel, ByteBuffer.wrap(frames))
+            channel.force(true)
+        }
+        forceDirectory(requireNotNull(checkpoint.file.parentFile).toPath())
     }
 
     private fun appendResumeFinalizing(checkpoint: ResumableCheckpoint) {
@@ -2455,6 +2656,30 @@ object ForeverCasc {
         ekey = spec.ekey.lowercase(),
         contentKey = spec.contentKey.lowercase(),
     )
+
+    private fun verifyTargetMembership(
+        spec: IncrementalObjectSpec,
+        targetObjectCount: Int,
+        targetMembership: (String) -> IndexedValue<IncrementalObjectSpec>,
+        seenOrdinals: java.util.BitSet,
+        source: String = "incremental manifest",
+    ) {
+        val admitted = try {
+            targetMembership(spec.ekey)
+        } catch (missing: NoSuchElementException) {
+            throw IllegalStateException("$source contains an object outside the admitted target", missing)
+        }
+        if (admitted.index !in 0 until targetObjectCount) {
+            throw IllegalStateException("$source membership ordinal is outside its bounded target")
+        }
+        if (normalizeIncrementalSpec(admitted.value) != spec) {
+            throw IllegalStateException("$source object does not match the admitted target manifest")
+        }
+        if (seenOrdinals[admitted.index]) {
+            throw IllegalStateException("$source repeats a target membership ordinal")
+        }
+        seenOrdinals.set(admitted.index)
+    }
 
     private fun validateIncrementalSpec(spec: IncrementalObjectSpec) {
         require(spec.ekey.matches(Regex("[0-9a-f]{32}"))) { "invalid CASC encoding key" }
@@ -3285,13 +3510,14 @@ object ForeverCasc {
     /**
      * The sealed-prefix verifier: exactly one thread, at most one open
      * segment FD at a time, read-only over old prefix files, O(128 KiB +
-     * 34 + 1024) memory regardless of group size. Every frozen checkpoint
-     * frame is re-read from the checkpoint file (bounded to the frozen byte
-     * end, so writer appends past it never invalidate the prefix) and joined
-     * lockstep with the admitted official sequence (same ORDER BY ekey on
-     * both sides, so the join is positional with no map, no bitmap, no
-     * per-key query). Each object is crypto-verified streaming inside its
-     * sealed group; a group is acknowledged by count and key range only
+     * 34 + 1024 + targetObjectCount/8) memory regardless of group size. Every
+     * frozen checkpoint frame is re-read from the checkpoint file (bounded to
+     * the frozen byte end, so writer appends past it never invalidate the
+     * prefix) and checked either through the legacy lockstep stream or the
+     * bounded membership lookup plus duplicate bitmap. Each object is
+     * crypto-verified streaming inside its sealed group; a group is
+     * acknowledged by exact wanted keys in membership mode, or by count and
+     * key range in legacy mode, only
      * after ALL its objects pass header/EKey/BLTE/CKey/size checks AND the
      * post-group guards hold: the exact segment sealed binding plus a fresh
      * checkpoint seal recheck (same inode, header identity, size at or past
@@ -3306,19 +3532,21 @@ object ForeverCasc {
         outputDataFiles: File,
         checkpointFile: File,
         freeze: OverlapPrefixFreeze,
-        officialStream: OverlapOfficialStream,
+        officialStream: OverlapOfficialStream?,
         readerFactory: ((() -> Boolean) -> CascReplayReader),
         coordinator: CascOverlapCoordinator,
         cancelled: () -> Boolean,
+        targetObjectCount: Int,
+        targetMembership: ((String) -> IndexedValue<IncrementalObjectSpec>)?,
     ) {
         val verifyStarted = System.nanoTime()
         checkCheckpointStillSealed(checkpointFile, freeze)
         var verifiedGroups = 0L
-        // The official cursor runs on this thread for the whole run; it is
-        // never shared with the producer, which holds its own cursor.
-        officialStream({ coordinator.peerCancel.get() || cancelled() }) { officialSeq ->
-            val officialIt = officialSeq.iterator()
-            var officialNext: IncrementalObjectSpec? = if (officialIt.hasNext()) officialIt.next() else null
+        val membershipSeen = if (targetMembership == null) null else java.util.BitSet(targetObjectCount)
+        val wantedKeys = coordinator.snapshotWantedKeys()
+        val verify: (Sequence<IncrementalObjectSpec>?) -> Unit = { officialSeq ->
+            val officialIt = officialSeq?.iterator()
+            var officialNext: IncrementalObjectSpec? = if (officialIt != null && officialIt.hasNext()) officialIt.next() else null
             val path = checkpointFile.toPath()
             FileChannel.open(path, StandardOpenOption.READ, LinkOption.NOFOLLOW_LINKS).use { channel ->
                 val reader = readerFactory(cancelled)
@@ -3332,6 +3560,7 @@ object ForeverCasc {
                     var groupBytes = 0L
                     var groupMinKey: String? = null
                     var groupMaxKey: String? = null
+                    val groupWantedKeys = HashSet<String>(wantedKeys.size)
                     var source: SegmentBufferedSource? = null
                     fun flushGroup() {
                         if (groupId < 0) return
@@ -3350,7 +3579,11 @@ object ForeverCasc {
                         checkCheckpointStillSealed(checkpointFile, freeze)
                         val groupMin = requireNotNull(groupMinKey) { "CASC sealed group has no verified objects: data.$groupId" }
                         val groupMax = requireNotNull(groupMaxKey) { "CASC sealed group has no verified objects: data.$groupId" }
-                        coordinator.ackGroup(groupCount, groupMin, groupMax, groupBytes)
+                        if (targetMembership == null) {
+                            coordinator.ackGroup(groupCount, groupMin, groupMax, groupBytes)
+                        } else {
+                            coordinator.ackGroupExact(groupCount, groupWantedKeys, groupBytes)
+                        }
                         verifiedGroups++
                         if (verifiedGroups % 64 == 0L) {
                             diagnostics.info("CASC sealed prefix groups=$verifiedGroups objects=${coordinator.ackedObjects.get()} elapsedMs=${(System.nanoTime() - verifyStarted) / 1_000_000}")
@@ -3361,6 +3594,7 @@ object ForeverCasc {
                         groupBytes = 0L
                         groupMinKey = null
                         groupMaxKey = null
+                        groupWantedKeys.clear()
                     }
                     while (position < freeze.cpByteEnd) {
                         checkCancelled(cancelled)
@@ -3385,15 +3619,24 @@ object ForeverCasc {
                                 val end = Math.addExact(record.offset, Math.addExact(LOCAL_HEADER_SIZE.toLong(), record.encodedSize))
                                 if (end > ARCHIVE_LIMIT) throw IllegalStateException("CASC sealed prefix object exceeds its segment bound")
                                 val key = record.ekey.lowercase()
-                                // Lockstep with the admitted official tuples:
-                                // same order on both sides, so the head must
-                                // match exactly — no skips, no queries.
-                                val official = officialNext
-                                    ?: throw IllegalStateException("CASC sealed prefix is longer than the admitted official sequence")
-                                if (official.ekey != key || official.contentKey != record.contentKey.lowercase() ||
-                                    official.encodedSize != record.encodedSize || official.decodedSize != record.decodedSize
-                                ) throw IllegalStateException("CASC sealed prefix object differs from the admitted target manifest")
-                                officialNext = if (officialIt.hasNext()) officialIt.next() else null
+                                if (targetMembership == null) {
+                                    // Legacy ordered join; the exact production
+                                    // path does not assume EKey chronology.
+                                    val official = officialNext
+                                        ?: throw IllegalStateException("CASC sealed prefix is longer than the admitted official sequence")
+                                    if (official.ekey != key || official.contentKey != record.contentKey.lowercase() ||
+                                        official.encodedSize != record.encodedSize || official.decodedSize != record.decodedSize
+                                    ) throw IllegalStateException("CASC sealed prefix object differs from the admitted target manifest")
+                                    officialNext = if (officialIt!!.hasNext()) officialIt.next() else null
+                                } else {
+                                    verifyTargetMembership(
+                                        IncrementalObjectSpec(key, record.contentKey.lowercase(), record.encodedSize, record.decodedSize),
+                                        targetObjectCount,
+                                        targetMembership,
+                                        requireNotNull(membershipSeen),
+                                        "CASC sealed prefix",
+                                    )
+                                }
                                 if (record.archiveId != groupId) {
                                     flushGroup()
                                     if (record.archiveId != expectedArchiveId || record.offset != SEGMENT_HEADER_SIZE.toLong()) {
@@ -3433,6 +3676,7 @@ object ForeverCasc {
                                 // Reconstruction consumes encoded bytes; E frames pass through.
                                 ForeverBlte.verifyEncodedRange(window, record.encodedSize, key, record.decodedSize, record.contentKey, cancelled)
                                 if (window.remaining != 0L) throw IllegalStateException("CASC sealed prefix object left unread bytes: data.$groupId")
+                                if (targetMembership != null && key in wantedKeys) groupWantedKeys += key
                                 if (groupMinKey == null || key < groupMinKey!!) groupMinKey = key
                                 if (groupMaxKey == null || key > groupMaxKey!!) groupMaxKey = key
                                 groupCount = Math.addExact(groupCount, 1L)
@@ -3448,6 +3692,14 @@ object ForeverCasc {
                     reader.close()
                 }
             }
+        }
+        if (targetMembership == null) {
+            requireNotNull(officialStream) { "CASC overlap official stream is unavailable" }.invoke(
+                { coordinator.peerCancel.get() || cancelled() },
+                { officialSeq -> verify(officialSeq) },
+            )
+        } else {
+            verify(null)
         }
         diagnostics.info("CASC sealed prefix verifier done groups=$verifiedGroups objects=${coordinator.ackedObjects.get()} elapsedMs=${(System.nanoTime() - verifyStarted) / 1_000_000}")
     }

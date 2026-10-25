@@ -22,6 +22,8 @@ class ForeverClientUpdateForegroundServiceTest {
         ForeverClientUpdateExecution.busy.value = false
         ForeverClientUpdateExecution.cancel.set(false)
         ForeverClientUpdateExecution.pendingPlan = null
+        ForeverClientUpdateExecution.resumePlan = null
+        ForeverClientUpdateExecution.rate.reset()
         ForeverClientUpdateExecution.outcome.value = null
         ForeverClientUpdateExecution.inspection.value = null
         ForeverClientUpdateExecution.applying.value = false
@@ -108,5 +110,22 @@ class ForeverClientUpdateForegroundServiceTest {
         } finally {
             controller.destroy()
         }
+    }
+
+    @Test
+    fun burstProgressIsCoalescedButPhaseAndCompletionStayImmediate() {
+        val controller = Robolectric.buildService(ForeverClientUpdateForegroundService::class.java).create()
+        try {
+            val service = controller.get()
+            val first = ForeverClientUpdateProgress(ForeverClientUpdateProgress.Phase.DOWNLOADING, 0, 10, 1, 10000)
+            service.publish(first)
+            repeat(100) { service.publish(first.copy(transferredBytes = it + 2L)) }
+            assertEquals(first, ForeverClientUpdateExecution.detail.value)
+            service.publish(first.copy(transferredBytes = 10000))
+            assertEquals(10000L, ForeverClientUpdateExecution.detail.value?.transferredBytes)
+            service.publish(first.copy(phase = ForeverClientUpdateProgress.Phase.APPLYING))
+            assertTrue(ForeverClientUpdateExecution.applying.value)
+            assertEquals(ForeverClientUpdateProgress.Phase.APPLYING, ForeverClientUpdateExecution.detail.value?.phase)
+        } finally { controller.destroy() }
     }
 }

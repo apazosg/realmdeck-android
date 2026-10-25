@@ -10,22 +10,185 @@ import java.nio.file.LinkOption
 import java.nio.file.StandardCopyOption
 import java.nio.file.StandardOpenOption
 import java.security.MessageDigest
+import java.util.BitSet
 import java.util.Locale
-import java.util.TreeSet
 import java.util.UUID
 import java.util.concurrent.CancellationException
+import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.Executors
-import java.util.concurrent.Future
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.atomic.AtomicLongArray
 import java.util.concurrent.atomic.AtomicReference
 import java.util.logging.Logger
 import org.json.JSONArray
 import org.json.JSONObject
+
+private typealias UpdaterFetchObject = (
+    ForeverClientUpdateCatalog.ObjectRecord,
+    File,
+    () -> Boolean,
+    (Long) -> Unit,
+) -> File
+
+private typealias UpdaterFetchBatch = (
+    List<ForeverClientUpdateCatalog.ObjectRecord>,
+    File,
+    () -> Boolean,
+    (String, Long) -> Unit,
+) -> List<File>
+
+private val DEFAULT_UPDATER_FETCH_OBJECT: UpdaterFetchObject = { record, work, cancelled, progress ->
+    ForeverClientUpdateTransfer().fetch(record, work, cancelled, progress)
+}
+
+private val DEFAULT_UPDATER_FETCH_BATCH: UpdaterFetchBatch = { records, work, cancelled, progress ->
+    ForeverClientUpdateTransfer().fetchBatch(records, work, cancelled, progress)
+}
+
+/** Bounded, aggregate-only timings for the sourceless fetch executor. */
+private class FetchPipelineDiagnostics {
+    private val logger = Logger.getLogger("ForeverClientUpdate")
+    private val batchGroups = AtomicLong()
+    private val batchHistogram = AtomicLongArray(ForeverClientUpdateTransfer.MAX_BATCH_OBJECTS + 1)
+    private val singles = AtomicLong()
+    // Candidate members actually submitted singly because a reservation-pressure
+    // split left one reserved member while later contiguous members remained.
+    private val pressureTailSingles = AtomicLong()
+    private val callbacksStarted = AtomicLong()
+    private val callbacksCompleted = AtomicLong()
+    private val callbacksActive = AtomicInteger()
+    private val callbacksPeak = AtomicInteger()
+    private val executorWaitNanos = AtomicLong()
+    private val executorWaitMaxNanos = AtomicLong()
+    private val callbackNanos = AtomicLong()
+    private val callbackMaxNanos = AtomicLong()
+    private val readyAtRequest = AtomicLong()
+    private val readyAfterRevalidate = AtomicLong()
+    private val headReadyAtRequest = AtomicLong()
+    private val headPendingAtRequest = AtomicLong()
+    private val headReadyAfterRevalidate = AtomicLong()
+    private val headPendingAfterRevalidate = AtomicLong()
+    private val emptyReadyAtRequest = AtomicLong()
+    private val emptyReadyAfterRevalidate = AtomicLong()
+    private val sourceWaitCount = AtomicLong()
+    private val sourceWaitNanos = AtomicLong()
+    private val sourceWaitMaxNanos = AtomicLong()
+    private val readyAhead = AtomicInteger()
+    private val readyAheadPeak = AtomicInteger()
+    val reserveNanos = AtomicLong()
+    val reserveWaitNanos = AtomicLong()
+    val reserveRetireNanos = AtomicLong()
+    val sourceConsumedRawNanos = AtomicLong()
+    private val outstandingKeys = AtomicInteger()
+
+    fun submittedBatch(memberCount: Int) {
+        require(memberCount in 2..ForeverClientUpdateTransfer.MAX_BATCH_OBJECTS)
+        batchGroups.incrementAndGet()
+        batchHistogram.incrementAndGet(memberCount)
+    }
+
+    fun submittedSingle() {
+        singles.incrementAndGet()
+    }
+
+    fun pressureTailSingles(memberCount: Int) {
+        if (memberCount > 0) pressureTailSingles.addAndGet(memberCount.toLong())
+    }
+
+    fun callbackStarted(submittedAtNanos: Long): Long {
+        val startedAtNanos = System.nanoTime()
+        val waitNanos = (startedAtNanos - submittedAtNanos).coerceAtLeast(0L)
+        executorWaitNanos.addAndGet(waitNanos)
+        executorWaitMaxNanos.accumulateAndGet(waitNanos) { current, next -> maxOf(current, next) }
+        callbacksStarted.incrementAndGet()
+        callbacksActive.incrementAndGet().also { active ->
+            callbacksPeak.accumulateAndGet(active) { current, next -> maxOf(current, next) }
+        }
+        return startedAtNanos
+    }
+
+    fun callbackFinished(startedAtNanos: Long) {
+        val durationNanos = (System.nanoTime() - startedAtNanos).coerceAtLeast(0L)
+        callbackNanos.addAndGet(durationNanos)
+        callbackMaxNanos.accumulateAndGet(durationNanos) { current, next -> maxOf(current, next) }
+        callbacksActive.decrementAndGet()
+        callbacksCompleted.incrementAndGet()
+    }
+
+    /** Counters use one per-entry state lock: completion and resolution cannot double count. */
+    fun registered() { outstandingKeys.incrementAndGet() }
+    fun completeReady(state: AtomicInteger, future: CompletableFuture<File>, file: File) {
+        synchronized(state) {
+            if (state.get() != 0) return
+            if (!future.complete(file)) return
+            state.set(1)
+            val count = readyAhead.incrementAndGet()
+            readyAheadPeak.accumulateAndGet(count) { current, next -> maxOf(current, next) }
+        }
+    }
+    fun sourceRequested(state: AtomicInteger, afterRevalidate: Boolean): Pair<Boolean, Int> {
+        val headReady = synchronized(state) { state.get() == 1 }
+        val count = readyAhead.get().toLong()
+        if (afterRevalidate) {
+            readyAfterRevalidate.addAndGet(count)
+            if (count == 0L) emptyReadyAfterRevalidate.incrementAndGet()
+            if (headReady) headReadyAfterRevalidate.incrementAndGet() else headPendingAfterRevalidate.incrementAndGet()
+        } else {
+            readyAtRequest.addAndGet(count)
+            if (count == 0L) emptyReadyAtRequest.incrementAndGet()
+            if (headReady) headReadyAtRequest.incrementAndGet() else headPendingAtRequest.incrementAndGet()
+        }
+        return headReady to readyAhead.get()
+    }
+    fun sourceResolved(state: AtomicInteger, waitNanos: Long) {
+        synchronized(state) {
+            if (state.get() == 1) readyAhead.decrementAndGet()
+            state.set(2)
+        }
+        outstandingKeys.decrementAndGet()
+        sourceWaitNanos.addAndGet(waitNanos)
+        sourceWaitCount.incrementAndGet()
+        sourceWaitMaxNanos.accumulateAndGet(waitNanos) { current, next -> maxOf(current, next) }
+    }
+
+    fun log(event: String, committedObjects: Long, reservationSnapshot: Pair<Int, Long>) {
+        val histogram = (2..ForeverClientUpdateTransfer.MAX_BATCH_OBJECTS)
+            .joinToString(",") { size -> "$size:${batchHistogram.get(size)}" }
+        try {
+            logger.info(
+                "CASC fetch pipeline event=$event scope=updater-run committed=$committedObjects " +
+                    "batchGroups=${batchGroups.get()} batchMembersBySize=$histogram singles=${singles.get()} " +
+                    "pressureTailSingles=${pressureTailSingles.get()} callbacksStarted=${callbacksStarted.get()} " +
+                    "callbacksCompleted=${callbacksCompleted.get()} callbacksActive=${callbacksActive.get()} " +
+                    "callbacksPeak=${callbacksPeak.get()} executorWaitTotalMs=${executorWaitNanos.get() / 1_000_000} " +
+                    "executorWaitMaxMs=${executorWaitMaxNanos.get() / 1_000_000} " +
+                    "callbackTotalMs=${callbackNanos.get() / 1_000_000} " +
+                    "callbackMaxMs=${callbackMaxNanos.get() / 1_000_000} " +
+                    "headReadyAtRequest=${headReadyAtRequest.get()} headPendingAtRequest=${headPendingAtRequest.get()} " +
+                    "headReadyAfterRevalidate=${headReadyAfterRevalidate.get()} headPendingAfterRevalidate=${headPendingAfterRevalidate.get()} " +
+                    "readyAheadDepthAtRequestTotal=${readyAtRequest.get()} readyAheadDepthAfterRevalidateTotal=${readyAfterRevalidate.get()} " +
+                    "readyEmptyAtRequest=${emptyReadyAtRequest.get()} readyEmptyAfterRevalidate=${emptyReadyAfterRevalidate.get()} " +
+                    "readyAhead=${readyAhead.get()} readyAheadPeak=${readyAheadPeak.get()} sourceOutstanding=${outstandingKeys.get()} " +
+                    "reservedKeys=${reservationSnapshot.first} reservedBytes=${reservationSnapshot.second} " +
+                    "sourceWaitCount=${sourceWaitCount.get()} sourceWaitTotalMs=${sourceWaitNanos.get() / 1_000_000} " +
+                    "sourceWaitMaxMs=${sourceWaitMaxNanos.get() / 1_000_000} " +
+                    "reserveTotalMs=${reserveNanos.get() / 1_000_000} reserveBudgetWaitMs=${reserveWaitNanos.get() / 1_000_000} " +
+                    "reserveInheritedRetireMs=${reserveRetireNanos.get() / 1_000_000} " +
+                    "sourceConsumedRawMs=${sourceConsumedRawNanos.get() / 1_000_000} " +
+                     ForeverClientUpdateTransfer.diagnosticSnapshot(),
+            )
+        } catch (diagnosticFailure: Exception) {
+            // Diagnostics must never affect fetching, checkpointing, or teardown.
+        }
+    }
+}
+
+private const val FETCH_DIAGNOSTIC_OBJECT_INTERVAL = 64L
 
 /**
  * Destination supplied by the storage/runtime owner. [revalidate] must re-check its
@@ -140,9 +303,7 @@ class ForeverClientUpdater(
         File,
         () -> Boolean,
         (Long) -> Unit,
-    ) -> File = { record, work, cancelled, progress ->
-        ForeverClientUpdateTransfer().fetch(record, work, cancelled, progress)
-    },
+    ) -> File = DEFAULT_UPDATER_FETCH_OBJECT,
 ) {
     /**
      * Cold-replay fast path for resumable staged verification. Null keeps
@@ -153,6 +314,19 @@ class ForeverClientUpdater(
      * old mode while this is null.
      */
     internal var replayReaderFactory: ((() -> Boolean) -> CascReplayReader)? = null
+    /** Smaller budgets exercise writer/producer backpressure without GiB fixtures. */
+    internal var prefetchMaxBytesForTests: Long? = null
+    /** Internal-only seam: injected object fetchers remain single-object and can never hit the CDN accidentally. */
+    internal var batchFetchForTests: ((
+        List<ForeverClientUpdateCatalog.ObjectRecord>,
+        File,
+        () -> Boolean,
+        (String, Long) -> Unit,
+    ) -> List<File>)? = null
+    /** Internal synchronization seams used only by bounded diagnostics tests. */
+    internal var sourceReadinessForTests: ((Boolean, Boolean, Int) -> Unit)? = null
+    internal var fetchReadyForTests: ((String) -> Unit)? = null
+    internal var beforePostRevalidateSampleForTests: (() -> Unit)? = null
     private val targetSummary = validatedTargetSummary()
     private val targetCatalogSha256 = catalog.verifiedSha256.lowercase(Locale.ROOT).also {
         require(it.matches(HASH_PATTERN)) { "verified client catalog SHA-256 is malformed" }
@@ -160,6 +334,7 @@ class ForeverClientUpdater(
     private val targetBinding = "$targetCatalogSha256|${targetSummary.version}"
     private val updaterToken = "$ENGINE_ID|$RUNTIME_SCHEMA|$targetBinding"
     private val workBase = File(privateWorkDirectory, WORK_BASE_NAME)
+    private val archiveOrderDirectory = File(privateWorkDirectory, ARCHIVE_ORDER_DIRECTORY_NAME)
 
     data class RecoveryStatus(val result: ForeverClientRecoveryResult, val pendingTransaction: Boolean)
 
@@ -170,7 +345,9 @@ class ForeverClientUpdater(
         progress: (ForeverClientUpdateProgress) -> Unit = {},
     ): ForeverClientUpdatePlan = withLease(destination) {
         ensureNoRootTransaction(destination)
-        buildPlan(destination, cancelled, progress)
+        withPlanArchiveOrder(destination, cancelled) { target, archiveOrder ->
+            buildPlan(destination, cancelled, progress, target, archiveOrder)
+        }
     }
 
     /**
@@ -187,7 +364,8 @@ class ForeverClientUpdater(
         checkConsent(destination, plan, consent)
         ensureNoRootTransaction(destination)
         destination.revalidate()
-        val fresh = buildPlan(destination, cancelled, progress)
+        withPlanArchiveOrder(destination, cancelled) { target, archiveOrder ->
+        val fresh = buildPlan(destination, cancelled, progress, target, archiveOrder)
         requireSamePlan(plan, fresh)
         if (!fresh.hasEnoughSpace) {
             throw IllegalStateException(
@@ -210,7 +388,7 @@ class ForeverClientUpdater(
         val loosePlan = inspectLooseFiles(destination)
         val privateResume = inspectPrivateWorkspace(destination, plan.sourceRevision, loosePlan)
         val retainedOldSegments = existingSegmentBytes(destination)
-        val cascResult = writeCascDelta(destination, plan, paths, cancelled, progress)
+        val cascResult = writeCascDelta(destination, plan, paths, cancelled, progress, archiveOrder)
         if (Math.addExact(cascResult.reusedObjects, cascResult.writtenObjects) != plan.totalObjects) {
             throw IllegalStateException("CASC writer did not account for the complete admitted object manifest")
         }
@@ -262,6 +440,7 @@ class ForeverClientUpdater(
             cascResult.writtenObjects,
             retainedOldSegments,
         )
+        }
     }
 
     /** Recovers only the transaction's own durable journal; never infers a clean guest. */
@@ -503,17 +682,193 @@ class ForeverClientUpdater(
         val stageReceipt: UpdateStageReceipt?,
     )
 
+    /**
+     * Source-less ingestion owns one reusable, private ordering hint. Reserve its
+     * full cap before first creation; a validated existing file is credited only
+     * when checking current free space, never deducted from the consented plan.
+     */
+    private fun <T> withPlanArchiveOrder(
+        destination: ForeverClientUpdateDestination,
+        cancelled: () -> Boolean,
+        block: (TargetState, ForeverClientArchiveOrder?) -> T,
+    ): T {
+        checkCancelled(cancelled)
+        val target = inspectTargetState(destination)
+        if (target.sourceDataFiles != null) return block(target, null)
+
+        val bounds = catalog.objectSizeBounds(cancelled)
+        if (bounds.maxEncodedSize !in 1..MAX_ENCODED_BYTES) {
+            throw IllegalStateException("catalog object exceeds the admitted CASC/transfer encoded-size bound: ${bounds.maxEncodedSize}")
+        }
+        val required = sumExact(
+            ForeverClientArchiveOrder.MAX_BYTES,
+            CASC_TABLE_AND_SORT_RESERVE,
+            METADATA_RESERVE,
+        )
+        val existingBytes = prepareArchiveOrderDirectory()
+        val effectiveAvailable = Math.addExact(
+            ForeverClientUpdateCatalog.availableBytes(privateWorkDirectory.toPath()),
+            existingBytes,
+        )
+        if (effectiveAvailable < required) {
+            throw IllegalStateException(
+                "insufficient app-private free space for the bounded archive-order cache and CASC planning: " +
+                "need $required bytes, available $effectiveAvailable",
+            )
+        }
+        return ForeverClientArchiveOrder.open(catalog, archiveOrderDirectory, cancelled).use { order ->
+            block(target, order)
+        }
+    }
+
+    /** Verify the private, single-slot hint directory and retire only owned stale build temps. */
+    private fun prepareArchiveOrderDirectory(): Long {
+        val directory = archiveOrderDirectory.toPath().toAbsolutePath().normalize()
+        val parent = directory.parent ?: throw IllegalStateException("private archive-order directory has no parent")
+        requireSafeAncestors(parent)
+        if (!Files.isDirectory(parent, LinkOption.NOFOLLOW_LINKS) || Files.isSymbolicLink(parent)) {
+            throw IllegalStateException("private archive-order parent is unavailable or unsafe")
+        }
+        if (!Files.exists(directory, LinkOption.NOFOLLOW_LINKS)) {
+            Files.createDirectory(directory)
+            forceDirectory(parent)
+        } else if (Files.isSymbolicLink(directory) || !Files.isDirectory(directory, LinkOption.NOFOLLOW_LINKS)) {
+            throw IllegalStateException("private archive-order path is not a regular directory")
+        }
+
+        val owner = directory.resolve(ARCHIVE_ORDER_OWNER_NAME)
+        if (!Files.exists(owner, LinkOption.NOFOLLOW_LINKS)) {
+            Files.newDirectoryStream(directory).use { children ->
+                if (children.iterator().hasNext()) {
+                    throw IllegalStateException("private archive-order directory has unowned state without its owner marker")
+                }
+            }
+            FileChannel.open(
+                owner,
+                StandardOpenOption.CREATE_NEW,
+                StandardOpenOption.WRITE,
+                LinkOption.NOFOLLOW_LINKS,
+            ).use { channel ->
+                writeFully(channel, ByteBuffer.wrap(ARCHIVE_ORDER_OWNER_BYTES))
+                channel.force(true)
+            }
+            forceDirectory(directory)
+        } else {
+            requireExactFile(owner, ARCHIVE_ORDER_OWNER_BYTES, "private archive-order directory owner marker")
+        }
+
+        var cacheBytes = 0L
+        val staleTemps = ArrayList<java.nio.file.Path>()
+        Files.newDirectoryStream(directory).use { children ->
+            children.forEach { path ->
+                val name = path.fileName.toString()
+                if (Files.isSymbolicLink(path)) {
+                    throw IllegalStateException("private archive-order directory contains a symlink: $name")
+                }
+                when {
+                    name == ARCHIVE_ORDER_OWNER_NAME -> Unit
+                    name == ForeverClientArchiveOrder.CACHE_NAME -> {
+                        if (!Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) {
+                            throw IllegalStateException("private archive-order cache is not a regular file")
+                        }
+                        cacheBytes = Files.size(path)
+                        if (cacheBytes !in 1..ForeverClientArchiveOrder.MAX_BYTES) {
+                            throw IllegalStateException("private archive-order cache exceeds its reserved bound")
+                        }
+                    }
+                    name == ARCHIVE_ORDER_PUBLISH_LOCK_NAME -> {
+                        if (!Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS) || Files.size(path) != 0L) {
+                            throw IllegalStateException("private archive-order publication lock is unsafe")
+                        }
+                    }
+                    ARCHIVE_ORDER_TEMP_FILE.matches(name) -> {
+                        if (!Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS) ||
+                            Files.size(path) > ForeverClientArchiveOrder.MAX_BYTES
+                        ) {
+                            throw IllegalStateException("private archive-order temporary is unsafe or exceeds its bound")
+                        }
+                        if (staleTemps.isNotEmpty()) {
+                            throw IllegalStateException("private archive-order directory contains multiple stale build temporaries")
+                        }
+                        staleTemps.add(path)
+                    }
+                    else -> throw IllegalStateException("private archive-order directory contains unowned state: $name")
+                }
+            }
+        }
+        staleTemps.forEach { Files.delete(it) }
+        if (staleTemps.isNotEmpty()) forceDirectory(directory)
+        return cacheBytes
+    }
+
+    private fun checkpointMembership(
+        archiveOrder: ForeverClientArchiveOrder,
+        cascOutput: File,
+        checkpointDirectory: File,
+        checkpointIdentity: String,
+        cancelled: () -> Boolean,
+    ): BitSet {
+        val seen = BitSet(archiveOrder.objectCount.toInt())
+        var checkpointed = 0L
+        ForeverCasc.withResumableCheckpointObjects(
+            cascOutput,
+            checkpointDirectory,
+            checkpointIdentity,
+            cancelled,
+        ) { staged ->
+            staged.forEach { saved ->
+                checkCancelled(cancelled)
+                val record = try {
+                    catalog.objectByKey(saved.ekey)
+                } catch (missing: NoSuchElementException) {
+                    throw IllegalStateException("resumable CASC checkpoint contains an object outside the admitted target", missing)
+                }
+                if (record.ekey != saved.ekey.lowercase(Locale.ROOT) ||
+                    record.contentKey != saved.contentKey.lowercase(Locale.ROOT) ||
+                    record.encodedSize != saved.encodedSize || record.decodedSize != saved.decodedSize
+                ) {
+                    throw IllegalStateException("resumable CASC checkpoint object differs from the admitted target manifest")
+                }
+                val ordinal = archiveOrder.ordinalOf(record.ekey)
+                if (seen[ordinal]) throw IllegalStateException("resumable CASC checkpoint repeats an admitted object")
+                seen.set(ordinal)
+                checkpointed = Math.addExact(checkpointed, 1L)
+                if (checkpointed > archiveOrder.objectCount) {
+                    throw IllegalStateException("resumable CASC checkpoint exceeds the admitted target count")
+                }
+            }
+        }
+        return seen
+    }
+
+    private fun archiveTargetMembership(
+        archiveOrder: ForeverClientArchiveOrder,
+        ekey: String,
+    ): IndexedValue<ForeverCasc.IncrementalObjectSpec> {
+        val record = catalog.objectByKey(ekey)
+        return IndexedValue(
+            archiveOrder.ordinalOf(record.ekey),
+            ForeverCasc.IncrementalObjectSpec(
+                record.ekey.lowercase(Locale.ROOT),
+                record.contentKey.lowercase(Locale.ROOT),
+                record.encodedSize,
+                record.decodedSize,
+            ),
+        )
+    }
+
     private fun buildPlan(
         destination: ForeverClientUpdateDestination,
         cancelled: () -> Boolean,
         progress: (ForeverClientUpdateProgress) -> Unit,
+        target: TargetState,
+        archiveOrder: ForeverClientArchiveOrder?,
     ): ForeverClientUpdatePlan {
         checkCancelled(cancelled)
         validatePrivateDirectories()
         validateDestination(destination)
         val summary = targetSummary
         val configs = validateConfigAssets()
-        val target = inspectTargetState(destination)
         val loose = inspectLooseFiles(destination)
         val buildInfo = buildInfoBytes()
         val buildState = inspectBuildInfo(destination, buildInfo, target.emptyRoot, target.sourceOrigin)
@@ -564,68 +919,102 @@ class ForeverClientUpdater(
         ensureDirectoryTree(scratchParent.toPath())
         val inspectionWork = Files.createTempDirectory(scratchParent.toPath(), ".target-inspection-").toFile()
         val scan = try {
-            catalog.withObjects(cancelled) { records ->
-                ForeverCasc.withResumableCheckpointObjects(
+            if (archiveOrder != null) {
+                check(target.sourceDataFiles == null) { "archive ordering was opened for an existing CASC source" }
+                val checkpointedOrdinals = checkpointMembership(
+                    archiveOrder,
                     cascOutput,
                     resumableWorkspacePath(destination),
                     checkpointIdentity,
                     cancelled,
-                ) { stagedObjects ->
-                    val stagedIterator = stagedObjects.iterator()
-                    var stagedNext = if (stagedIterator.hasNext()) stagedIterator.next() else null
+                )
+                var currentOrdinal = -1
+                archiveOrder.withObjects(cancelled) { records ->
                     val specs = sequence {
+                        var ordinal = 0
                         records.forEach { record ->
                             checkCancelled(cancelled)
                             validateTransferBounds(record)
+                            currentOrdinal = ordinal++
                             scanned = Math.addExact(scanned, 1L)
                             if ((scanned and 0x3fffL) == 0L) {
                                 progress(ForeverClientUpdateProgress(ForeverClientUpdateProgress.Phase.SCANNING, scanned, summary.objectCount, 0, 0))
                             }
                             yield(ForeverCasc.IncrementalObjectSpec(record.ekey, record.contentKey, record.encodedSize, record.decodedSize))
                         }
+                        check(ordinal.toLong() == summary.objectCount) { "archive-order scan did not consume the complete admitted target" }
                     }
                     val onScannedObject: (ForeverCasc.IncrementalObjectSpec, Boolean) -> Unit = { objectSpec, verified ->
-                        val ekey = objectSpec.ekey.lowercase(Locale.ROOT)
-                        while (stagedNext != null && stagedNext!!.ekey < ekey) {
-                            throw IllegalStateException("resumable CASC checkpoint contains an object missing from the target cursor")
+                        if (currentOrdinal !in 0 until summary.objectCount.toInt()) {
+                            throw IllegalStateException("archive-order planner callback has no current target ordinal")
                         }
-                        if (stagedNext?.ekey == ekey) {
-                            val staged = requireNotNull(stagedNext)
-                            if (staged.contentKey != objectSpec.contentKey.lowercase(Locale.ROOT) ||
-                                staged.encodedSize != objectSpec.encodedSize || staged.decodedSize != objectSpec.decodedSize
-                            ) throw IllegalStateException("resumable CASC checkpoint object differs from the admitted target manifest")
+                        if (checkpointedOrdinals[currentOrdinal]) {
                             checkpointedObjects = Math.addExact(checkpointedObjects, 1L)
-                            checkpointedEncodedBytes = Math.addExact(checkpointedEncodedBytes, staged.encodedSize)
-                            if (!verified) checkpointedMissingBytes = Math.addExact(checkpointedMissingBytes, staged.encodedSize)
+                            checkpointedEncodedBytes = Math.addExact(checkpointedEncodedBytes, objectSpec.encodedSize)
+                            if (!verified) checkpointedMissingBytes = Math.addExact(checkpointedMissingBytes, objectSpec.encodedSize)
                             if (objectSpec.ekey == privateResume.cachedObjectKey) cachedKeyIsCheckpointed = true
-                            stagedNext = if (stagedIterator.hasNext()) stagedIterator.next() else null
                         }
                         if (objectSpec.ekey == privateResume.cachedObjectKey) cachedObjectIsCascMiss = !verified
                     }
-                    val inspected = if (target.sourceDataFiles == null) {
-                        // Sourceless install: the admitted catalog cursor already
-                        // streams ORDER BY ekey, so the ordered planner validates
-                        // that strict order per row and skips the disk-backed
-                        // target table. Packing, bounds, costs, per-row
-                        // cancellation, and callbacks are exactly the generic
-                        // ones; source reuse keeps the generic route below.
-                        ForeverCasc.inspectTargetOrderedSourceNull(
-                            File(inspectionWork, "scan"),
-                            specs,
-                            cancelled,
-                            onScannedObject,
-                        )
-                    } else {
-                        ForeverCasc.inspectTarget(
+                    // Physical archive order is not EKey order. Use the generic
+                    // bounded inspector so packing and quota estimates match ingestion.
+                    ForeverCasc.inspectTarget(
+                        null,
+                        File(inspectionWork, "scan"),
+                        specs,
+                        cancelled,
+                        onScannedObject,
+                    )
+                }
+            } else {
+                catalog.withObjects(cancelled) { records ->
+                    ForeverCasc.withResumableCheckpointObjects(
+                        cascOutput,
+                        resumableWorkspacePath(destination),
+                        checkpointIdentity,
+                        cancelled,
+                    ) { stagedObjects ->
+                        val stagedIterator = stagedObjects.iterator()
+                        var stagedNext = if (stagedIterator.hasNext()) stagedIterator.next() else null
+                        val specs = sequence {
+                            records.forEach { record ->
+                                checkCancelled(cancelled)
+                                validateTransferBounds(record)
+                                scanned = Math.addExact(scanned, 1L)
+                                if ((scanned and 0x3fffL) == 0L) {
+                                    progress(ForeverClientUpdateProgress(ForeverClientUpdateProgress.Phase.SCANNING, scanned, summary.objectCount, 0, 0))
+                                }
+                                yield(ForeverCasc.IncrementalObjectSpec(record.ekey, record.contentKey, record.encodedSize, record.decodedSize))
+                            }
+                        }
+                        val onScannedObject: (ForeverCasc.IncrementalObjectSpec, Boolean) -> Unit = { objectSpec, verified ->
+                            val ekey = objectSpec.ekey.lowercase(Locale.ROOT)
+                            while (stagedNext != null && stagedNext!!.ekey < ekey) {
+                                throw IllegalStateException("resumable CASC checkpoint contains an object missing from the target cursor")
+                            }
+                            if (stagedNext?.ekey == ekey) {
+                                val staged = requireNotNull(stagedNext)
+                                if (staged.contentKey != objectSpec.contentKey.lowercase(Locale.ROOT) ||
+                                    staged.encodedSize != objectSpec.encodedSize || staged.decodedSize != objectSpec.decodedSize
+                                ) throw IllegalStateException("resumable CASC checkpoint object differs from the admitted target manifest")
+                                checkpointedObjects = Math.addExact(checkpointedObjects, 1L)
+                                checkpointedEncodedBytes = Math.addExact(checkpointedEncodedBytes, staged.encodedSize)
+                                if (!verified) checkpointedMissingBytes = Math.addExact(checkpointedMissingBytes, staged.encodedSize)
+                                if (objectSpec.ekey == privateResume.cachedObjectKey) cachedKeyIsCheckpointed = true
+                                stagedNext = if (stagedIterator.hasNext()) stagedIterator.next() else null
+                            }
+                            if (objectSpec.ekey == privateResume.cachedObjectKey) cachedObjectIsCascMiss = !verified
+                        }
+                        val inspected = ForeverCasc.inspectTarget(
                             target.sourceDataFiles,
                             File(inspectionWork, "scan"),
                             specs,
                             cancelled,
                             onScannedObject,
                         )
+                        if (stagedNext != null) throw IllegalStateException("resumable CASC checkpoint has an object outside the complete target cursor")
+                        inspected
                     }
-                    if (stagedNext != null) throw IllegalStateException("resumable CASC checkpoint has an object outside the complete target cursor")
-                    inspected
                 }
             }
         } finally {
@@ -634,7 +1023,17 @@ class ForeverClientUpdater(
         if (scanned != summary.objectCount || scan.totalObjects != summary.objectCount) {
             throw IllegalStateException("CASC inspection did not consume the complete admitted object manifest")
         }
-        val resume = catalog.withObjects(cancelled) { records ->
+        val resume = if (archiveOrder != null) {
+            ForeverCasc.inspectResumableCheckpoint(
+                cascOutput,
+                resumableWorkspacePath(destination),
+                emptySequence(),
+                cancelled,
+                checkpointIdentity,
+                targetObjectCount = archiveOrder.objectCount.toInt(),
+                targetMembership = { key -> archiveTargetMembership(archiveOrder, key) },
+            )
+        } else catalog.withObjects(cancelled) { records ->
             ForeverCasc.inspectResumableCheckpoint(
                 cascOutput,
                 resumableWorkspacePath(destination),
@@ -736,6 +1135,7 @@ class ForeverClientUpdater(
         } else {
             largestEncoded
         }
+        val archiveOrderReserve = if (archiveOrder == null) 0L else ForeverClientArchiveOrder.MAX_BYTES
         val privateRequired = sumExact(
             prefetchInFlightBound, // private resumable transfer file(s)
             largestEncoded, // one private CASC verification temporary for the largest admitted encoded object
@@ -743,8 +1143,9 @@ class ForeverClientUpdater(
             Math.multiplyExact(scan.missingObjects, CHECKPOINT_FRAME_BYTES.toLong()),
             CASC_CHECKPOINT_HEADER_BYTES + CASC_CHECKPOINT_FINALIZE_BYTES,
             METADATA_RESERVE,
+            archiveOrderReserve,
         )
-        val privatePlannerBytes = Math.addExact(plannerScratchRequired, METADATA_RESERVE)
+        val privatePlannerBytes = sumExact(plannerScratchRequired, METADATA_RESERVE, archiveOrderReserve)
         val destinationRequired = sumExact(
             scan.newSegmentBytesUpperBound,
             scan.indexBytesUpperBound,
@@ -768,9 +1169,10 @@ class ForeverClientUpdater(
         val peak = Math.addExact(workspaceBytes, destinationBytes)
         val sharedFileStore = ForeverClientUpdateCatalog.sharedCapacity(privateWorkDirectory.toPath(), destination.root.toPath())
         val privateAvailable = ForeverClientUpdateCatalog.availableBytes(privateWorkDirectory.toPath())
+        val privateAvailableWithArchiveIndex = Math.addExact(privateAvailable, archiveOrder?.fileBytes ?: 0L)
         val destinationAvailable = ForeverClientUpdateCatalog.availableBytes(destination.root.toPath())
-        val enough = if (sharedFileStore) privateAvailable >= peak else
-            privateAvailable >= workspaceBytes && destinationAvailable >= destinationBytes
+        val enough = if (sharedFileStore) privateAvailableWithArchiveIndex >= peak else
+            privateAvailableWithArchiveIndex >= workspaceBytes && destinationAvailable >= destinationBytes
         val snapshot = snapshotHash(
             target.sourceRevision,
             target.storageMarker,
@@ -831,8 +1233,10 @@ class ForeverClientUpdater(
         val spec: ForeverCasc.IncrementalObjectSpec,
         val record: ForeverClientUpdateCatalog.ObjectRecord,
         val fetchedBytes: AtomicLong,
-        val future: Future<File>,
-    )
+        val future: CompletableFuture<File>,
+    ) {
+        val diagnosticState = AtomicInteger(0) // 0 pending, 1 ready, 2 resolved
+    }
 
     private object PrefetchEnd
 
@@ -851,9 +1255,23 @@ class ForeverClientUpdater(
      * before any file is created, never a wider figure. Release stays short
      * and never blocks: no byte wait, no progress lock, no fetch, no queue
      * wait. */
-    private class PrefetchBudget {
+    private class PrefetchBudget(private val maxBytes: Long = PREFETCH_MAX_BYTES) {
+        init { require(maxBytes in 1..PREFETCH_MAX_BYTES) }
         private val reservations = LinkedHashMap<String, Long>()
+        val commitFlushRequest = AtomicReference<(() -> Boolean)?>(null)
         private var reservedBytes = 0L
+        fun tryReserve(key: String, size: Long): Boolean {
+            val normalized = key.lowercase(Locale.ROOT)
+            require(size in 1..maxBytes) { "prefetch request exceeds the bounded private byte budget" }
+            synchronized(this) {
+                val current = reservations[normalized]
+                if (current != null) return reservedBytes <= maxBytes
+                if (reservations.size >= MAX_RESERVED_KEYS || reservedBytes > maxBytes - size) return false
+                reservations[normalized] = size
+                reservedBytes = Math.addExact(reservedBytes, size)
+                return true
+            }
+        }
         fun seed(key: String, size: Long) {
             val normalized = key.lowercase(Locale.ROOT)
             require(size in 1..PREFETCH_MAX_BYTES) { "prefetch seed exceeds the bounded private byte budget" }
@@ -876,9 +1294,18 @@ class ForeverClientUpdater(
             cancelled: () -> Boolean,
             drainPossible: () -> Boolean,
             evictOne: () -> Boolean,
+        ) = requestMeasured(key, size, cancelled, drainPossible, evictOne) {}
+
+        fun requestMeasured(
+            key: String,
+            size: Long,
+            cancelled: () -> Boolean,
+            drainPossible: () -> Boolean,
+            evictOne: () -> Boolean,
+            onWait: (Long) -> Unit,
         ) {
             val normalized = key.lowercase(Locale.ROOT)
-            require(size in 1..PREFETCH_MAX_BYTES) { "prefetch request exceeds the bounded private byte budget" }
+            require(size in 1..maxBytes) { "prefetch request exceeds the bounded private byte budget" }
             while (true) {
                 // waitForDrain is snapshotted once per iteration: the
                 // producer is the only submitter and the consumer only
@@ -893,8 +1320,8 @@ class ForeverClientUpdater(
                         // Identity already hash-recorded: accept without
                         // double count while the hard total stays within cap;
                         // above cap the inherited debt must drain first.
-                        if (reservedBytes <= PREFETCH_MAX_BYTES) return
-                    } else if (reservations.size < MAX_RESERVED_KEYS && reservedBytes <= PREFETCH_MAX_BYTES - size) {
+                        if (reservedBytes <= maxBytes) return
+                    } else if (reservations.size < MAX_RESERVED_KEYS && reservedBytes <= maxBytes - size) {
                         reservations[normalized] = size
                         reservedBytes = Math.addExact(reservedBytes, size)
                         return
@@ -906,7 +1333,9 @@ class ForeverClientUpdater(
                 }
                 if (waitForDrain) {
                     if (cancelled()) throw CancellationException("client update was paused or cancelled")
-                    Thread.sleep(100)
+                    val waitStarted = System.nanoTime()
+                    try { Thread.sleep(100) }
+                    finally { onWait(System.nanoTime() - waitStarted) }
                     continue
                 }
                 // Nothing submitted, nothing queued and no bare awaiting its
@@ -926,6 +1355,7 @@ class ForeverClientUpdater(
                 reservations.remove(key.lowercase(Locale.ROOT))?.let { reservedBytes = (reservedBytes - it).coerceAtLeast(0L) }
             }
         }
+        fun snapshot(): Pair<Int, Long> = synchronized(this) { reservations.size to reservedBytes }
         fun hasReservation(key: String): Boolean {
             synchronized(this) { return reservations.containsKey(key.lowercase(Locale.ROOT)) }
         }
@@ -943,6 +1373,7 @@ class ForeverClientUpdater(
         paths: WorkspacePaths,
         cancelled: () -> Boolean,
         progress: (ForeverClientUpdateProgress) -> Unit,
+        archiveOrder: ForeverClientArchiveOrder?,
     ): ForeverCasc.IncrementalResult {
         val target = inspectTargetState(destination)
         if (target.sourceRevision != plan.sourceRevision) throw IllegalStateException("client CASC source changed after planning")
@@ -953,11 +1384,14 @@ class ForeverClientUpdater(
         // The sealed-prefix overlap arms only on the sourceless path: sourced
         // serial updates keep the old behavior even with a reader factory.
         return if (target.sourceDataFiles == null) {
+            val requiredOrder = archiveOrder
+                ?: throw IllegalStateException("source-less CASC ingestion requires its admitted physical archive order")
             val overlapIdentity = cascCheckpointIdentity(destination, plan.sourceRevision, paths.stageReceipt)
             val overlapArmed = replayReaderFactory != null &&
                 ForeverCasc.resumableCheckpointHasObjects(paths.cascDataFiles, paths.root, overlapIdentity, cancelled)
-            writeCascDeltaParallel(destination, plan, paths, cancelled, progress, overlapArmed, overlapIdentity)
+            writeCascDeltaParallel(destination, plan, paths, cancelled, progress, overlapArmed, overlapIdentity, requiredOrder)
         } else {
+            check(archiveOrder == null) { "existing-source CASC updates must retain their serial EKey path" }
             writeCascDeltaSerial(destination, plan, paths, target, cancelled, progress)
         }
     }
@@ -1191,6 +1625,7 @@ class ForeverClientUpdater(
         progress: (ForeverClientUpdateProgress) -> Unit,
         overlapArmed: Boolean,
         overlapIdentity: String,
+        archiveOrder: ForeverClientArchiveOrder,
     ): ForeverCasc.IncrementalResult {
         val transferred = AtomicLong(0L)
         val lastReported = AtomicLong(0L)
@@ -1228,9 +1663,9 @@ class ForeverClientUpdater(
         // checkpointed prefix). Initial installs (empty checkpoint) and
         // sourced updates keep the old paths with no verifier thread, no
         // coordinator, and no behavior change.
-        return catalog.withObjects(cancelled) { records ->
+        return run {
             val queue = LinkedBlockingQueue<Any>(PREFETCH_QUEUE_DEPTH)
-            val budget = PrefetchBudget()
+            val budget = PrefetchBudget(prefetchMaxBytesForTests ?: PREFETCH_MAX_BYTES)
             // Inventory the owned leftovers of any interrupted run first: the
             // in-flight budget starts from known disk debt instead of zero,
             // so a resume never reserves a second 1 GiB on top of crash
@@ -1245,13 +1680,15 @@ class ForeverClientUpdater(
             // request evicts or fails expressly.
             val submittedUncommitted = AtomicInteger(0)
             val outstandingBare = AtomicInteger(0)
-            // Inherited raws the producer has not scheduled yet: the only
-            // legal eviction victims when the quota is full and nothing
-            // in-flight can drain. A key leaves this set the moment the
-            // producer reaches it; the far-future (largest) key goes first,
-            // never the object currently needed.
+            // After checkpoint membership is read, this map contains only
+            // uncheckpointed inherited raws not yet scheduled: the only
+            // raw-only eviction victims when quota is full and nothing
+            // in-flight can drain. Checkpointed raws are removed before the
+            // first request and require a staged-copy proof. The farthest
+            // remaining physical ordinal goes first, never the current object.
             val leftoverKeys = seedInheritedRawReservations(paths.objects, budget)
-            val evictable = TreeSet(leftoverKeys)
+            val evictable = LinkedHashMap<String, Int>(leftoverKeys.size)
+            leftoverKeys.forEach { key -> evictable[key] = archiveOrder.ordinalOf(key) }
             // Overlap coordinator: created exactly when armed, shared by the
             // producer (registration/retire accounting) and the writer (freeze
             // and group acks). The wanted leftover set is snapshotted here so
@@ -1271,6 +1708,19 @@ class ForeverClientUpdater(
             } else {
                 null
             }
+            // Bounded history prevents a raw proved/retired before its physical
+            // producer turn from being registered a second time at that turn.
+            val registeredCheckpointedRaws = HashSet<String>(leftoverKeys.size)
+            val earlyCheckpointedRawKeys = HashSet<String>(leftoverKeys.size)
+            fun registerCheckpointedRaw(ekey: String) {
+                val coordinator = overlap ?: return
+                if (!budget.hasReservation(ekey) || !registeredCheckpointedRaws.add(ekey)) return
+                outstandingBare.incrementAndGet()
+                if (coordinator.registerRawKey(ekey)) {
+                    retireOwnedLeftoverRaw(paths.objects, budget, ekey)
+                    outstandingBare.decrementAndGet()
+                }
+            }
             // Budget waits additionally observe verifier death (overlap only;
             // null otherwise, so the expression is constant false on the old
             // paths). No per-object ack wait: this only observes terminal
@@ -1278,10 +1728,15 @@ class ForeverClientUpdater(
             // group acks that will never arrive.
             val requestCancelled = { workerCancelled() || (overlap?.failure?.get() != null) }
             val pending = LinkedHashMap<String, Prefetched>()
+            // Sources handed to the CASC writer but not yet durably acknowledged.
+            // This is bounded by the writer's commit group, including
+            // an object currently being appended while an earlier group flushes.
+            val commitEntries = LinkedHashMap<String, Pair<Prefetched, File>>()
             val producerCrash = AtomicReference<Throwable?>()
             val executor = Executors.newFixedThreadPool(PREFETCH_WORKERS) { runnable ->
                 Thread(runnable).apply { name = "forever-fetch"; isDaemon = true }
             }
+            val fetchPipelineDiagnostics = FetchPipelineDiagnostics()
             fun emit(entry: Any) {
                 while (!queue.offer(entry, 250, TimeUnit.MILLISECONDS)) {
                     if (tearingDown.get()) throw CancellationException("client update was paused or cancelled")
@@ -1290,8 +1745,7 @@ class ForeverClientUpdater(
             }
             fun worker(record: ForeverClientUpdateCatalog.ObjectRecord, entryBytes: AtomicLong): File {
                 // Resume accounting lives in the worker now: the parallel pool runs
-                // ahead of the commit cursor while the writer stays strictly in
-                // catalog order.
+                // ahead of the physical archive-order commit cursor.
                 val part = File(paths.objects, "${record.ekey}.part")
                 val resumeOffset = if (Files.isRegularFile(part.toPath(), LinkOption.NOFOLLOW_LINKS)) {
                     Files.size(part.toPath()).takeIf { it in 1 until record.encodedSize } ?: 0L
@@ -1306,15 +1760,184 @@ class ForeverClientUpdater(
                     }
                 }
             }
+            val batchFetch = batchFetchForTests ?: if (fetchObject === DEFAULT_UPDATER_FETCH_OBJECT) {
+                DEFAULT_UPDATER_FETCH_BATCH
+            } else {
+                null
+            }
+            fun resumeOffset(record: ForeverClientUpdateCatalog.ObjectRecord): Long {
+                val part = File(paths.objects, "${record.ekey}.part")
+                return if (Files.isRegularFile(part.toPath(), LinkOption.NOFOLLOW_LINKS)) {
+                    Files.size(part.toPath()).takeIf { it in 1 until record.encodedSize } ?: 0L
+                } else 0L
+            }
+            fun reportMemberProgress(record: ForeverClientUpdateCatalog.ObjectRecord, entryBytes: AtomicLong, bytes: Long, offset: Long) {
+                if (tearingDown.get()) throw CancellationException("client update was paused or cancelled")
+                val network = (bytes - offset).coerceAtLeast(0L)
+                synchronized(progressLock) {
+                    entryBytes.accumulateAndGet(network) { current, next -> maxOf(current, next) }
+                    inFlight[record.ekey] = maxOf(inFlight.getOrDefault(record.ekey, 0L), network)
+                    reportLocked()
+                }
+            }
+            fun evictOne(): Boolean {
+                val retireStarted = System.nanoTime()
+                val claimed = overlap?.tryClaimOne()
+                if (claimed != null) {
+                    val factory = replayReaderFactory
+                        ?: throw IllegalStateException("overlap evict proof requires a reader factory")
+                    val staged = overlap?.rawKeyRecord(claimed)
+                        ?: throw IllegalStateException("overlap freeze records unavailable before staged-copy proof")
+                    val victimRecord = catalog.objectByKey(claimed)
+                    val victimSpec = ForeverCasc.IncrementalObjectSpec(
+                        victimRecord.ekey, victimRecord.contentKey, victimRecord.encodedSize, victimRecord.decodedSize,
+                    )
+                    if (!ForeverCasc.verifyStagedCopyForRawRetire(paths.cascDataFiles, staged, victimSpec, factory, workerCancelled)) {
+                        throw IllegalStateException("private updater checkpointed raw cannot prove its staged copy: $claimed")
+                    }
+                    evictable.remove(claimed)
+                    retireOwnedLeftoverRaw(paths.objects, budget, claimed)
+                    outstandingBare.decrementAndGet()
+                    fetchPipelineDiagnostics.reserveRetireNanos.addAndGet(System.nanoTime() - retireStarted)
+                    return true
+                }
+                val victim = evictable.maxByOrNull { it.value }?.key ?: return false
+                evictable.remove(victim)
+                retireOwnedLeftoverRaw(paths.objects, budget, victim)
+                fetchPipelineDiagnostics.reserveRetireNanos.addAndGet(System.nanoTime() - retireStarted)
+                return true
+            }
+            fun submitReserved(records: List<ForeverClientUpdateCatalog.ObjectRecord>) {
+                if (records.isEmpty()) return
+                val entries = records.map { record ->
+                    val spec = ForeverCasc.IncrementalObjectSpec(
+                        record.ekey.lowercase(Locale.ROOT), record.contentKey.lowercase(Locale.ROOT),
+                        record.encodedSize, record.decodedSize,
+                    )
+                    Prefetched(spec, record, AtomicLong(0L), CompletableFuture())
+                }
+                entries.forEach { fetchPipelineDiagnostics.registered() }
+                synchronized(progressLock) { records.forEach { inFlight[it.ekey] = 0L } }
+                submittedUncommitted.addAndGet(records.size)
+                if (records.size > 1 && batchFetch != null) {
+                    fetchPipelineDiagnostics.submittedBatch(records.size)
+                    val positions = records.mapIndexed { index, record -> record.ekey.lowercase(Locale.ROOT) to index }.toMap()
+                    val offsets = records.map(::resumeOffset)
+                    val submittedAtNanos = System.nanoTime()
+                    executor.execute {
+                        val callbackStartedAtNanos = fetchPipelineDiagnostics.callbackStarted(submittedAtNanos)
+                        try {
+                            val fetched = batchFetch.invoke(records, paths.objects, workerCancelled) { key, bytes ->
+                                val index = positions[key.lowercase(Locale.ROOT)]
+                                    ?: throw IllegalStateException("archive batch reported progress for an unreserved object")
+                                reportMemberProgress(records[index], entries[index].fetchedBytes, bytes, offsets[index])
+                            }
+                            if (fetched.size != entries.size) throw IllegalStateException("archive batch returned the wrong member count")
+                             fetched.forEachIndexed { index, file ->
+                                fetchPipelineDiagnostics.completeReady(entries[index].diagnosticState, entries[index].future, file)
+                                fetchReadyForTests?.invoke(records[index].ekey)
+                             }
+                        } catch (failure: Throwable) {
+                            entries.forEach { it.future.completeExceptionally(failure) }
+                        } finally {
+                            fetchPipelineDiagnostics.callbackFinished(callbackStartedAtNanos)
+                        }
+                    }
+                } else {
+                    entries.forEachIndexed { index, entry ->
+                        fetchPipelineDiagnostics.submittedSingle()
+                        val submittedAtNanos = System.nanoTime()
+                        executor.execute {
+                            val callbackStartedAtNanos = fetchPipelineDiagnostics.callbackStarted(submittedAtNanos)
+                            try {
+                                val file = worker(records[index], entry.fetchedBytes)
+                                fetchPipelineDiagnostics.completeReady(entry.diagnosticState, entry.future, file)
+                                fetchReadyForTests?.invoke(records[index].ekey)
+                            } catch (failure: Throwable) {
+                                entry.future.completeExceptionally(failure)
+                            } finally {
+                                fetchPipelineDiagnostics.callbackFinished(callbackStartedAtNanos)
+                            }
+                        }
+                    }
+                }
+                entries.forEach(::emit)
+            }
+            fun reserveAheadOfInheritedDebt(record: ForeverClientUpdateCatalog.ObjectRecord): Boolean {
+                while (!budget.tryReserve(record.ekey, record.encodedSize)) {
+                    checkCancelled(workerCancelled)
+                    // Old lexical lookahead can occupy 30 of 34 slots far beyond
+                    // the physical cursor. Drain legal inherited victims before
+                    // waiting, or completed head work leaves only four fetchers
+                    // active forever. evictOne preserves the staged-copy proof
+                    // for checkpointed raws and never chooses in-flight sources.
+                    if (!evictOne()) return false
+                }
+                return true
+            }
+            fun reserveImmediately(record: ForeverClientUpdateCatalog.ObjectRecord): Boolean {
+                val reserveStarted = System.nanoTime()
+                return try {
+                    reserveAheadOfInheritedDebt(record)
+                } finally {
+                    fetchPipelineDiagnostics.reserveNanos.addAndGet(System.nanoTime() - reserveStarted)
+                }
+            }
+            fun reserveForSingle(record: ForeverClientUpdateCatalog.ObjectRecord) {
+                val reserveStarted = System.nanoTime()
+                try {
+                    if (!reserveAheadOfInheritedDebt(record)) {
+                        budget.requestMeasured(
+                            record.ekey,
+                            record.encodedSize,
+                            requestCancelled,
+                            {
+                                submittedUncommitted.get() > 0 || !queue.isEmpty() ||
+                                    (outstandingBare.get() > 0 && overlap?.hasProvableRaw() != true)
+                            },
+                            ::evictOne,
+                            { waited -> fetchPipelineDiagnostics.reserveWaitNanos.addAndGet(waited) },
+                        )
+                    }
+                } catch (cancelledFailure: CancellationException) {
+                    if (!workerCancelled()) overlap?.failure?.get()?.let { throw it }
+                    throw cancelledFailure
+                }
+                fetchPipelineDiagnostics.reserveNanos.addAndGet(System.nanoTime() - reserveStarted)
+                if (tearingDown.get()) throw CancellationException("client update was paused or cancelled")
+            }
+            fun requestAndSubmitSingle(record: ForeverClientUpdateCatalog.ObjectRecord) {
+                reserveForSingle(record)
+                submitReserved(listOf(record))
+            }
+            fun submitReservedGroup(records: List<ForeverClientUpdateCatalog.ObjectRecord>) {
+                var next = 0
+                while (next < records.size) {
+                    val prefixStart = next
+                    while (next < records.size && reserveImmediately(records[next])) next++
+
+                    if (next == prefixStart) {
+                        // With no immediately reservable prefix, block only for
+                        // the first remaining member. Then opportunistically
+                        // reserve its contiguous successors before submission;
+                        // never wait while holding an unscheduled partial group.
+                        reserveForSingle(records[next])
+                        next++
+                        while (next < records.size && reserveImmediately(records[next])) next++
+                    }
+
+                    val reservedCount = next - prefixStart
+                    if (reservedCount == 1 && next < records.size && batchFetch != null) {
+                        fetchPipelineDiagnostics.pressureTailSingles(1)
+                    }
+                    submitReserved(records.subList(prefixStart, next))
+                }
+            }
             val producer = Thread {
                 try {
                     val identity = cascCheckpointIdentity(destination, plan.sourceRevision, paths.stageReceipt)
-                    // The writer creates the identity-bound owner/checkpoint on
-                    // the calling thread concurrently with this open. A read
-                    // that lands mid-creation must not fail the run: retry
-                    // bounded while nothing was submitted yet. Any failure
-                    // after the checkpoint opened propagates immediately, and a
-                    // genuinely foreign checkpoint still throws after the bound.
+                    // The writer creates the identity-bound checkpoint concurrently.
+                    // Retry only its initial bounded open; all later failures are final.
                     var checkpointOpened = false
                     var openAttempts = 0
                     while (true) {
@@ -1326,161 +1949,155 @@ class ForeverClientUpdater(
                                 workerCancelled,
                             ) { staged ->
                                 checkpointOpened = true
-                                val stagedIterator = staged.iterator()
-                                var stagedNext: ForeverCasc.IncrementalObjectSpec? = if (stagedIterator.hasNext()) stagedIterator.next() else null
-                                records.forEach { record ->
-                                    if (tearingDown.get()) throw CancellationException("client update was paused or cancelled")
-                                    checkCancelled(cancelled)
-                                    validateTransferBounds(record)
-                                    val ekey = record.ekey.lowercase(Locale.ROOT)
-                                    val contentKey = record.contentKey.lowercase(Locale.ROOT)
-                                    while (stagedNext != null && stagedNext!!.ekey < ekey) {
-                                        throw IllegalStateException("resumable CASC checkpoint contains an object missing from the target cursor")
+                                val checkpointed = BitSet(archiveOrder.objectCount.toInt())
+                                staged.forEach { saved ->
+                                    val admitted = archiveTargetMembership(archiveOrder, saved.ekey)
+                                    val spec = admitted.value
+                                    if (spec.ekey != saved.ekey.lowercase(Locale.ROOT) ||
+                                        spec.contentKey != saved.contentKey.lowercase(Locale.ROOT) ||
+                                        spec.encodedSize != saved.encodedSize || spec.decodedSize != saved.decodedSize ||
+                                        checkpointed[admitted.index]
+                                    ) {
+                                        throw IllegalStateException("resumable CASC checkpoint repeats or changes an admitted target object")
                                     }
-                                    // Reached means scheduled: this key can no
-                                    // longer be evicted as an unscheduled
-                                    // inherited leftover.
-                                    evictable.remove(ekey)
-                                    val spec = ForeverCasc.IncrementalObjectSpec(ekey, contentKey, record.encodedSize, record.decodedSize)
-                                    if (stagedNext?.ekey == ekey) {
-                                        val completed = requireNotNull(stagedNext)
-                                        if (completed.contentKey != contentKey || completed.encodedSize != record.encodedSize || completed.decodedSize != record.decodedSize) {
-                                            throw IllegalStateException("resumable CASC checkpoint staged object changed in the target catalog")
+                                    checkpointed.set(admitted.index)
+                                }
+
+                                // Legacy checkpoints are EKey ordered, while
+                                // new missing objects are scheduled physically.
+                                // A retained raw can therefore be checkpointed
+                                // after the first missing physical object. Such
+                                // keys are never raw-only eviction candidates:
+                                // wait for the overlap writer's frozen locator
+                                // map, register the bounded set before the
+                                // first budget request, and let the existing
+                                // exact staged-copy proof/ack retire them.
+                                val checkpointedRawKeys = leftoverKeys.filter { key ->
+                                    val keyOrdinal = archiveOrder.ordinalOf(key)
+                                    if (checkpointed[keyOrdinal]) {
+                                        evictable.remove(key)
+                                        true
+                                    } else {
+                                        false
+                                    }
+                                }
+                                val overlapCoordinator = overlap
+                                if (overlapCoordinator != null && checkpointedRawKeys.isNotEmpty()) {
+                                    while (overlapCoordinator.prefixTotal.get() < 0L) {
+                                        overlapCoordinator.failure.get()?.let { throw it }
+                                        checkCancelled(workerCancelled)
+                                        Thread.sleep(25L)
+                                    }
+                                    overlapCoordinator.failure.get()?.let { throw it }
+                                    if (overlapCoordinator.prefixTotal.get() != checkpointed.cardinality().toLong()) {
+                                        throw IllegalStateException("producer checkpoint membership differs from the frozen overlap prefix")
+                                    }
+                                    checkpointedRawKeys.forEach { key ->
+                                        if (overlapCoordinator.rawKeyRecord(key) == null) {
+                                            throw IllegalStateException("checkpointed inherited raw has no frozen staged-copy locator: $key")
                                         }
-                                        stagedNext = if (stagedIterator.hasNext()) stagedIterator.next() else null
-                                        if (overlap != null) {
-                                            // Sealed-prefix overlap: the staged
-                                            // bytes stay UNVERIFIED until the
-                                            // verifier group-acks them, so the
-                                            // original bare-yield raw retirement
-                                            // is removed here. Only keys that
-                                            // actually hold a leftover raw are
-                                            // registered (bounded by the 34-key
-                                            // recovery quota). The increment
-                                            // happens BEFORE registration, so
-                                            // a late registration (the verifier
-                                            // already acked past this key)
-                                            // balances with an immediate single
-                                            // retire instead of stranding the
-                                            // budget or double-counting.
-                                            if (completed.ekey.lowercase(java.util.Locale.ROOT) in leftoverKeys) {
+                                        registerCheckpointedRaw(key)
+                                    }
+                                } else if (checkpointedRawKeys.isNotEmpty()) {
+                                    // Without an overlap reader, let the existing
+                                    // serial CASC writer verify these retained
+                                    // copies before physical scheduling reaches a
+                                    // missing object. Its after-yield retire is
+                                    // the proof; the 34-key budget still applies.
+                                    checkpointedRawKeys.forEach { key ->
+                                        if (budget.hasReservation(key) && earlyCheckpointedRawKeys.add(key)) {
+                                            outstandingBare.incrementAndGet()
+                                            val record = catalog.objectByKey(key)
+                                            emit(
+                                                ForeverCasc.IncrementalObjectSpec(
+                                                    record.ekey,
+                                                    record.contentKey,
+                                                    record.encodedSize,
+                                                    record.decodedSize,
+                                                ),
+                                            )
+                                        }
+                                    }
+                                }
+
+                                var ordinal = 0
+                                val candidates = ArrayList<ForeverClientUpdateCatalog.ObjectRecord>(ForeverClientUpdateTransfer.MAX_BATCH_OBJECTS)
+                                var candidateBytes = 0L
+                                fun flushCandidates() {
+                                    if (candidates.isEmpty()) return
+                                    submitReservedGroup(candidates.toList())
+                                    candidates.clear()
+                                    candidateBytes = 0L
+                                }
+                                archiveOrder.withObjects(workerCancelled) { orderedRecords ->
+                                    orderedRecords.forEach { record ->
+                                        if (tearingDown.get()) throw CancellationException("client update was paused or cancelled")
+                                        checkCancelled(cancelled)
+                                        validateTransferBounds(record)
+                                        if (ordinal >= archiveOrder.objectCount.toInt()) {
+                                            throw IllegalStateException("archive-order producer exceeded the admitted target count")
+                                        }
+                                        val ekey = record.ekey.lowercase(Locale.ROOT)
+                                        evictable.remove(ekey)
+                                        val spec = ForeverCasc.IncrementalObjectSpec(
+                                            ekey,
+                                            record.contentKey.lowercase(Locale.ROOT),
+                                            record.encodedSize,
+                                            record.decodedSize,
+                                        )
+                                        if (checkpointed[ordinal]) {
+                                            flushCandidates()
+                                            if (overlap != null) {
+                                                // Pre-registration above covers
+                                                // checkpointed inherited raws
+                                                // that may be claimed before this
+                                                // physical turn. The live-reservation
+                                                // and bounded history guard make
+                                                // this idempotent if this key was
+                                                // retired while waiting for it.
+                                                registerCheckpointedRaw(ekey)
+                                            } else if (ekey !in earlyCheckpointedRawKeys) {
                                                 outstandingBare.incrementAndGet()
-                                                if (overlap?.registerRawKey(completed.ekey) == true) {
-                                                    retireOwnedLeftoverRaw(paths.objects, budget, completed.ekey)
-                                                    outstandingBare.decrementAndGet()
-                                                }
+                                            } else {
+                                                // Already emitted before missing
+                                                // physical work so its serial
+                                                // staged-copy proof could free
+                                                // the inherited quota safely.
                                             }
-                                            emit(spec)
+                                            if (overlap != null || ekey !in earlyCheckpointedRawKeys) emit(spec)
+                                            ordinal++
                                             return@forEach
                                         }
-                                        // Already committed by the interrupted run: yielded
-                                        // bare, with no pending entry. The writer verifies
-                                        // the staged bytes itself and never calls sourceFor
-                                        // for this spec, so keeping it out of [pending]
-                                        // also fixes the O(N) leak of never-removed
-                                        // checkpoint entries. Counted before the
-                                        // queue offer so the consumer's liveness
-                                        // check never sees a dequeued-but-
-                                        // unverified bare as drainable-nothing.
-                                        outstandingBare.incrementAndGet()
-                                        emit(spec)
-                                        return@forEach
-                                    }
-                                    try {
-                                        budget.request(
-                                            record.ekey,
-                                            record.encodedSize,
-                                            // A dead verifier unblocks a budget
-                                            // wait immediately, and a registered
-                                            // prefix key with a frozen
-                                            // staged-copy location never waits
-                                            // for a group ack when an
-                                            // individual proof can free it: the
-                                            // verifier may still be a whole slow
-                                            // group away while the tail could
-                                            // already download. The wrapper
-                                            // below rethrows the verifier's
-                                            // error as primary.
-                                            requestCancelled,
-                                            {
-                                                submittedUncommitted.get() > 0 || !queue.isEmpty() ||
-                                                    (outstandingBare.get() > 0 && overlap?.hasProvableRaw() != true)
-                                            },
+                                        if (record.sourceKind != "range" ||
+                                            record.encodedSize > ForeverClientUpdateTransfer.MAX_BATCH_BYTES
                                         ) {
-                                        // Registered prefix keys first: an
-                                        // individual full-strength proof frees
-                                        // budget without waiting for the
-                                        // verifier. The atomic claim means a
-                                        // concurrent group ack can never
-                                        // double-retire. Its ACTUAL staged copy
-                                        // (located by the freeze record
-                                        // collected during the single load
-                                        // pass, no checkpoint rescan) must pass
-                                        // the full-strength reader proof with
-                                        // path-vs-FD binding before the single
-                                        // retire. Any mismatch (a replaced
-                                        // same-size inode included) aborts the
-                                        // run without retiring and without
-                                        // falling back. Unregistered far-tail
-                                        // victims keep the legacy raw-only
-                                        // retirement below.
-                                        val claimed = overlap?.tryClaimOne()
-                                        if (claimed != null) {
-                                            val factory = replayReaderFactory
-                                                ?: throw IllegalStateException("overlap evict proof requires a reader factory")
-                                            val staged = overlap?.rawKeyRecord(claimed)
-                                                ?: throw IllegalStateException("overlap freeze records unavailable before staged-copy proof")
-                                            val victimRecord = catalog.objectByKey(claimed)
-                                            val victimSpec = ForeverCasc.IncrementalObjectSpec(
-                                                victimRecord.ekey,
-                                                victimRecord.contentKey,
-                                                victimRecord.encodedSize,
-                                                victimRecord.decodedSize,
-                                            )
-                                            val proven = ForeverCasc.verifyStagedCopyForRawRetire(
-                                                paths.cascDataFiles,
-                                                staged,
-                                                victimSpec,
-                                                factory,
-                                                workerCancelled,
-                                            )
-                                            if (!proven) {
-                                                throw IllegalStateException("private updater checkpointed raw cannot prove its staged copy: $claimed")
-                                            }
-                                            evictable.remove(claimed)
-                                            retireOwnedLeftoverRaw(paths.objects, budget, claimed)
-                                            outstandingBare.decrementAndGet()
-                                            true
-                                        } else {
-                                            // Unregistered far-tail victims
-                                            // (never checkpointed, never in a
-                                            // group) keep the legacy raw-only
-                                            // retirement: their bytes were never
-                                            // incorporated, so no staged-copy
-                                            // proof exists to run.
-                                            val victim = evictable.lastOrNull()
-                                            if (victim == null) {
-                                                false
-                                            } else {
-                                                evictable.remove(victim)
-                                                retireOwnedLeftoverRaw(paths.objects, budget, victim)
-                                                true
+                                            flushCandidates()
+                                            requestAndSubmitSingle(record)
+                                            ordinal++
+                                            return@forEach
+                                        }
+                                        if (candidates.isNotEmpty()) {
+                                            val previous = candidates.last()
+                                            val contiguous = previous.sourceKind == "range" &&
+                                                previous.sourceHash.equals(record.sourceHash, true) &&
+                                                Math.addExact(previous.sourceOffset, previous.encodedSize) == record.sourceOffset
+                                            val exceedsBytes = candidateBytes > ForeverClientUpdateTransfer.MAX_BATCH_BYTES - record.encodedSize
+                                            if (!contiguous || exceedsBytes || candidates.size == ForeverClientUpdateTransfer.MAX_BATCH_OBJECTS) {
+                                                flushCandidates()
                                             }
                                         }
+                                        candidates += record
+                                        candidateBytes = Math.addExact(candidateBytes, record.encodedSize)
+                                        ordinal++
+                                        if (candidates.size == ForeverClientUpdateTransfer.MAX_BATCH_OBJECTS ||
+                                            candidateBytes == ForeverClientUpdateTransfer.MAX_BATCH_BYTES
+                                        ) flushCandidates()
                                     }
-                                    } catch (cancelledFailure: CancellationException) {
-                                        if (!workerCancelled()) overlap?.failure?.get()?.let { throw it }
-                                        throw cancelledFailure
+                                    check(ordinal.toLong() == archiveOrder.objectCount) {
+                                        "archive-order producer did not consume the complete admitted target"
                                     }
-                                    if (tearingDown.get()) throw CancellationException("client update was paused or cancelled")
-                                    val entryBytes = AtomicLong(0L)
-                                    val future = executor.submit<File> {
-                                        worker(record, entryBytes)
-                                    }
-                                    submittedUncommitted.incrementAndGet()
-                                    emit(Prefetched(spec, record, entryBytes, future))
                                 }
-                                if (stagedNext != null) throw IllegalStateException("resumable CASC checkpoint contains objects outside the target cursor")
+                                flushCandidates()
                             }
                             break
                         } catch (cancelledFailure: CancellationException) {
@@ -1498,15 +2115,10 @@ class ForeverClientUpdater(
                         }
                     }
                 } catch (crash: Throwable) {
-                    // First failure wins: a teardown interrupt must not mask the
-                    // original error, and the consumer rethrows it after the end
-                    // marker instead of truncating the manifest silently.
                     producerCrash.compareAndSet(null, crash)
                 } finally {
                     runCatching {
                         while (!queue.offer(PrefetchEnd, 250, TimeUnit.MILLISECONDS)) {
-                            // A slow final commit must not lose the end marker.
-                            // Teardown interrupts this wait and joins the producer.
                             if (tearingDown.get() || Thread.currentThread().isInterrupted) break
                         }
                     }
@@ -1515,6 +2127,10 @@ class ForeverClientUpdater(
             fun nextEntry(): Any {
                 var idleChecks = 0
                 while (true) {
+                // Only the physical-order writer persists groups or retires raws.
+                    // An empty queue may mean the producer cannot reserve its
+                    // next object until this partial group's budget is freed.
+                    if (queue.isEmpty()) budget.commitFlushRequest.get()?.invoke()
                     queue.poll(2, TimeUnit.SECONDS)?.let { return it }
                     producerCrash.get()?.let { throw it }
                     checkCancelled(cancelled)
@@ -1524,11 +2140,11 @@ class ForeverClientUpdater(
                     }
                 }
             }
-            var activeEntry: Prefetched? = null
             var sourceRevalidateNanos = 0L
             var verifiedSourceWaitNanos = 0L
             var resolvedSources = 0L
             val sourceDiagnostics = Logger.getLogger("ForeverClientUpdate")
+            var pipelineOutcome = "failed"
             try {
                 val specs = sequence {
                     while (true) {
@@ -1570,7 +2186,7 @@ class ForeverClientUpdater(
                     // instead of committing a truncated manifest.
                     producerCrash.get()?.let { throw it }
                 }
-                ForeverCasc.writeTargetIncrementalResumable(
+                val result = ForeverCasc.writeTargetIncrementalResumable(
                     null,
                     paths.cascDataFiles,
                     paths.root,
@@ -1581,11 +2197,16 @@ class ForeverClientUpdater(
                         // storage identity is re-checked for every object, never
                         // throttled to an interval and never deferred to commit.
                         val revalidateStarted = System.nanoTime()
+                        val entry = pending[spec.ekey]
+                            ?: throw IllegalStateException("CASC writer requested an object outside the fetch pipeline")
+                        val beforeStorage = fetchPipelineDiagnostics.sourceRequested(entry.diagnosticState, afterRevalidate = false)
+                        sourceReadinessForTests?.invoke(false, beforeStorage.first, beforeStorage.second)
                         destination.revalidate()
                         sourceRevalidateNanos += System.nanoTime() - revalidateStarted
-                        val entry = pending.remove(spec.ekey)
-                            ?: throw IllegalStateException("CASC writer requested an object outside the fetch pipeline")
-                        activeEntry = entry
+                        pending.remove(spec.ekey)
+                        beforePostRevalidateSampleForTests?.invoke()
+                        val afterStorage = fetchPipelineDiagnostics.sourceRequested(entry.diagnosticState, afterRevalidate = true)
+                        sourceReadinessForTests?.invoke(true, afterStorage.first, afterStorage.second)
                         val waitStarted = System.nanoTime()
                         val verified = try {
                             if (overlap != null) {
@@ -1609,9 +2230,19 @@ class ForeverClientUpdater(
                             }
                         } catch (failure: ExecutionException) {
                             throw (failure.cause ?: failure)
+                        } finally {
+                            fetchPipelineDiagnostics.sourceResolved(entry.diagnosticState, System.nanoTime() - waitStarted)
                         }
                         verifiedSourceWaitNanos += System.nanoTime() - waitStarted
                         resolvedSources++
+                        run {
+                            if (commitEntries.size >= ForeverCasc.RESUMABLE_COMMIT_GROUP_OBJECTS) {
+                                throw IllegalStateException("CASC unacknowledged source map exceeds its bounded commit group")
+                            }
+                            if (commitEntries.putIfAbsent(spec.ekey, entry to verified) != null) {
+                                throw IllegalStateException("CASC source was resolved twice before durable acknowledgement")
+                            }
+                        }
                         // Diagnostic only: both phases previously shared the
                         // CASC sourceResolve timer. The writer owns these sums.
                         if ((resolvedSources and 0xffL) == 0L) {
@@ -1626,10 +2257,22 @@ class ForeverClientUpdater(
                     cancelled,
                     cascCheckpointIdentity(destination, plan.sourceRevision, paths.stageReceipt),
                     { spec, raw ->
-                        val entry = requireNotNull(activeEntry) { "verified encoded transfer committed without an active fetch" }
-                        activeEntry = null
-                        if (Files.isSymbolicLink(raw.toPath()) || !Files.isRegularFile(raw.toPath(), LinkOption.NOFOLLOW_LINKS)) {
-                            throw IllegalStateException("verified encoded transfer is not a regular private-work file")
+                        val rawValidationStarted = System.nanoTime()
+                        val entry = try {
+                            val key = spec.ekey.lowercase(Locale.ROOT)
+                            val (matchedEntry, expectedRaw) = commitEntries.remove(key)
+                                ?: throw IllegalStateException("durable CASC acknowledgement has no matching bounded fetch entry")
+                            if (matchedEntry.spec.ekey != key || matchedEntry.spec.contentKey != spec.contentKey.lowercase(Locale.ROOT) ||
+                                matchedEntry.spec.encodedSize != spec.encodedSize || matchedEntry.spec.decodedSize != spec.decodedSize || expectedRaw != raw
+                            ) {
+                                throw IllegalStateException("durable CASC acknowledgement does not match its resolved fetch entry")
+                            }
+                            if (Files.isSymbolicLink(raw.toPath()) || !Files.isRegularFile(raw.toPath(), LinkOption.NOFOLLOW_LINKS)) {
+                                throw IllegalStateException("verified encoded transfer is not a regular private-work file")
+                            }
+                            matchedEntry
+                        } finally {
+                            fetchPipelineDiagnostics.sourceConsumedRawNanos.addAndGet(System.nanoTime() - rawValidationStarted)
                         }
                         synchronized(progressLock) {
                             transferred.addAndGet(entry.fetchedBytes.get())
@@ -1637,78 +2280,78 @@ class ForeverClientUpdater(
                             inFlight.remove(spec.ekey)
                             reportLocked()
                         }
-                        Files.delete(raw.toPath())
-                        // Make the unlink durable before freeing its budget:
-                        // only this private cache directory is forced — Data,
-                        // checkpoint and journal cadence is unchanged. A
-                        // failed force propagates without releasing, so the
-                        // next resume re-inventories instead of undercounting.
-                        forceDirectory(paths.objects.toPath())
-                        // The updater never deletes .part files outside the
-                        // owned-leftover retirement: keep the reservation
-                        // while a sibling raw of this key persists instead
-                        // of freeing bytes for a file still on disk.
-                        if (!Files.exists(File(paths.objects, "${spec.ekey}.part").toPath(), LinkOption.NOFOLLOW_LINKS)) {
-                            budget.release(spec.ekey)
+                        val rawRetireStarted = System.nanoTime()
+                        try {
+                            Files.delete(raw.toPath())
+                            // Make the unlink durable before freeing its budget:
+                            // only this private cache directory is forced — Data,
+                            // checkpoint and journal cadence is unchanged. A
+                            // failed force propagates without releasing, so the
+                            // next resume re-inventories instead of undercounting.
+                            forceDirectory(paths.objects.toPath())
+                            // The updater never deletes .part files outside the
+                            // owned-leftover retirement: keep the reservation
+                            // while a sibling raw of this key persists instead
+                            // of freeing bytes for a file still on disk.
+                            if (!Files.exists(File(paths.objects, "${spec.ekey}.part").toPath(), LinkOption.NOFOLLOW_LINKS)) {
+                                budget.release(spec.ekey)
+                            }
+                        } finally {
+                            fetchPipelineDiagnostics.sourceConsumedRawNanos.addAndGet(System.nanoTime() - rawRetireStarted)
                         }
                         submittedUncommitted.decrementAndGet()
+                        val committed = committedObjects.get()
+                        if (committed > 0L && committed % FETCH_DIAGNOSTIC_OBJECT_INTERVAL == 0L) {
+                            fetchPipelineDiagnostics.log("progress", committed, budget.snapshot())
+                        }
                     },
                     replayReaderFactory = replayReaderFactory,
                     overlapCoordinator = overlap,
-                    overlapOfficialStream = if (overlap != null) {
-                        { verifierCancelled, consume ->
-                            // Dedicated official cursor on the verifier thread:
-                            // same ORDER BY ekey as the producer's cursor, so
-                            // the verifier's join with the checkpoint prefix
-                            // is positional with O(1) memory and no per-key
-                            // query. Never a cursor shared with the producer.
-                            catalog.withObjects(verifierCancelled) { records ->
-                                consume(records.map { record ->
-                                    ForeverCasc.IncrementalObjectSpec(
-                                        record.ekey.lowercase(java.util.Locale.ROOT),
-                                        record.contentKey.lowercase(java.util.Locale.ROOT),
-                                        record.encodedSize,
-                                        record.decodedSize,
-                                    )
-                                })
-                            }
-                        }
-                    } else {
-                        null
-                    },
+                    commitFlushRequest = budget.commitFlushRequest,
+                    targetObjectCount = archiveOrder.objectCount.toInt(),
+                    targetMembership = { key -> archiveTargetMembership(archiveOrder, key) },
                 )
+                pipelineOutcome = "complete"
+                result
+            } catch (cancelledFailure: CancellationException) {
+                pipelineOutcome = "cancelled"
+                throw cancelledFailure
             } finally {
-                // Combined stop: no new submits or writes from here on, then join
-                // every worker before returning. The wait is bounded by the socket
-                // read timeout per stalled worker; a pause or failure is never
-                // reported as complete while a worker can still write.
-                tearingDown.set(true)
-                producer.interrupt()
-                executor.shutdownNow()
                 try {
-                    producer.join(30_000)
-                } catch (_: InterruptedException) {
-                    Thread.currentThread().interrupt()
-                }
-                if (producer.isAlive) producer.join()
-                var waitedMs = 0L
-                while (!executor.isTerminated && waitedMs < TEARDOWN_WORKER_GRACE_MS) {
-                    if (!executor.awaitTermination(10, TimeUnit.SECONDS)) executor.shutdownNow()
-                    waitedMs += 10_000L
-                }
-                if (!executor.isTerminated) {
-                    executor.awaitTermination(Long.MAX_VALUE, TimeUnit.NANOSECONDS)
-                }
-                for (ekey in pending.keys.toList()) {
-                    pending.remove(ekey)?.let { entry ->
-                        if (!entry.future.isDone) entry.future.cancel(true)
-                        // Completed-but-unconsumed verified outputs stay on disk:
-                        // the private workspace accepts them as prefetch
-                        // leftovers (up to its legacy bound) and the next run
-                        // reuses them without spending consent again.
+                    // Combined stop: no new submits or writes from here on, then join
+                    // every worker before returning. The wait is bounded by the socket
+                    // read timeout per stalled worker; a pause or failure is never
+                    // reported as complete while a worker can still write.
+                    tearingDown.set(true)
+                    producer.interrupt()
+                    executor.shutdownNow()
+                    try {
+                        producer.join(30_000)
+                    } catch (_: InterruptedException) {
+                        Thread.currentThread().interrupt()
                     }
+                    if (producer.isAlive) producer.join()
+                    var waitedMs = 0L
+                    while (!executor.isTerminated && waitedMs < TEARDOWN_WORKER_GRACE_MS) {
+                        if (!executor.awaitTermination(10, TimeUnit.SECONDS)) executor.shutdownNow()
+                        waitedMs += 10_000L
+                    }
+                    if (!executor.isTerminated) {
+                        executor.awaitTermination(Long.MAX_VALUE, TimeUnit.NANOSECONDS)
+                    }
+                    for (ekey in pending.keys.toList()) {
+                        pending.remove(ekey)?.let { entry ->
+                            if (!entry.future.isDone) entry.future.cancel(true)
+                            // Completed-but-unconsumed verified outputs stay on disk:
+                            // the private workspace accepts them as prefetch
+                            // leftovers (up to its legacy bound) and the next run
+                            // reuses them without spending consent again.
+                        }
+                    }
+                    budget.reset()
+                } finally {
+                    fetchPipelineDiagnostics.log(pipelineOutcome, committedObjects.get(), budget.snapshot())
                 }
-                budget.reset()
             }
         }
     }
@@ -3204,15 +3847,11 @@ class ForeverClientUpdater(
         private const val PRODUCT = "wow_classic_beta"
         private const val ENGINE_ID = "forever-client-updater"
         private const val RUNTIME_SCHEMA = "v1"
-        /** c106 lookahead-32 tuning: 16 workers against the widened
-         * depth-bound pipeline. The ordered consumer holds 1 pending entry
-         * while awaiting its offered future, the bounded queue holds at most
-         * 30 further entries, and the producer offers at most 1 more, so 16
-         * workers stay saturated while the commit cursor advances strictly in
-         * catalog order: at most ~32 in-flight keys stay under the 34-key
-         * prefetch bound (32 live plus margin for older crash-window
-         * leftovers), and the strict 1 GiB encoded-bytes budget is
-         * unchanged. Per-worker memory stays streaming-bounded: 64 KiB
+        /** Sixteen workers against the bounded producer/consumer pipeline.
+         * The consumer commits in physical archive order; the shared 34-key
+         * reservation map and strict 1 GiB encoded-byte budget bound both
+         * queued singles and every member of a reserved batch. Per-worker
+         * memory stays streaming-bounded: 64 KiB
          * buffers with a bounded 8192-entry chunk table and no decoded-size
          * allocation (ForeverBlte.verifyEncodedObject decodes to a null
          * sink), plus one private verification temporary per largest
@@ -3271,6 +3910,11 @@ class ForeverClientUpdater(
         private const val MAX_STORAGE_MARKER_BYTES = 512
         private const val COPY_BUFFER_BYTES = 64 * 1024
         private const val CASC_TABLE_AND_SORT_RESERVE = 256L * 1024 * 1024
+        private const val ARCHIVE_ORDER_DIRECTORY_NAME = ".forever-client-archive-order"
+        private const val ARCHIVE_ORDER_OWNER_NAME = ".owner"
+        private val ARCHIVE_ORDER_OWNER_BYTES = "forever-client-archive-order-v1\n".toByteArray(Charsets.UTF_8)
+        private const val ARCHIVE_ORDER_PUBLISH_LOCK_NAME = ".forever-private-publish.lock"
+        private val ARCHIVE_ORDER_TEMP_FILE = Regex("\\.archive-order-[A-Za-z0-9_-]{1,64}\\.sqlite3")
         private const val METADATA_RESERVE = 16L * 1024 * 1024
         private const val JOURNAL_AND_MARGIN_RESERVE = 64L * 1024 * 1024
         private const val EMPTY_SOURCE_REVISION = "empty-target-v1"

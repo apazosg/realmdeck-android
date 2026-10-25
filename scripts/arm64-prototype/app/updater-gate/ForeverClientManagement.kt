@@ -3,6 +3,7 @@ package app.gamenative
 import android.content.Intent
 import android.util.Log
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -11,9 +12,18 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowForward
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -28,6 +38,9 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -38,13 +51,39 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.delay
 
-/** Local inspection on open; remote check, update planning and download confirmation stay explicit. */
+/** Sample the clock and estimate together, independently of progress recompositions. */
+@Composable
+fun ForeverClientDownloadEstimate() {
+    val detail by ForeverClientUpdateExecution.detail.collectAsState()
+    val active by ForeverClientUpdateExecution.busy.collectAsState()
+    val phase = detail?.phase
+    var estimateText by remember(active, phase) { mutableStateOf("Sin estimación") }
+    LaunchedEffect(active, phase) {
+        while (active && phase == ForeverClientUpdateProgress.Phase.DOWNLOADING) {
+            // A cached UI clock can precede a fresh network sample and falsely
+            // invalidate it. Format once per second with a fresh monotonic clock.
+            val rate = ForeverClientUpdateExecution.rate
+            val estimate = synchronized(rate) { rate.estimate(android.os.SystemClock.elapsedRealtime()) }
+            estimateText = estimate?.text() ?: "Sin estimación"
+            delay(1_000)
+        }
+    }
+    if (active && phase == ForeverClientUpdateProgress.Phase.DOWNLOADING) {
+        Text(estimateText, minLines = 1, maxLines = 1, overflow = TextOverflow.Ellipsis,
+            style = MaterialTheme.typography.bodySmall.copy(fontFeatureSettings = "tnum"))
+    }
+}
+
+/** Opening reads local state only; Home may supply its missing-client presentation snapshot. */
 @Composable
 fun ForeverClientManagementDialog(
     onDismiss: () -> Unit,
     onClientChanged: () -> Unit,
     onPlay: () -> Unit = onDismiss,
+    inline: Boolean = false,
+    initialMissingStorageLabel: String? = null,
 ) {
     val context = LocalContext.current.applicationContext
     val scope = rememberCoroutineScope()
@@ -52,9 +91,15 @@ fun ForeverClientManagementDialog(
     val cancel = remember { AtomicBoolean(false) }
     val progressFlow = remember { MutableStateFlow("") }
     val progress by progressFlow.collectAsState()
-    var busy by remember { mutableStateOf(true) }
+    val missingHome = if (inline) initialMissingStorageLabel else null
+    var busy by remember { mutableStateOf(missingHome == null && !ForeverClientUpdateExecution.busy.value) }
+    var details by remember { mutableStateOf(false) }
     var applying by remember { mutableStateOf(false) }
-    var inspection by remember { mutableStateOf<ForeverClientUpdateService.Inspection?>(null) }
+    // Presentation only: never use this snapshot to admit, plan or execute a
+    // mutation. Continue/checkVersions and the engine still revalidate freshly.
+    var inspection by remember { mutableStateOf(missingHome?.let {
+        ForeverClientUpdateService.Inspection(null, "", it, 0, "", false, null)
+    }) }
     var published by remember { mutableStateOf<ForeverClientUpdateCheck.Fingerprint?>(null) }
     var plan by remember { mutableStateOf<ForeverClientUpdatePlan?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -100,8 +145,11 @@ fun ForeverClientManagementDialog(
     }
 
     fun checkForUpdates() {
+        // This snapshot is presentation only. checkVersions still performs fresh
+        // installed-content admission; execute/plan retain their own revalidation.
+        val localSnapshot = inspection
         runOperation("Buscando actualizaciones…") { service ->
-            val local = service.inspect()
+            val local = localSnapshot ?: service.inspect()
             val remote = try {
                 service.checkVersions()
             } catch (failure: Exception) {
@@ -126,7 +174,7 @@ fun ForeverClientManagementDialog(
     LaunchedEffect(Unit) {
         // While a foreground download owns the service lease, reopening the dialog
         // must not collide with it; the hub flows already describe the state.
-        if (!execution.busy.value) inspectLocal()
+        if (!execution.busy.value && missingHome == null) inspectLocal()
     }
     LaunchedEffect(Unit) {
         execution.outcome.collect { outcome ->
@@ -138,7 +186,7 @@ fun ForeverClientManagementDialog(
                     if (alive.get()) onClientChanged()
                 }
                 is ForeverClientUpdateExecution.Outcome.Paused -> {
-                    error = "Descarga pausada. Puedes continuar cuando quieras."
+                    error = if (inline) null else "Descarga pausada. Puedes continuar cuando quieras."
                     plan = null
                 }
                 is ForeverClientUpdateExecution.Outcome.Failed -> {
@@ -179,13 +227,12 @@ fun ForeverClientManagementDialog(
     // guest/storage/qualification gates; this only sequences the user action.
     fun startUpdate(target: ForeverClientUpdateCheck.Fingerprint) {
         runOperation("Preparando la descarga…") { service ->
-            service.preparePublishedVersion(
+            val current = service.preparePublishedVersion(
                 ForeverClientUpdateService.MetadataConsent(target, 1L shl 30, false), cancel::get,
             ) { stage, completed, total ->
-                progressFlow.value = if (total > 0) "Consultando archivos: ${ForeverFunctionalUiText.clientBytes(completed)} de ${ForeverFunctionalUiText.clientBytes(total)}" else "Consultando archivos…"
+                progressFlow.value = ForeverFunctionalUiText.preparationStatus(stage, completed, total)
             }
             service.qualify(cancel::get)
-            val current = service.inspect()
             val computed = service.plan(cancel::get, ::publishProgress)
             withContextOnMain {
                 if (alive.get()) { inspection = current; plan = computed }
@@ -193,30 +240,79 @@ fun ForeverClientManagementDialog(
         }
     }
 
-    Dialog(
-        onDismissRequest = {
-            when {
-                !(busy || executionBusy) -> onDismiss()
-                executionBusy && !executionApplying -> onDismiss()
-                !applying -> cancel.set(true)
+    fun handoff(readyPlan: ForeverClientUpdatePlan) = withContextOnMain {
+        if (!alive.get() || cancel.get()) throw CancellationException("download handoff cancelled")
+        ForeverClientUpdateExecution.resetFor(readyPlan)
+        try {
+            context.startForegroundService(Intent(context, ForeverClientUpdateForegroundService::class.java))
+        } catch (failure: Exception) {
+            if (!execution.busy.value && execution.pendingPlan === readyPlan) execution.pendingPlan = null
+            throw failure
+        }
+    }
+
+    fun beginDownload(readyPlan: ForeverClientUpdatePlan) {
+        runOperation("Comprobando almacenamiento…") { service ->
+            // The user can leave the consent screen open beyond the receipt's
+            // lifetime. Renew the proof, never relax the executor's age gate.
+            service.qualify(cancel::get)
+            handoff(readyPlan)
+        }
+    }
+
+    fun continueInstallation() {
+        runOperation("Consultando versión…") { service ->
+            val remote = service.checkVersions()
+            val target = remote.published ?: throw IllegalStateException("network versions unavailable")
+            val current = service.preparePublishedVersion(
+                ForeverClientUpdateService.MetadataConsent(target, 1L shl 30, false), cancel::get,
+            ) { stage, completed, total ->
+                progressFlow.value = ForeverFunctionalUiText.preparationStatus(stage, completed, total)
             }
-        },
-        properties = DialogProperties(usePlatformDefaultWidth = true),
-    ) {
-        Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surface) {
+            service.qualify(cancel::get)
+            val computed = service.plan(cancel::get, ::publishProgress)
+            withContextOnMain {
+                if (alive.get()) { published = target; inspection = current; plan = computed }
+            }
+        }
+    }
+
+    fun resumeDownload(previous: ForeverClientUpdatePlan) {
+        runOperation("Comprobando descarga pendiente…") { service ->
+            service.qualify(cancel::get)
+            val computed = service.plan(cancel::get, ::publishProgress)
+            val consent = ForeverClientUpdateConsent(previous.planId, previous.downloadBytes,
+                previous.peakAdditionalBytes, previous.privateWorkBytes, previous.destinationBytes)
+            // The ID binds identity/snapshot; residual costs must stay within
+            // the original consent, not prompt again just for saved progress.
+            if (execution.canResume(computed, consent, previous.sourceRevision)) {
+                handoff(computed)
+            } else withContextOnMain { if (alive.get()) plan = computed }
+        }
+    }
+
+    val content: @Composable () -> Unit = {
+        Surface(shape = MaterialTheme.shapes.large,
+            color = if (inline) androidx.compose.ui.graphics.Color.Transparent else MaterialTheme.colorScheme.surface) {
             Column(
-                Modifier.fillMaxWidth().heightIn(max = 680.dp).verticalScroll(rememberScrollState()).padding(20.dp),
+                Modifier.fillMaxWidth().then(if (inline) Modifier.animateContentSize() else Modifier)
+                    .heightIn(max = 680.dp).verticalScroll(rememberScrollState()).padding(if (inline) 8.dp else 20.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                Text("WoW", style = MaterialTheme.typography.titleLarge)
+                Text(if (inline && inspection?.installedVersion == null) "Instalar WoW" else "WoW",
+                    style = if (inline) MaterialTheme.typography.titleMedium else MaterialTheme.typography.titleLarge)
                 inspection?.let { current ->
-                    Text("Ubicación: ${current.storageLabel}")
-                    Text(current.installedVersion?.let { "Instalado: $it" } ?: if (current.clientPresent)
+                    Text("Destino: ${current.storageLabel}")
+                    if (!inline || details) Text(current.installedVersion?.let { "Instalado: $it" } ?: if (current.clientPresent)
                         "Hay archivos del cliente, pero no se pudo identificar la instalación." else "Cliente no instalado.")
                 }
                 if (busy || executionBusy) {
-                    CircularProgressIndicator()
+                    val detail by execution.detail.collectAsState()
+                    val fraction = if (executionBusy) ForeverFunctionalUiText.downloadFraction(detail) else null
+                    if (fraction != null) LinearProgressIndicator(progress = { fraction }, modifier = Modifier.fillMaxWidth())
+                    else LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                     Text(if (executionBusy) executionProgress else progress)
+                    ForeverClientDownloadEstimate()
                     TextButton(enabled = !applying && !executionApplying, onClick = {
                         if (executionBusy) {
                             context.startService(
@@ -227,6 +323,7 @@ fun ForeverClientManagementDialog(
                             cancel.set(true)
                         }
                     }) {
+                        if (inline && !(applying || executionApplying)) Icon(Icons.Default.Pause, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
                         Text(if (applying || executionApplying) "Aplicando…" else "Pausar")
                     }
                 } else {
@@ -241,26 +338,26 @@ fun ForeverClientManagementDialog(
                         Button(
                             enabled = readyPlan.hasEnoughSpace,
                             modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
-                            onClick = {
-                                applying = false
-                                error = null
-                                scope.launch {
-                                    try {
-                                        withContext(Dispatchers.IO) {
-                                            val service = ForeverClientUpdateService(context)
-                                            try { service.inspect() } finally { service.close() }
-                                            ForeverClientUpdateExecution.resetFor(readyPlan)
-                                            context.startForegroundService(
-                                                Intent(context, ForeverClientUpdateForegroundService::class.java),
-                                            )
-                                        }
-                                    } catch (failure: Exception) {
-                                        Log.w("ForeverClientUpdate", "download handoff to foreground service failed", failure)
-                                        if (alive.get()) error = failureMessage(failure)
-                                    }
-                                }
-                            },
-                        ) { Text("Confirmar descarga") }
+                            onClick = { beginDownload(readyPlan) },
+                        ) {
+                            if (inline) Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
+                            Text(if (inline) "Descargar" else "Confirmar descarga")
+                        }
+                    } else if (inline && execution.resumePlan != null) {
+                        Text("En pausa")
+                        Button(onClick = { execution.resumePlan?.let(::resumeDownload) }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+                            Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
+                            Text("Reanudar")
+                        }
+                    } else if (inline && local != null && !local.clientPresent) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Icon(Icons.Default.Wifi, contentDescription = "Wi-Fi")
+                            Text("Preparación: hasta 1 GiB de metadatos", style = MaterialTheme.typography.bodySmall)
+                        }
+                        Button(onClick = ::continueInstallation, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+                            Icon(Icons.Default.ArrowForward, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
+                            Text("Continuar")
+                        }
                     } else if (local != null) {
                         val installed = local.installedVersion
                         val latest = published
@@ -300,9 +397,30 @@ fun ForeverClientManagementDialog(
                         Button(onClick = ::inspectLocal, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Reintentar") }
                     }
                 }
+                if (inline && !inspection?.detail.isNullOrBlank()) {
+                    TextButton(onClick = { details = !details }, modifier = Modifier.semantics {
+                        stateDescription = if (details) "Expandido" else "Contraído"
+                    }) {
+                        Icon(if (details) Icons.Default.ExpandLess else Icons.Default.ExpandMore, contentDescription = null)
+                        Text("Detalles")
+                    }
+                    if (details) inspection?.detail?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+                }
                 TextButton(enabled = !(busy && !executionBusy), onClick = onDismiss) { Text("Volver") }
             }
         }
+    }
+    if (inline) content() else Dialog(
+        onDismissRequest = {
+            when {
+                !(busy || executionBusy) -> onDismiss()
+                executionBusy && !executionApplying -> onDismiss()
+                !applying -> cancel.set(true)
+            }
+        },
+        properties = DialogProperties(usePlatformDefaultWidth = true),
+    ) {
+        content()
     }
 }
 

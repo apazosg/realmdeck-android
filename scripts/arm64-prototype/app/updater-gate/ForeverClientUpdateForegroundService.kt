@@ -27,6 +27,9 @@ import kotlinx.coroutines.withContext
 object ForeverClientUpdateExecution {
     /** Set by the management dialog before the service starts; the plan object stays in-process. */
     @Volatile var pendingPlan: ForeverClientUpdatePlan? = null
+    /** Only an in-process consent candidate: every resume must freshly re-plan. */
+    @Volatile var resumePlan: ForeverClientUpdatePlan? = null
+    val rate = ForeverClientDownloadRate()
 
     /** Latest shared inspection from the service, used by the dialog without a redundant re-detect. */
     val inspection = MutableStateFlow<ForeverClientUpdateService.Inspection?>(null)
@@ -44,6 +47,12 @@ object ForeverClientUpdateExecution {
 
     internal val cancel = AtomicBoolean(false)
 
+    /** Same identity/revision, with residual costs inside the consented budgets. */
+    internal fun canResume(plan: ForeverClientUpdatePlan, consent: ForeverClientUpdateConsent, revision: String): Boolean =
+        plan.hasEnoughSpace && plan.sourceRevision == revision && plan.planId == consent.planId &&
+            plan.downloadBytes <= consent.downloadBytes && plan.privateWorkBytes <= consent.privateWorkBytes &&
+            plan.destinationBytes <= consent.destinationBytes && plan.peakAdditionalBytes <= consent.peakAdditionalBytes
+
     /** Terse terminal outcomes; the dialog owns the user-facing wording. */
     sealed interface Outcome {
         object Done : Outcome
@@ -53,8 +62,10 @@ object ForeverClientUpdateExecution {
 
     /** Clear per-run volatile state before a fresh foreground run. */
     fun resetFor(plan: ForeverClientUpdatePlan) {
-        check(!busy.value) { "client download is already running" }
+        check(!busy.value && pendingPlan == null) { "client download is already running" }
         pendingPlan = plan
+        resumePlan = plan
+        rate.reset()
         cancel.set(false)
         outcome.value = null
         inspection.value = null
@@ -72,6 +83,8 @@ class ForeverClientUpdateForegroundService : Service() {
     private var wifiLock: WifiManager.WifiLock? = null
     private var lastNotificationMillis = 0L
     private var latestStartId = 0
+    private var lastProgressMillis = 0L
+    private var lastProgressPhase: ForeverClientUpdateProgress.Phase? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -128,8 +141,11 @@ class ForeverClientUpdateForegroundService : Service() {
             ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC,
         )
         scope.launch {
-            val service = ForeverClientUpdateService(applicationContext)
+            var service: ForeverClientUpdateService? = null
+            var outcome: ForeverClientUpdateExecution.Outcome = ForeverClientUpdateExecution.Outcome.Paused
             try {
+                val activeService = ForeverClientUpdateService(applicationContext)
+                service = activeService
                 val consent = ForeverClientUpdateConsent(
                     plan.planId,
                     plan.downloadBytes,
@@ -137,26 +153,27 @@ class ForeverClientUpdateForegroundService : Service() {
                     plan.privateWorkBytes,
                     plan.destinationBytes,
                 )
-                executeWithAutoRecovery(service, plan, consent)
-                execution.outcome.value = if (execution.cancel.get()) {
+                executeWithAutoRecovery(activeService, plan, consent)
+                outcome = if (execution.cancel.get()) {
                     ForeverClientUpdateExecution.Outcome.Paused
                 } else {
+                    execution.resumePlan = null
                     ForeverClientUpdateExecution.Outcome.Done
                 }
             } catch (cancelled: CancellationException) {
                 Log.w(TAG, "client execution paused", cancelled)
-                execution.outcome.value = ForeverClientUpdateExecution.Outcome.Paused
+                outcome = ForeverClientUpdateExecution.Outcome.Paused
             } catch (failure: Exception) {
                 Log.w(TAG, "client execution failed", failure)
-                execution.outcome.value = ForeverClientUpdateExecution.Outcome.Failed(failure)
+                outcome = ForeverClientUpdateExecution.Outcome.Failed(failure)
             } finally {
                 try {
-                    execution.inspection.value = service.inspect()
+                    execution.inspection.value = service?.inspect()
                 } catch (inspectionFailure: Exception) {
                     Log.w(TAG, "post-execution inspection failed", inspectionFailure)
                 }
                 try {
-                    service.close()
+                    service?.close()
                 } finally {
                     // onStartCommand also runs on Main: a successor cannot start
                     // between clearing busy and retiring this run's notification
@@ -167,6 +184,9 @@ class ForeverClientUpdateForegroundService : Service() {
                         execution.applying.value = false
                         stopForeground(STOP_FOREGROUND_REMOVE)
                         execution.busy.value = false
+                        // Consumers may inspect/launch again only after the IO
+                        // lease is closed and final inspection is available.
+                        execution.outcome.value = outcome
                         Log.i(TAG, "foreground execution finished id=$latestStartId cancelled=${execution.cancel.get()}")
                         stopSelf(latestStartId)
                     }
@@ -202,12 +222,20 @@ class ForeverClientUpdateForegroundService : Service() {
     }
 
     /** Mirrors the dialog wording so the notification and the dialog never disagree. */
-    fun publish(update: ForeverClientUpdateProgress) {
+    @Synchronized fun publish(update: ForeverClientUpdateProgress) {
         val execution = ForeverClientUpdateExecution
         val atomicPhase = ForeverFunctionalUiText.isAtomicPhase(update.phase)
         execution.applying.value = atomicPhase
+        val now = android.os.SystemClock.elapsedRealtime()
+        execution.rate.record(update, now)
+        // Preserve phase transitions/final counters and atomic progress. Formatting
+        // and Compose publication need not serialize all 16 workers on every 64 KiB.
+        val complete = update.totalTransferBytes > 0 && update.transferredBytes == update.totalTransferBytes
+        if (!atomicPhase && !complete && update.phase == lastProgressPhase && now - lastProgressMillis < 250) return
+        lastProgressPhase = update.phase
+        lastProgressMillis = now
         // Structured numbers are reset per invocation (see resetFor) and
-        // published together with the human text every callback.
+        // published together with the human text at a bounded UI cadence.
         execution.detail.value = update
         val text = ForeverFunctionalUiText.downloadStatusText(update, execution.progress.value)
         execution.progress.value = text

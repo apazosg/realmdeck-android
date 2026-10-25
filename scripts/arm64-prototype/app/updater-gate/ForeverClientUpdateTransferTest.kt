@@ -342,6 +342,161 @@ class ForeverClientUpdateTransferTest {
         }
     }
 
+    @Test
+    fun contiguousBatchUsesOneExactRangeAndReusesAuthenticatedMembers() {
+        Fixture().use { fixture ->
+            val items = archiveObjects()
+            val records = items.map { it.record }
+            val body = items.fold(ByteArray(0)) { bytes, item -> bytes + item.bytes }
+            val start = records.first().sourceOffset
+            val end = start + body.size - 1
+            val seen = mutableListOf<FakeConnection>()
+            val progress = mutableMapOf<String, Long>()
+            val transfer = ForeverClientUpdateTransfer { url ->
+                assertEquals(items.first().directUrl, url)
+                FakeConnection(206, body, "bytes $start-$end/${end + 1}").also { seen += it }
+            }
+            val results = transfer.fetchBatch(records, fixture.workDir, { false }) { key, bytes -> progress[key] = bytes }
+            assertEquals(1, seen.size)
+            assertEquals("bytes=$start-$end", seen.single().requestedRange)
+            assertFalse(seen.single().disconnected)
+            items.zip(results).forEach { (item, file) ->
+                assertEquals(item.bytes.toList(), file.readBytes().toList())
+                assertEquals(item.record.encodedSize, progress[item.record.ekey])
+            }
+            assertEquals(results, transfer.fetchBatch(records, fixture.workDir, { false }) { _, _ -> })
+            assertEquals(1, seen.size)
+        }
+    }
+
+    @Test
+    fun processPhaseTotalsIncludeSingleAndGroupedRequestsAndLeaveNoActiveHttp() {
+        Fixture().use { fixture ->
+            val batch = archiveObjects()
+            val body = batch.fold(ByteArray(0)) { bytes, item -> bytes + item.bytes }
+            val start = batch.first().record.sourceOffset
+            val end = start + body.size - 1
+            val single = objectData("single phase fixture".toByteArray())
+            val before = ForeverClientUpdateTransfer.diagnosticSnapshot()
+            val transfer = ForeverClientUpdateTransfer { url ->
+                if (url == batch.first().directUrl) FakeConnection(206, body, "bytes $start-$end/${end + 1}")
+                else FakeConnection(HttpURLConnection.HTTP_OK, single.bytes)
+            }
+
+            transfer.fetchBatch(batch.map { it.record }, fixture.workDir, { false }) { _, _ -> }
+            transfer.fetch(single.record, fixture.workDir, { false }) { }
+
+            val after = ForeverClientUpdateTransfer.diagnosticSnapshot()
+            fun field(snapshot: String, name: String): Long =
+                Regex("(?:^| )$name=([0-9]+)(?: |$)").find(snapshot)?.groupValues?.get(1)?.toLong()
+                    ?: error("missing $name in diagnostic snapshot: $snapshot")
+            assertEquals(2L, field(after, "invocations") - field(before, "invocations"))
+            assertEquals(1L, field(after, "httpGroups") - field(before, "httpGroups"))
+            assertEquals(1L, field(after, "httpSingles") - field(before, "httpSingles"))
+            assertTrue(field(after, "headersMs") >= field(before, "headersMs"))
+            assertTrue(field(after, "bodyReadMs") >= field(before, "bodyReadMs"))
+            assertTrue(field(after, "authNanos") > field(before, "authNanos"))
+            assertEquals(0L, field(after, "httpActive"))
+        }
+    }
+
+    @Test
+    fun batchRejectsInvalidGroupingWrongRangeAndTrailingBytesBeforePublishing() {
+        Fixture().use { fixture ->
+            val items = archiveObjects()
+            val records = items.map { it.record }
+            var opened = false
+            val noNetwork = ForeverClientUpdateTransfer { opened = true; throw AssertionError("invalid batch must not open HTTP") }
+            assertThrows(IllegalArgumentException::class.java) {
+                noNetwork.fetchBatch(listOf(records.first(), records.last().copy(sourceOffset = records.last().sourceOffset + 1)), fixture.workDir, { false }) { _, _ -> }
+            }
+            assertThrows(IllegalArgumentException::class.java) {
+                noNetwork.fetchBatch(List(17) { records.first() }, fixture.workDir, { false }) { _, _ -> }
+            }
+            val huge = records.first().copy(encodedSize = (1L shl 20), sourceLength = (1L shl 20))
+            assertThrows(IllegalArgumentException::class.java) {
+                noNetwork.fetchBatch(listOf(huge, records.last().copy(sourceOffset = huge.sourceOffset + huge.encodedSize)), fixture.workDir, { false }) { _, _ -> }
+            }
+            assertFalse(opened)
+            val body = items.fold(ByteArray(0)) { bytes, item -> bytes + item.bytes }
+            assertThrows(IllegalArgumentException::class.java) {
+                ForeverClientUpdateTransfer { FakeConnection(206, body, "bytes 0-${body.size - 1}/${body.size}") }
+                    .fetchBatch(records, fixture.workDir, { false }) { _, _ -> }
+            }
+            assertTrue(fixture.workDir.listFiles()!!.isEmpty())
+            val start = records.first().sourceOffset
+            val end = start + body.size - 1
+            assertThrows(IllegalArgumentException::class.java) {
+                ForeverClientUpdateTransfer { FakeConnection(206, body + byteArrayOf(1), "bytes $start-$end/${end + 1}", body.size.toLong()) }
+                    .fetchBatch(records, fixture.workDir, { false }) { _, _ -> }
+            }
+            assertTrue(records.none { File(fixture.workDir, "${it.ekey}.blte").exists() })
+        }
+    }
+
+    @Test
+    fun corruptBatchMemberCannotAuthenticateItsNeighboursOrForceTheirRedownload() {
+        Fixture().use { fixture ->
+            val items = archiveObjects()
+            val records = items.map { it.record }
+            val seen = mutableListOf<FakeConnection>()
+            val transfer = ForeverClientUpdateTransfer {
+                val body = if (seen.isEmpty()) items.first().bytes + items.last().bytes.copyOf().also { it[it.lastIndex] = (it.last().toInt() xor 1).toByte() } else items.last().bytes
+                val start = if (seen.isEmpty()) records.first().sourceOffset else records.last().sourceOffset
+                val end = start + body.size - 1
+                FakeConnection(206, body, "bytes $start-$end/${end + 1}").also { seen += it }
+            }
+            assertThrows(IllegalStateException::class.java) {
+                transfer.fetchBatch(records, fixture.workDir, { false }) { _, _ -> }
+            }
+            assertTrue(File(fixture.workDir, "${records.first().ekey}.blte").exists())
+            assertFalse(File(fixture.workDir, "${records.last().ekey}.blte").exists())
+            val result = transfer.fetchBatch(records, fixture.workDir, { false }) { _, _ -> }
+            assertEquals(2, seen.size)
+            items.zip(result).forEach { (item, file) -> assertEquals(item.bytes.toList(), file.readBytes().toList()) }
+        }
+    }
+
+    @Test
+    fun cancelledBatchKeepsCompleteAndPartialMembersForExactIndividualResume() {
+        Fixture().use { fixture ->
+            val items = archiveObjects(ByteArray(200_000) { (it * 31).toByte() })
+            val records = items.map { it.record }
+            val secondPart = File(fixture.workDir, "${records.last().ekey}.part")
+            var cancelled = false
+            val seen = mutableListOf<FakeConnection>()
+            val transfer = ForeverClientUpdateTransfer {
+                val resumeAt = if (seen.isEmpty()) 0 else secondPart.length().toInt()
+                val body = if (seen.isEmpty()) items.first().bytes + items.last().bytes else items.last().bytes.copyOfRange(resumeAt, items.last().bytes.size)
+                val start = if (seen.isEmpty()) records.first().sourceOffset else records.last().sourceOffset + resumeAt
+                val end = start + body.size - 1
+                FakeConnection(206, body, "bytes $start-$end/${end + 1}").also { seen += it }
+            }
+            assertThrows(java.util.concurrent.CancellationException::class.java) {
+                transfer.fetchBatch(records, fixture.workDir, { cancelled }) { key, received ->
+                    if (key == records.last().ekey && received > 0) cancelled = true
+                }
+            }
+            assertTrue(seen.single().disconnected)
+            assertTrue(secondPart.length() in 1 until records.last().encodedSize)
+            assertTrue(ForeverClientUpdateTransfer.diagnosticSnapshot().contains("httpActive=0"))
+            val resumeStart = records.last().sourceOffset + secondPart.length()
+            val result = transfer.fetchBatch(records, fixture.workDir, { false }) { _, _ -> }
+            assertEquals(2, seen.size)
+            assertTrue(seen.last().requestedRange!!.startsWith("bytes=$resumeStart-"))
+            items.zip(result).forEach { (item, file) -> assertEquals(item.bytes.toList(), file.readBytes().toList()) }
+        }
+    }
+
+    private fun archiveObjects(secondDecoded: ByteArray = "another-object".toByteArray()): List<EncodedObject> {
+        var offset = 50_000L
+        val hash = "ab".repeat(16)
+        return listOf(objectData(), objectData(secondDecoded)).map { item ->
+            item.copy(record = item.record.copy(sourceKind = "range", sourceHash = hash, sourceOffset = offset),
+                directUrl = "https://us.cdn.blizzard.com/tpr/wow/data/ab/ab/$hash").also { offset += item.bytes.size }
+        }
+    }
+
     private class Fixture : AutoCloseable {
         val root = Files.createTempDirectory("client-update-transfer-").toFile()
         val workDir = File(root, "stage").apply { mkdir() }
@@ -354,8 +509,7 @@ class ForeverClientUpdateTransferTest {
         val directUrl: String,
     )
 
-    private fun objectData(): EncodedObject {
-        val decoded = "resumable-encoded-object".toByteArray()
+    private fun objectData(decoded: ByteArray = "resumable-encoded-object".toByteArray()): EncodedObject {
         val bytes = byteArrayOf('B'.code.toByte(), 'L'.code.toByte(), 'T'.code.toByte(), 'E'.code.toByte(), 0, 0, 0, 0, 'N'.code.toByte()) + decoded
         val ekey = md5(bytes)
         return EncodedObject(
@@ -374,9 +528,11 @@ class ForeverClientUpdateTransferTest {
     ) : HttpURLConnection(URL("https://us.cdn.blizzard.com/")) {
         var requestedRange: String? = null
             private set
+        var disconnected = false
+            private set
 
         override fun connect() = Unit
-        override fun disconnect() = Unit
+        override fun disconnect() { disconnected = true }
         override fun usingProxy(): Boolean = false
         override fun getResponseCode(): Int = status
         override fun getContentLengthLong(): Long = declaredLength

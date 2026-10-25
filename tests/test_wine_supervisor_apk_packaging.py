@@ -66,19 +66,28 @@ def test_modern_assets_inherit_main_without_equal_priority_duplicates() -> None:
 def test_reviewed_overlay_source_deltas_are_exact_and_fail_closed(monkeypatch: pytest.MonkeyPatch) -> None:
     expected = {
         "ForeverBoundedLogRetention.kt": "7b92dffd6ed05ae9c6b7ab72f90476cff8c7fcdfe073ed4e49c0f74bca3c03f7",
+        "ForeverClientProvisioner.kt": "98c25790d3d126ec9bbf2ead1eb2ba976abece91dfa11511c77d09ed4082122d",
         "ForeverHostSafetyTest.kt": "4698d034e0f0cacc20528641c4a702db2df51aefa8e08891e93017ccf98c6d45",
         "ForeverLaunchController.kt": "8e89d2b0a79af9c6d6470cbf7897fdcb3941437febac96cd819a48258fdd1dac",
         "ForeverProcessDiagnostics.kt": "8011dfbc1b88751fd655745a76ed888a2d2c8aa80a087d243def776196a9299e",
         "ForeverRunStore.kt": "b6b699cbe5cdca69d08409424bae2b66433a34890ea4af1f386b300a99e9d744",
+        "ForeverFunctionalClientStorage.kt": "9497a0aa068f93c3be0d2a64e5ef2b4eab3fbf22510d1510e6ae9df63c622443",
     }
     baseline = wine.load_code59_source_baseline()
     assert wine.APPROVED_REVIEWED_OVERLAY_DELTAS == expected
     output = wine.validate_overlay_authority(baseline)
+    assert len(output) == 64
     bindings = {binding["name"]: binding for binding in baseline["overlayAuthority"]["bindings"]}
     assert {
         name: hashlib.sha256(output[Path(bindings[name]["path"])]).hexdigest()
-        for name in expected
-    } == expected
+        for name in expected if name in bindings
+    } == {name: digest for name, digest in expected.items() if name in bindings}
+    storage_target = wine.REVIEWED_FUNCTIONAL_SOURCE[1]
+    assert hashlib.sha256(output[storage_target]).hexdigest() == expected["ForeverFunctionalClientStorage.kt"]
+
+    monkeypatch.setitem(wine.APPROVED_REVIEWED_OVERLAY_DELTAS, "ForeverFunctionalClientStorage.kt", "0" * 64)
+    with pytest.raises(ValueError, match="reviewed overlay delta pin mismatch: ForeverFunctionalClientStorage.kt"):
+        wine.validate_overlay_authority(baseline)
 
     monkeypatch.setitem(wine.APPROVED_REVIEWED_OVERLAY_DELTAS, "ForeverBoundedLogRetention.kt", "0" * 64)
     with pytest.raises(ValueError, match="reviewed overlay delta pin mismatch: ForeverBoundedLogRetention.kt"):

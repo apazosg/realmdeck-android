@@ -1069,7 +1069,7 @@ class ForeverClientMetadataTransport internal constructor(
             require(uri.scheme == "https" && uri.host == OFFICIAL_HOST && uri.userInfo == null &&
                 uri.port == -1 && uri.rawQuery == null && uri.rawFragment == null && validPath
             ) { "refusing metadata URL outside the official Blizzard HTTPS CDN" }
-            return URL(value).openConnection() as? HttpsURLConnection
+            return ForeverWifiDownloads.open(URL(value)) as? HttpsURLConnection
                 ?: throw IllegalStateException("official metadata endpoint is not HTTPS")
         }
     }

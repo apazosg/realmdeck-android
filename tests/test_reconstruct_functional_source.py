@@ -21,7 +21,7 @@ SPEC.loader.exec_module(module)
 
 
 def _privacy_delta_fixture(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *, candidate: bool = False, storage_candidate: bool = False
 ) -> tuple[Path, SimpleNamespace]:
     old_contract = {
         "schema": "test-disposition/v1",
@@ -34,27 +34,69 @@ def _privacy_delta_fixture(
     new_bytes = (json.dumps(new_contract, sort_keys=True) + "\n").encode()
     contract_sha = module.sha256_bytes(new_bytes)
 
+    historical_recipe = tmp_path / "historical-apply-overlay.py"
+    historical_recipe.write_text("synthetic frozen recipe\n", encoding="utf-8")
+    candidate_recipe = tmp_path / "candidate-apply-overlay.py"
+    candidate_recipe.write_text("synthetic reviewed recipe\n", encoding="utf-8")
+    historical_recipe_sha = module.sha256_file(historical_recipe)
+    candidate_recipe_sha = module.sha256_file(candidate_recipe)
     recipe = tmp_path / "apply_overlay.py"
-    recipe.write_text("synthetic recipe\n", encoding="utf-8")
+    recipe.write_bytes((candidate_recipe if candidate else historical_recipe).read_bytes())
     monkeypatch.setattr(module, "APPLY_OVERLAY", recipe)
-    monkeypatch.setattr(module, "C138_RECIPE_SHA256", module.sha256_file(recipe))
+    monkeypatch.setattr(module, "C138_RECIPE_SHA256", historical_recipe_sha)
+    if storage_candidate:
+        monkeypatch.setattr(module, "REVIEWED_STORAGE_RECIPE_SHA256", candidate_recipe_sha)
+    else:
+        monkeypatch.setattr(module, "REVIEWED_CANDIDATE_RECIPE_SHA256", candidate_recipe_sha)
     monkeypatch.setattr(module, "CURRENT_DISPOSITION_SOURCE", tmp_path / "disposition.json")
     module.CURRENT_DISPOSITION_SOURCE.write_bytes(new_bytes)
     monkeypatch.setattr(module, "C138_DISPOSITION_SHA256", contract_sha)
 
+    source_input = "scripts/arm64-prototype/app/overlay/ForeverClientProvisioner.kt"
+    generated_path = "app/src/main/java/app/gamenative/ForeverClientProvisioner.kt"
     provenance = {
-        "recipeSha256": module.C138_RECIPE_SHA256,
+        "recipeSha256": historical_recipe_sha,
         "interruptedRunDisposition": {
             "sha256": contract_sha,
             "sourceSha256": contract_sha,
         },
+        "sourceBaseline": {
+            "overlayBindings": {
+                "approvedReviewedOverlayDeltas": {},
+                "sourceInputSHA256": {source_input: "35e78fd6b1ff0eea27da67cee267fa8619f9f440aa955a07ded0794623bcff05"},
+                "generatedSHA256": {generated_path: "35e78fd6b1ff0eea27da67cee267fa8619f9f440aa955a07ded0794623bcff05"},
+                "count": 63,
+            },
+            "wine60SourceInputs": {},
+        },
     }
-    provenance_bytes = (json.dumps(provenance, sort_keys=True) + "\n").encode()
-    monkeypatch.setattr(module, "C138_PROVENANCE_SHA256", module.sha256_bytes(provenance_bytes))
+    historical_provenance_bytes = (json.dumps(provenance, sort_keys=True) + "\n").encode()
+    monkeypatch.setattr(module, "C138_PROVENANCE_SHA256", module.sha256_bytes(historical_provenance_bytes))
+    candidate_provenance = json.loads(json.dumps(provenance))
+    bindings = candidate_provenance["sourceBaseline"]["overlayBindings"]
+    candidate_provenance["recipeSha256"] = candidate_recipe_sha
+    if storage_candidate:
+        storage_input = "scripts/arm64-prototype/app/overlay/ForeverFunctionalClientStorage.kt"
+        storage_target = "app/src/main/java/app/gamenative/ForeverFunctionalClientStorage.kt"
+        bindings["approvedReviewedOverlayDeltas"]["ForeverFunctionalClientStorage.kt"] = module.REVIEWED_STORAGE_SOURCE_SHA256
+        bindings["sourceInputSHA256"][storage_input] = module.REVIEWED_STORAGE_SOURCE_SHA256
+        bindings["generatedSHA256"][storage_target] = module.REVIEWED_STORAGE_SOURCE_SHA256
+        bindings["count"] = 64
+        candidate_provenance["sourceBaseline"]["wine60SourceInputs"][storage_target] = module.REVIEWED_STORAGE_SOURCE_SHA256
+    else:
+        bindings["approvedReviewedOverlayDeltas"]["ForeverClientProvisioner.kt"] = module.REVIEWED_CANDIDATE_PROVISIONER_SHA256
+        bindings["sourceInputSHA256"][source_input] = module.REVIEWED_CANDIDATE_PROVISIONER_SHA256
+        bindings["generatedSHA256"][generated_path] = module.REVIEWED_CANDIDATE_PROVISIONER_SHA256
+    candidate_provenance_bytes = (json.dumps(candidate_provenance, sort_keys=True) + "\n").encode()
+    if storage_candidate:
+        monkeypatch.setattr(module, "REVIEWED_STORAGE_PROVENANCE_SHA256", module.sha256_bytes(candidate_provenance_bytes))
+    else:
+        monkeypatch.setattr(module, "REVIEWED_CANDIDATE_PROVENANCE_SHA256", module.sha256_bytes(candidate_provenance_bytes))
+    provenance_bytes = candidate_provenance_bytes if candidate else historical_provenance_bytes
 
     apk = tmp_path / "authenticated-code64.apk"
     historical = {
-        module.CODE_PROVENANCE_MEMBER: b'{"historical":true}\n',
+        module.CODE_PROVENANCE_MEMBER: historical_provenance_bytes,
         module.INTERRUPTED_DISPOSITION_MEMBER: old_bytes,
     }
     with zipfile.ZipFile(apk, "w") as archive:
@@ -75,6 +117,19 @@ def _privacy_delta_fixture(
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(data)
     return source, inputs
+
+
+def _json_changed_paths(before: object, after: object, prefix: str = "") -> set[str]:
+    if isinstance(before, dict) and isinstance(after, dict):
+        paths = set()
+        for key in before.keys() | after.keys():
+            path = f"{prefix}.{key}" if prefix else str(key)
+            if key not in before or key not in after:
+                paths.add(path)
+            else:
+                paths.update(_json_changed_paths(before[key], after[key], path))
+        return paths
+    return set() if before == after else {prefix}
 
 
 def test_candidate_build_requires_exact_code62_and_uses_code97() -> None:
@@ -268,6 +323,16 @@ def test_updater_gate_sources_are_explicit_and_historical_casc_preimages_are_pre
     assert module.sha256_file(module.APP_ROOT / "overlay/ForeverBlte.kt") == module.PINNED_UPDATER_BLTE_PREIMAGES["ForeverBlte.kt"]
 
 
+def test_wifi_runtime_patch_rejects_unreviewed_backend_without_modifying_it(tmp_path: Path) -> None:
+    target = tmp_path / "app/src/main/java/app/gamenative/service/SteamService.kt"
+    target.parent.mkdir(parents=True)
+    original = b"unreviewed runtime backend"
+    target.write_bytes(original)
+    with pytest.raises(module.ReconstructionError, match="preimage is not the reviewed source"):
+        module.stage_wifi_runtime_backend(tmp_path)
+    assert target.read_bytes() == original
+
+
 def test_updater_gate_replacement_rejects_unpinned_historical_casc_preimage(tmp_path: Path) -> None:
     source = tmp_path / "source"
     target = source / "app/src/main/java/app/gamenative/ForeverCasc.kt"
@@ -436,6 +501,17 @@ def test_candidate_version_and_privacy_hash_pins_match_frozen_recipe_output() ->
     assert module.C138_DISPOSITION_SHA256 == "c198e20f582b90e5bc691e3e4712e8b2b1ecf33434bf1f86232c30be7fab2ac6"
     assert module.C138_RECIPE_SHA256 == "f3deeab1112963bfa1b805f1fec465375f64801696cbe918c365855755e29127"
     assert module.C138_PROVENANCE_SHA256 == "5254e4a33471f7c9600140a7c5f0ab6e6f90be493c85d1824b386b6723acda35"
+    assert module.REVIEWED_CANDIDATE_RECIPE_SHA256 == "385e1c4c443aa4a192a14769caacc4af959d2a2ee498e82485fb9eb6cbc4e151"
+    assert module.REVIEWED_CANDIDATE_PROVENANCE_SHA256 == "aa8f0dc18cda8f92e2a6dac73349a36845d67493a2c2cf712f622b9594d10a20"
+    assert module.REVIEWED_STORAGE_SOURCE_SHA256 == "9497a0aa068f93c3be0d2a64e5ef2b4eab3fbf22510d1510e6ae9df63c622443"
+    assert module.REVIEWED_STORAGE_RECIPE_SHA256 == "df97574d8c5dce73ea53b535cf52e1bd28d556bcb2bcef0eef92f5704a5060df"
+    assert module.REVIEWED_STORAGE_PROVENANCE_SHA256 == "867d8d4a51b86865d6232d14c7b746f8117bdb7022addbd86eb840eb9e2b1efa"
+    assert module.sha256_file(module.APPLY_OVERLAY) == module.REVIEWED_STORAGE_RECIPE_SHA256
+    assert module.privacy_provenance_pin_for_recipe(module.C138_RECIPE_SHA256) == module.C138_PROVENANCE_SHA256
+    assert module.privacy_provenance_pin_for_recipe(module.REVIEWED_CANDIDATE_RECIPE_SHA256) == module.REVIEWED_CANDIDATE_PROVENANCE_SHA256
+    assert module.privacy_provenance_pin_for_recipe(module.REVIEWED_STORAGE_RECIPE_SHA256) == module.REVIEWED_STORAGE_PROVENANCE_SHA256
+    with pytest.raises(module.ReconstructionError, match="no frozen privacy provenance pair"):
+        module.privacy_provenance_pin_for_recipe("0" * 64)
     assert module.PINNED_CODE64_APK_SHA256 == "1d91f727f0322d4100e43a37277ed5fe6714f24fb66aeb9e062b702bd5fe4324"
     assert module.PINNED_CODE64_AUDIT_SHA256 == "325fcad6cb9cc5898628c04568f82636cd59aa129f0fc726ffdddcea17b4e0e8"
     assert module.PINNED_CODE64_NATIVE_SIDECAR_SHA256 == "7318ed2b4f7b14d1fe1d1cd520a7a597c1d938c4cb66b02a403218b7a7f8e6af"
@@ -454,8 +530,99 @@ def test_privacy_sanitization_accepts_only_serial_redaction_with_frozen_payload_
     assert receipt["status"] == "PASS_EXACT_DEVICE_SERIAL_REDACTION"
     assert receipt["changedField"] == "device.serial"
     assert receipt["replacement"] == "DEVICE_SERIAL"
+    assert set(receipt) == {"status", "changedField", "replacement", "recipeSha256", "payloads"}
+    assert receipt["recipeSha256"] == module.C138_RECIPE_SHA256
     assert receipt["payloads"][module.CODE_PROVENANCE_MEMBER]["afterSha256"] == module.C138_PROVENANCE_SHA256
     assert receipt["payloads"][module.INTERRUPTED_DISPOSITION_MEMBER]["afterSha256"] == module.C138_DISPOSITION_SHA256
+
+
+def test_privacy_sanitization_admits_exact_reviewed_candidate_provenance_delta(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source, inputs = _privacy_delta_fixture(tmp_path, monkeypatch, candidate=True)
+    receipt = module.validate_sanitized_c138_payloads(source, inputs)
+    assert receipt["status"] == "PASS_EXACT_DEVICE_SERIAL_REDACTION"
+    assert set(receipt) == {"status", "changedField", "replacement", "recipeSha256", "payloads"}
+    assert receipt["recipeSha256"] == module.REVIEWED_CANDIDATE_RECIPE_SHA256
+    assert receipt["payloads"][module.CODE_PROVENANCE_MEMBER]["afterSha256"] == module.REVIEWED_CANDIDATE_PROVENANCE_SHA256
+    assert receipt["payloads"][module.INTERRUPTED_DISPOSITION_MEMBER]["afterSha256"] == module.C138_DISPOSITION_SHA256
+
+    with zipfile.ZipFile(inputs.code64_apk) as archive:
+        old_provenance = json.loads(archive.read(module.CODE_PROVENANCE_MEMBER))
+    current_provenance = json.loads(
+        (source / module.update_asset_source_relative(module.CODE_PROVENANCE_MEMBER)).read_bytes()
+    )
+    assert _json_changed_paths(old_provenance, current_provenance) == {
+        "recipeSha256",
+        "sourceBaseline.overlayBindings.approvedReviewedOverlayDeltas.ForeverClientProvisioner.kt",
+        "sourceBaseline.overlayBindings.generatedSHA256.app/src/main/java/app/gamenative/ForeverClientProvisioner.kt",
+        "sourceBaseline.overlayBindings.sourceInputSHA256.scripts/arm64-prototype/app/overlay/ForeverClientProvisioner.kt",
+    }
+    assert old_provenance["interruptedRunDisposition"] == current_provenance["interruptedRunDisposition"]
+
+
+def test_privacy_sanitization_admits_exact_reviewed_storage_provenance_delta(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source, inputs = _privacy_delta_fixture(tmp_path, monkeypatch, candidate=True, storage_candidate=True)
+    receipt = module.validate_sanitized_c138_payloads(source, inputs)
+    assert receipt["status"] == "PASS_EXACT_DEVICE_SERIAL_REDACTION"
+    assert set(receipt) == {"status", "changedField", "replacement", "recipeSha256", "payloads"}
+    assert receipt["recipeSha256"] == module.REVIEWED_STORAGE_RECIPE_SHA256
+    assert receipt["payloads"][module.CODE_PROVENANCE_MEMBER]["afterSha256"] == module.REVIEWED_STORAGE_PROVENANCE_SHA256
+    assert receipt["payloads"][module.INTERRUPTED_DISPOSITION_MEMBER]["afterSha256"] == module.C138_DISPOSITION_SHA256
+
+    with zipfile.ZipFile(inputs.code64_apk) as archive:
+        old_provenance = json.loads(archive.read(module.CODE_PROVENANCE_MEMBER))
+    current_provenance = json.loads(
+        (source / module.update_asset_source_relative(module.CODE_PROVENANCE_MEMBER)).read_bytes()
+    )
+    assert _json_changed_paths(old_provenance, current_provenance) == {
+        "recipeSha256",
+        "sourceBaseline.overlayBindings.approvedReviewedOverlayDeltas.ForeverFunctionalClientStorage.kt",
+        "sourceBaseline.overlayBindings.count",
+        "sourceBaseline.overlayBindings.generatedSHA256.app/src/main/java/app/gamenative/ForeverFunctionalClientStorage.kt",
+        "sourceBaseline.overlayBindings.sourceInputSHA256.scripts/arm64-prototype/app/overlay/ForeverFunctionalClientStorage.kt",
+        "sourceBaseline.wine60SourceInputs.app/src/main/java/app/gamenative/ForeverFunctionalClientStorage.kt",
+    }
+    assert current_provenance["sourceBaseline"]["overlayBindings"]["approvedReviewedOverlayDeltas"]["ForeverFunctionalClientStorage.kt"] == module.REVIEWED_STORAGE_SOURCE_SHA256
+    assert old_provenance["interruptedRunDisposition"] == current_provenance["interruptedRunDisposition"]
+
+
+@pytest.mark.parametrize("tamper", ["recipe", "provenance"])
+def test_privacy_sanitization_rejects_unpaired_reviewed_storage_recipe_or_provenance(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, tamper: str
+) -> None:
+    source, inputs = _privacy_delta_fixture(tmp_path, monkeypatch, candidate=True, storage_candidate=True)
+    if tamper == "recipe":
+        module.APPLY_OVERLAY.write_text("unreviewed storage recipe\n", encoding="utf-8")
+        expected_error = "no frozen privacy provenance pair"
+    else:
+        target = source / module.update_asset_source_relative(module.CODE_PROVENANCE_MEMBER)
+        changed = json.loads(target.read_bytes())
+        changed["unreviewed"] = True
+        target.write_text(json.dumps(changed, sort_keys=True) + "\n", encoding="utf-8")
+        expected_error = "frozen pin"
+    with pytest.raises(module.ReconstructionError, match=expected_error):
+        module.validate_sanitized_c138_payloads(source, inputs)
+
+
+@pytest.mark.parametrize("tamper", ["recipe", "provenance"])
+def test_privacy_sanitization_rejects_unpaired_reviewed_candidate_recipe_or_provenance(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, tamper: str
+) -> None:
+    source, inputs = _privacy_delta_fixture(tmp_path, monkeypatch, candidate=True)
+    if tamper == "recipe":
+        module.APPLY_OVERLAY.write_text("unreviewed recipe\n", encoding="utf-8")
+        expected_error = "no frozen privacy provenance pair"
+    else:
+        target = source / module.update_asset_source_relative(module.CODE_PROVENANCE_MEMBER)
+        changed = json.loads(target.read_bytes())
+        changed["unreviewed"] = True
+        target.write_text(json.dumps(changed, sort_keys=True) + "\n", encoding="utf-8")
+        expected_error = "frozen pin"
+    with pytest.raises(module.ReconstructionError, match=expected_error):
+        module.validate_sanitized_c138_payloads(source, inputs)
 
 
 @pytest.mark.parametrize("member", [module.INTERRUPTED_DISPOSITION_MEMBER, module.CODE_PROVENANCE_MEMBER])

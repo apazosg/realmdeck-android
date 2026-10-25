@@ -25,6 +25,32 @@ import java.util.concurrent.atomic.AtomicInteger
 @Config(sdk = [29], application = android.app.Application::class)
 class ForeverFunctionalLauncherUxTest {
     @Test
+    fun accountButtonHidesOnlyAfterThisLaunchVerifiesPatchApplication() {
+        val pending = ForeverFunctionalPocPatchSession.PatchStatus(
+            ForeverFunctionalPocPatchSession.PatchAttemptPhase.PENDING,
+        )
+        assertTrue(assistedAccountButtonVisible(null))
+        assertTrue(assistedAccountButtonVisible(pending))
+        assertTrue(assistedAccountButtonVisible(pending.copy(
+            phase = ForeverFunctionalPocPatchSession.PatchAttemptPhase.DISABLED,
+        )))
+        assertTrue(assistedAccountButtonVisible(pending.copy(
+            phase = ForeverFunctionalPocPatchSession.PatchAttemptPhase.FAILED,
+        )))
+        val verified = pending.copy(
+            phase = ForeverFunctionalPocPatchSession.PatchAttemptPhase.VERIFIED,
+            everApplied = true,
+        )
+        assertEquals(false, assistedAccountButtonVisible(verified))
+        assertEquals(false, assistedAccountButtonVisible(verified.copy(
+            phase = ForeverFunctionalPocPatchSession.PatchAttemptPhase.ENDED,
+        )))
+        assertTrue(assistedAccountButtonVisible(verified.copy(captureOnly = true)))
+        // A fresh launch's status cannot inherit the previous launch's visibility.
+        assertTrue(assistedAccountButtonVisible(pending))
+    }
+
+    @Test
     fun accessoryKeysSendBalancedTapsAndReleaseStickyModifiers() {
         val events = mutableListOf<Pair<Int, Int>>()
         val keys = ForeverFunctionalKeyboardKeys { keyCode, action -> events += keyCode to action }

@@ -2071,6 +2071,67 @@ class ForeverFunctionalClientStorageTest {
 
     @Test
     @Config(sdk = [34])
+    fun directedRevalidationDiagnosticsAggregatePhasesAndPreserveFailures() {
+        val base = Files.createTempDirectory("forever-directed-timings").toFile()
+        val primaryBase = File(base, "primary/files").apply { mkdirs() }
+        val usbVol = File(base, "usbvol").apply { mkdirs() }
+        val legacy = File(base, "primary/CustomGames/WoW Forever")
+        legacy.parentFile?.mkdirs()
+        val uuid = "usb-timing"
+        val mount = "mount:timing"
+        val storage = directedStorage(
+            CountingVolumes(listOf(primaryCandidate(primaryBase), nativeUsbCandidate(usbVol, uuid, mount))),
+            CountingNative(validDirectedNative(usbVol, uuid, mount)), legacy,
+        )
+        val identity = storage.snapshot().options.single { it.identity.kind == ForeverFunctionalClientStorage.Kind.REMOVABLE }.identity
+        storage.select(identity)
+        val target = storage.resolveForUpdate()
+        val before = ForeverFunctionalClientStorage.revalidationDiagnosticSnapshot()
+
+        storage.revalidateForUpdate(target)
+        val afterSuccess = ForeverFunctionalClientStorage.revalidationDiagnosticSnapshot()
+        assertEquals(before.calls + 1, afterSuccess.calls)
+        assertEquals(before.directed + 1, afterSuccess.directed)
+        assertTrue(afterSuccess.totalNanos > before.totalNanos)
+        assertTrue(afterSuccess.selectionRegistryNanos > before.selectionRegistryNanos)
+        assertTrue(afterSuccess.freshMetadataNanos > before.freshMetadataNanos)
+        assertTrue(afterSuccess.namespaceNanos > before.namespaceNanos)
+        assertTrue(afterSuccess.candidateInspectionNanos > before.candidateInspectionNanos)
+        assertTrue(afterSuccess.resolveNanos > before.resolveNanos)
+        assertTrue(afterSuccess.pathCanonicalNanos > before.pathCanonicalNanos)
+        assertTrue(afterSuccess.markerNanos > before.markerNanos)
+        assertTrue(afterSuccess.identityMountNanos > before.identityMountNanos)
+        assertTrue(afterSuccess.finalCompareNanos > before.finalCompareNanos)
+
+        val originalNative = CountingNative(validDirectedNative(usbVol, uuid, mount))
+        val failingStorage = directedStorage(
+            CountingVolumes(listOf(primaryCandidate(primaryBase), nativeUsbCandidate(usbVol, uuid, mount))),
+            originalNative, legacy,
+        )
+        val failingId = failingStorage.snapshot().options.single { it.identity.kind == ForeverFunctionalClientStorage.Kind.REMOVABLE }.identity
+        failingStorage.select(failingId)
+        val failingTarget = failingStorage.resolveForUpdate()
+        val beforeFailures = ForeverFunctionalClientStorage.revalidationDiagnosticSnapshot()
+        originalNative.current = emptyList()
+        assertStorageFailure("storage_mount_unproven") { failingStorage.revalidateForUpdate(failingTarget) }
+        originalNative.current = validDirectedNative(usbVol, uuid, mount)
+        originalNative.cancel = true
+        try {
+            failingStorage.revalidateForUpdate(failingTarget)
+            throw AssertionError("cancelled revalidation accepted")
+        } catch (_: CancellationException) {
+        }
+        val afterFailures = ForeverFunctionalClientStorage.revalidationDiagnosticSnapshot()
+        assertEquals(beforeFailures.calls + 2, afterFailures.calls)
+        assertEquals(beforeFailures.directed + 2, afterFailures.directed)
+        assertEquals(beforeFailures.failures + 1, afterFailures.failures)
+        assertEquals(beforeFailures.cancellations + 1, afterFailures.cancellations)
+        assertEquals(beforeFailures.fallback, afterFailures.fallback)
+        assertNoProbes(base)
+    }
+
+    @Test
+    @Config(sdk = [34])
     fun directedUpdateRejectsUuidPathStateDuplicatesAndQueryFailureWithoutFallback() {
         val base = Files.createTempDirectory("forever-directed-identity").toFile()
         val primaryBase = File(base, "primary/files").apply { mkdirs() }

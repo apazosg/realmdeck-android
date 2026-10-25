@@ -27,15 +27,18 @@ def _fixture(tmp_path: Path) -> Path:
         encoding="utf-8",
     )
     (source / "app/src/main/AndroidManifest.xml").write_text(
-        """<application>
+        """<manifest>
+        <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+        <application>
         <activity android:name="app.gamenative.ForeverWineSupervisorActivity"
-            android:exported="true" android:enabled="true" />
+            android:exported="true" android:enabled="true" android:permission="android.permission.DUMP" />
         <activity-alias android:name="app.gamenative.ForeverWineSupervisorLauncher"
-            android:enabled="true"></activity-alias>
+            android:enabled="true" android:permission="android.permission.DUMP"></activity-alias>
         <!--
          android:windowSoftInputMode must always be in the activity block.
         -->
         </application>
+        </manifest>
         """,
         encoding="utf-8",
     )
@@ -168,11 +171,13 @@ def test_server_profile_field_is_independent_of_version_and_idempotent() -> None
 
 
 def test_existing_code64_manifest_migrates_landscape_poc_to_portrait() -> None:
-    manifest = """<application>
+    manifest = """<manifest>
+        <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+        <application>
         <activity android:name="app.gamenative.ForeverWineSupervisorActivity"
-            android:exported="true" android:enabled="false" />
+            android:exported="true" android:enabled="false" android:permission="android.permission.DUMP" />
         <activity-alias android:name="app.gamenative.ForeverWineSupervisorLauncher"
-            android:enabled="false"></activity-alias>
+            android:enabled="false" android:permission="android.permission.DUMP"></activity-alias>
         <activity android:name="app.gamenative.ForeverFunctionalPocActivity"
             android:exported="true"
             android:permission="android.permission.DUMP"
@@ -187,12 +192,14 @@ def test_existing_code64_manifest_migrates_landscape_poc_to_portrait() -> None:
         <!--
          android:windowSoftInputMode must always be in the activity block.
         -->
-    </application>
+        </application>
+    </manifest>
     """
     transformed = recipe.transform_manifest(manifest)
     assert 'android:screenOrientation="portrait"' in transformed
     assert 'android:screenOrientation="landscape"' not in transformed
     assert 'android:windowSoftInputMode="adjustNothing"' in transformed
+    assert recipe.transform_manifest(transformed) == transformed
 
 
 def test_route_contract_is_fixed_and_unmanaged() -> None:
