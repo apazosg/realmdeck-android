@@ -32,6 +32,36 @@ version downgrade from the installed C142; no uninstall, data reset or downgrade
 flag is used. Physical throughput validation is still pending; no speedup is
 claimed from this source change or build.
 
+### Interrupted C143 physical observation
+
+C143 replacement installation succeeded. Before launch, the installed APK hash
+matched the audited candidate and all three owner/receipt/checkpoint fingerprints
+(including size, inode and modification time) matched their fresh pre-install
+values. A freshly consented USB trial started, with a planned 600-second payload
+window and preparation measured separately.
+
+The host rebooted during observation, terminating the logger and UI observer
+before their final Pause could run. Only 30 numeric payload samples over
+359.628 seconds were retained: approximately 1,107.191 MB of useful bytes,
+**3.079 decimal MB/s**, with display-rounding bounds 2.929–3.228 MB/s. The earlier
+mid-run estimate of about 3.4 MB/s covered a shorter interval and is superseded
+by this longer retained window. The GiB display rounding makes the last subwindow
+particularly imprecise. This is not a completed ten-minute measurement, a paired
+A/B speedup, or confirmation of the 3.2-MB/s target.
+
+After reconnecting to the user-provided endpoint, the app was still downloading.
+It was paused using the same official UHID control; the resulting UI showed
+the paused state with Resume available, and the foreground operation subsequently
+reported cancellation.
+No reset, reinstall, installation deletion or client copy was used. Logs recovered
+from the phone retain later observations, but they do not fill the missing UI
+counter interval. The host interruption's underlying cause remains unresolved.
+
+The retained log includes 2,816 light boundary checks with zero failures and
+10.742 seconds accumulated check time before interruption. These are group
+checks with the explicitly reduced coverage above, not equivalent per-object
+full validation. A new uninterrupted observation is required for acceptance.
+
 ## Scope
 
 This branch selectively transfers reviewed download work onto the public source
