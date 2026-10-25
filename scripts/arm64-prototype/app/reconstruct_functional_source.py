@@ -112,8 +112,8 @@ PINNED_UPDATER_CASC_PREIMAGES = {
 }
 # Native V7 reserve, durable commit groups and exact recovery membership; frames unchanged.
 PINNED_UPDATER_CASC_POSTIMAGES = {
-    "ForeverCasc.kt": "1bc233849e3a73a46d68c9a3d61b334eadc8b852da86eb8b237b55a64439c971",
-    "ForeverCascTest.kt": "217e5c2d7fc8647585378bd840bc8e891279ff354056eea44917bc5d5d1d1d53",
+    "ForeverCasc.kt": "bc369af26b57d02c8f8081e7530c737b8361a653b44799dd061cb927b6393c04",
+    "ForeverCascTest.kt": "79122dac1cee11954a87e143a7cfa1ad3f7175bc7bc7c6c933e3c75340d1bf36",
 }
 # Reviewed reconstruction edit (2026-10-18): TACT-encrypted ('E') BLTE frames are
 # verified without decryption for CASC reconstruction consumers; strict decode is
@@ -131,7 +131,7 @@ BRIDGE_TARGET = Path("app/src/main/java/com/wowforever/launcher/ForeverPatchBrid
 CODE64_NATIVE_MEMBER = "lib/arm64-v8a/libforever_patcher_jni.so"
 FUNCTIONAL_MARKER_MEMBER = "assets/forever/functional-poc/provenance.json"
 SOURCE_VERSION = (62, "0.2.38-automated")
-CANDIDATE_VERSION = (146, "0.2.122-performance-preview")
+CANDIDATE_VERSION = (147, "0.2.123-download-startup-test")
 FUNCTIONAL_OVERLAY_NAMES = (
     "ForeverFunctionalPoc.kt",
     "ForeverFunctionalPocActivity.kt",
