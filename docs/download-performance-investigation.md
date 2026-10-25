@@ -28,8 +28,40 @@ The reviewed CASC sources match the canonical staged sources. A fresh paused,
 no-guest, Wi-Fi and writable-USB preflight preceded replacement installation.
 Before launch, all three progress hashes and size/inode/mtime fields matched
 exactly, as did the installed APK hash. The fresh-consent ten-minute observation
-is in progress; preparation is separate, and the helper owns the final Pause.
-No C145 throughput result is claimed yet. Merge remains deferred.
+completed and paused normally, with Resume available and zero active callbacks
+and HTTP requests. Preparation is separate. Merge/publication acceptance remains
+deferred pending the performance decision below.
+
+### Completed C145 observation
+
+Fifty numeric samples cover 610.573 seconds and approximately 244.751 MB of
+useful network bytes: **0.40085 decimal MB/s**, with display-rounding bounds
+0.40077–0.40094. The five approximately two-minute windows measured 0.188 / 0.217 /
+0.542 / 0.235 / 0.840 MB/s. These are distinct sequential objects, not a matched
+A/B comparison with C144 or the faster C143 observation.
+
+The aligned periodic writer interval contains 18,688 new objects over 627.960 s:
+420.286 s source resolution, 44.591 s private verification, 61.944 s append/force
+and 6.632 s checkpoint work. The measured group-force helper totals 56.059 s,
+or **3.000 ms/object**, versus C144's 7.549 ms/object. Thus the intended local cost
+fell, but end-to-end throughput did not improve in this observation. The cohorts
+also differ: approximately 13.7 KB versus 20.0 KB of CASC-written bytes per object;
+those are not useful-network byte counters.
+
+Final run diagnostics report 432.024 s waiting for source futures, 1,117 pending
+heads out of 19,098 requests, and 691 empty-ready-ahead samples. Producer budget
+sleep totals 358.990 s **concurrently**, not an additional wall-clock phase.
+Executor queue wait is only 2.680 s in aggregate; all 3,285 callbacks finish and
+actual HTTP activity reaches zero. These identify renewed source-readiness and
+backpressure pressure, but do not by themselves isolate CDN latency from the
+larger durable group's scheduling effects. No further optimization is inferred
+solely from the headline rate.
+
+C146 has been built and its source/build/payload audit passes, but it contains
+the same group policy and is **not installed or published**. Its publication gate
+is held until this result is assessed; an audited binary alone is not performance
+acceptance. Evidence remains in the private measurement workspace as the C145
+payload/Pause captures, scoped log and throughput/pipeline/append summaries.
 
 ## C144 append-clock diagnostic
 

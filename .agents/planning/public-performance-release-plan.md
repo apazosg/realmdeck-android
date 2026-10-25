@@ -52,7 +52,9 @@ this plan, including public integration, push and prerelease publication, on
 ## Implementation / Action Items
 
 - [x] Approve scope, prerelease channel and proposed C146 identity.
-- [ ] Complete and document the active C145 trial and normal final Pause.
+- [x] Complete and document the C145 trial and normal final Pause. The observed
+  0.401 MB/s does not establish a performance improvement: force-helper cost per
+  object fell, while source-readiness waits grew. Public acceptance is on hold.
 - [x] Verify current remote refs and authenticated access: public `main` remains
   at `457056e`; authenticated read-only checks confirm the repository account has
   push access. No remote mutation has been attempted and no credential is logged.
@@ -74,8 +76,11 @@ this plan, including public integration, push and prerelease publication, on
 
 - Scope, C146 identity and gated public publication are approved; passing the
   remaining gates is still required before publication.
-- C145's completed measurement is still pending. It is not yet public-release
-  acceptance, and final C146 binary checks cannot be inherited from C145.
+- C145 completed normally but measured 0.401 MB/s on a different object cohort.
+  Do not publish the group16 policy as a demonstrated end-to-end improvement.
+  Resolve the performance decision before public integration/publication. C146's
+  own source/build/payload audit passes; ordinary icon launch, upgrade proof and
+  source-attachment review remain pending and cannot be inherited from C145.
 - Authenticated read-only checks succeeded; public `main` is not protected.
   Final diff/asset review and all remaining release gates still precede any push.
 - On 2026-10-25 the user explicitly reconfirmed permission to redistribute the
