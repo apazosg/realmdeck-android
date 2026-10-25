@@ -145,6 +145,26 @@ costes y la reanudación con una sola acción cuando el plan siga siendo válido
 
 ### Medición y aceptación
 
+Prioridad reafirmada por el usuario tras medir C148: **medir y reducir el tiempo
+completo hasta empezar la transferencia**; los 16–24 minutos actuales no son una
+aceptación. Antes de otra candidata:
+
+- Correlacionar logs ya existentes de catálogo, orden físico, inspección,
+  checkpoint y solicitud de fuente. Un agregado de tamaños de ~0,2 s no explica
+  minutos; los relojes de consumidor/carga se anidan y no deben sumarse dos veces.
+- Aislar el coste de `checkpointMembership`: actualmente realiza dos consultas SQL
+  por objeto checkpointed (~356.000 en el dispositivo), antes de cada inspector.
+  Medir el patrón actual frente a lotes con el límite existente. Solo aplicar la
+  amortización si conserva metadatos autoritativos, ordinales únicos, rechazos,
+  cancelación y todos los contrastes posteriores; sin cachés entre operaciones.
+- Si los logs no bastan, realizar un perfil de muestreo diagnóstico acotado de la
+  app instalada, sin otro APK, reset ni nueva confirmación de costes. Declarar el
+  sobrecoste del perfil; no usar esa latencia como A/B de producción. Conservar
+  artefactos filtrados fuera del repo y pausar cooperativamente al terminar.
+- Tras regresiones y revisión, contrastar el recorrido Android completo y terminar
+  la reapertura al gestor con el botón real «Ver descarga». No repetir toda una
+  descarga únicamente para corregir una expectativa errónea del guion.
+
 - Registrar versión/hash, dispositivo/destino, build/catálogo, tamaño del prefijo,
   cachés frías/calientes, red compartida, objetos/tamaños, bytes útiles y reintentos.
   Artefactos/capturas fuera del repo; publicar solo resúmenes sin información privada.
@@ -202,6 +222,28 @@ costes y la reanudación con una sola acción cuando el plan siga siendo válido
   tarea y estado final limpio; cerrar plan en `done/` solo con aceptación acreditada.
 
 ## Open Issues
+
+- Prioridad reafirmada por el usuario: medir y reducir el intervalo completo entre
+  la acción y la transferencia, no aceptar solo una función más rápida. Para el
+  siguiente ajuste se conservarán las fases visibles y se atribuirá el coste con
+  logs existentes/perfilado diagnóstico (marcado por su sobrecoste), antes de
+  comparar de nuevo el recorrido sin perfilador. Sin APKs solo diagnósticas.
+- Hipótesis concreta a reproducir: la membresía de cada frame de checkpoint hace
+  consultas unitarias de catálogo y ordinal, repetidas en cada validación. Evaluar
+  amortizarlas en bloques acotados del mismo catálogo/orden abierto e inmutable,
+  sin omitir ninguna comprobación ni reutilizar confianza entre leases. Medir
+  consultas/resultados y latencia antes de aceptar el ajuste; preservar cancelación,
+  rechazo de claves/manifiestos ajenos y concurrencia del verificador/escritor.
+- C148 validó físicamente Resume con una sola acción, sin otra confirmación, pero
+  tardó 1.453,953 s hasta transferencia visible (Descargar: 948,398 s). La carga de
+  checkpoint y otras esperas siguen dominando; no se acepta el objetivo global por
+  eliminar rehashes del inspector. Diagnosticar el recorrido restante con las
+  mediciones retenidas antes de elegir otra intervención.
+- La reconexión UI quedó incompleta por una expectativa incorrecta del guion:
+  Home activo muestra «Ver descarga», no «Descargar cliente». Se conservó el error
+  original y se pausó cooperativamente a las 21:04:24 UTC; Home confirmó pausa y
+  cero servicios updater activos. No repetir pruebas terminadas para corregir la
+  evidencia ni declarar fallo del producto por esa aserción.
 
 - «Restaurar» se trata inicialmente como reanudar una descarga interrumpida,
   distinguiendo pausa del mismo proceso y reapertura tras cierre; no incluye

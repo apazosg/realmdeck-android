@@ -435,9 +435,66 @@ sin cambios y 178 payloads; 484.904.415 bytes, SHA-256
 Recibo, `build-final.log`, `apk-audit.json` e `install-summary.json` están en el
 directorio externo anterior. Con updater inactivo y sin ejecutables Wine/box64,
 `adb install -r` finalizó con éxito: PackageManager confirmó C148 y Home abrió a
-las 19:57:58 UTC. Sin reset, desinstalación ni publicación. La preparación física
-de C148 está en curso; no se atribuyen a esta corrección resultados físicos aún
-no medidos ni se da por válido el consentimiento de un proceso anterior.
+las 19:57:58 UTC. Sin reset, desinstalación ni publicación. La medición posterior
+se describe a continuación; no se da por válido el consentimiento de un proceso
+anterior.
+
+### Preparación y reanudación C148 — resultado físico
+
+- Abrir gestor y «Continuar» únicos, a las 19:58:43 y 19:59:05 UTC. Respuesta
+  observada a +2,911 s. El observador externo se interrumpió: el resumen solo quedó
+  acotado entre +370,786 y +978,803 s, **no** medido exactamente. El inspector sí
+  registró **180.801 ms, cero rehashes**, con 1.144.978 objetos. La interrupción del
+  observador no se interpreta como fallo del producto ni se repite «Continuar».
+- El usuario aprobó el plan concreto `1.60.1.70532`/Unidad USB, **62,9 GiB** de
+  descarga, **65,1 GiB** adicionales y cotas app/cliente **1,7/63,4 GiB**. Un único
+  «Descargar», Enter **20:22:14.305537 UTC**, dio respuesta observada a +3,031 s y
+  transferencia visible a **+948,398 s**. Su inspector tardó **132.096 ms**, sin
+  rehashes. Una pausa cooperativa a las **20:38:31.593966 UTC** confirmó pausa.
+- Un único «Reanudar», Enter **20:39:10.939764 UTC**, respondió a +2,837 s y llegó
+  a transferencia visible a **+1.453,953 s**, **sin otra confirmación**. Esto valida
+  físicamente la reparación del consentimiento privado en ese recorrido; no
+  acredita que toda la preparación sea rápida. Los dos inspectores de Resume
+  tardaron **169.652/135.147 ms**, ambos sin rehashes.
+- El arranque sigue siendo lento. C148 tarda unos **16 minutos** desde Descargar y
+  **24 minutos** desde Resume hasta transferencia visible. Los 948,398 s frente a
+  984,696 s de Descargar en C147 no son un A/B controlado: difieren progreso,
+  caché y cohorte. C146 se pausó tras una ventana de observación sin transferencia
+  visible; no se inventa un tiempo final para comparar ni una mejora total causal.
+
+Desglose restante de C148, con tiempos relativos a la acción correspondiente:
+
+| Fase registrada | Descargar | Reanudar |
+|---|---|---|
+| Inspector(es) | +207,603–339,699 s | +182,990–352,643 y +667,626–802,773 s |
+| Carga de checkpoint | 356.101 objetos; 150.713 ms; fin +754,059 s | 356.357 objetos; 169.787 ms; fin +1.254,049 s |
+| Primer pedido de fuente | +939,605 s; 41.404 verificados/314.697 pendientes | +1.441,823 s; 41.404 verificados/314.953 pendientes |
+
+Hay cinco rehashes durante la carga, **fuera del inspector**, que la primera
+optimización no elimina. Sus duraciones y las de carga ya están incluidas en los
+relojes superiores; no se suman como fases independientes. Un pedido puede reutilizar
+datos privados: no es prueba del primer byte nuevo de red. El commit registrado
+tras Descargar incorporó 256 objetos/67.746.954 bytes **escritos**, no necesariamente
+bytes nuevos de red. Las esperas previas y los recorridos de checkpoint necesitan
+diagnóstico antes de elegir otra optimización; eliminar esos cinco rehashes no
+explicaría por sí solo los 24 minutos.
+
+La comprobación de reapertura quedó **incompleta por un error del guion**:
+«Volver» a las 21:03:35 UTC mostró Home con descarga activa, pero el guion esperaba
+el botón de reposo «Descargar cliente». La implementación ofrece correctamente
+«Ver descarga» durante la transferencia. No se atribuye esa aserción al producto
+ni se repite toda la prueba para ocultarla. La descarga se pausó normalmente desde
+Home a las **21:04:24.523147 UTC**; después se comprobaron «Descarga pausada» y
+**cero servicios updater activos**. Las ventanas desde la primera muestra visible
+de transferencia hasta Pausar fueron 28,890 y 59,630 s; no son una medida exacta
+de duración de red ni una prueba de throughput sostenido.
+
+Los artefactos filtrados persisten en `physical-trial`: `download-resume-summary.json`,
+`prepare-observer-partial.json`, `prepare-casc-events.json` y
+`cleanup-pause-summary.json`. Se conserva el resultado de error original. Los
+guiones de control no forman parte del producto ni sus expectativas sustituyen el
+contrato aprobado. La reconexión completa al gestor durante transferencia sigue
+pendiente, al igual que acreditar una reducción total de preparación.
 
 ### Retención de evidencia
 
@@ -452,7 +509,7 @@ C148 se guarda en `work/download-resume-c148-20261025/physical-trial`, no en `/t
 
 | Entregable | Evidencia | Pendiente |
 |---|---|---|
-| Menor preparación al iniciar/reanudar | Menos rehashes y tiempos host; tres inspectores C147 físicos sin rehashes; transferencia visible tras una confirmación | Reducción causal de latencia total y primer byte exacto no acreditados |
-| Primera pulsación efectiva, sin repetir | Flujo físico abrir/Continuar/Descargar completado sin acciones extra; diez tests del servicio PASS; `633329e`; regresión privada corregida/revisada en `5516cf6` | Validar Resume físico sin reconfirmación con la corrección |
-| Garantías intactas | Review y focales; checkpoint recuperado y pausa normal con commit durable; ninguna guarda eliminada | No se ejecutó toda la suite; reconexión UI durante transferencia y Resume válido pendientes |
-| Entrega versionada y honesta | Commits separados; baseline C146 y C147 auditada/instalada/probada sin reset | Resolver reanudación y aceptación global; no cerrar por ahorro de un subcomponente |
+| Menor preparación al iniciar/reanudar | Menos rehashes y tiempos host; inspectores C147/C148 físicos sin rehashes | Preparación C148 aún de 16/24 minutos; reducción causal total y primer byte exacto no acreditados |
+| Primera pulsación efectiva, sin repetir | Flujo físico abrir/Continuar/Descargar sin acciones extra; C148 Resume válido de una acción sin reconfirmación; diez tests del servicio y cinco focales de reparación PASS | Reconexión completa al gestor; no se midió latencia subsegundo ni doble toque deliberado |
+| Garantías intactas | Review y focales; checkpoint recuperado y pausa normal; cuatro guardas conservadas | No se ejecutó toda la suite; continuar diagnóstico sin eliminar verificaciones |
+| Entrega versionada y honesta | Commits separados; baseline C146 y candidatas C147/C148 auditadas/instaladas/probadas sin reset; estado final pausado | Aceptación global pendiente; no cerrar por ahorro de un subcomponente |
