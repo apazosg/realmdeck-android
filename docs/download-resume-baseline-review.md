@@ -439,6 +439,15 @@ las 19:57:58 UTC. Sin reset, desinstalación ni publicación. La preparación f�
 de C148 está en curso; no se atribuyen a esta corrección resultados físicos aún
 no medidos ni se da por válido el consentimiento de un proceso anterior.
 
+### Retención de evidencia
+
+Los artefactos transitorios anteriores bajo `/tmp/opencode` ya no están
+disponibles; sus veredictos y cifras fueron leídos y registrados en este informe
+durante cada prueba. No se presentan esos paths como capturas aún recuperables ni
+se repiten pruebas verdes o una descarga antigua para recrearlos. Los recibos,
+builds y auditorías autenticados siguen fuera del repositorio. La nueva captura
+C148 se guarda en `work/download-resume-c148-20261025/physical-trial`, no en `/tmp`.
+
 ## Auditoría del objetivo (cierre pendiente)
 
 | Entregable | Evidencia | Pendiente |
