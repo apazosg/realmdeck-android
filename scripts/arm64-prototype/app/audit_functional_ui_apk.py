@@ -30,6 +30,44 @@ def require(condition: bool, message: str) -> None:
         raise ValueError(message)
 
 
+def check_functional_entry_permission(manifest_dump: str) -> None:
+    """Require the functional launcher Activity to have no caller permission."""
+    lines = manifest_dump.splitlines()
+    applications = [
+        (index, len(match.group(1)))
+        for index, line in enumerate(lines)
+        if (match := re.match(r'^(\s*)E: application(?:\s|$)', line))
+    ]
+    require(len(applications) == 1, 'APK manifest application is missing or ambiguous')
+    app_index, app_indent = applications[0]
+    require(not any(
+        (match := re.match(r'^(\s*)A: android:permission(?:\s|\()', line))
+        and len(match.group(1)) == app_indent + 2
+        for line in lines[app_index + 1:]
+    ), 'application requires a caller permission')
+
+    activities = []
+    for index, line in enumerate(lines):
+        match = re.match(r'^(\s*)E: activity(?:\s|$)', line)
+        if not match:
+            continue
+        indent = len(match.group(1))
+        end = index + 1
+        while end < len(lines):
+            next_element = re.match(r'^(\s*)E:', lines[end])
+            if next_element and len(next_element.group(1)) <= indent:
+                break
+            end += 1
+        block = lines[index:end]
+        if any('app.gamenative.ForeverFunctionalPocActivity' in item for item in block):
+            activities.append(block)
+
+    require(len(activities) == 1, 'functional entry Activity is missing or ambiguous in APK manifest')
+    require(not any(re.match(r'^\s*A: android:permission(?:\s|\()', line)
+                    for line in activities[0]),
+            'functional entry Activity requires a caller permission')
+
+
 def check_descriptor_delta(added: set[str], removed: set[str]) -> None:
     # Full recompilation changes method encodings/indices; only descriptor
     # additions/removals are constrained here. Core source lineage is checked
@@ -493,6 +531,7 @@ def main() -> None:
     require("native-code: 'arm64-v8a'" in badging, 'candidate ABI mismatch')
     require("sdkVersion:'29'" in badging and "targetSdkVersion:'36'" in badging, 'SDK drift')
     require("launchable-activity: name='app.gamenative.ForeverFunctionalPocActivity'" in badging, 'wrong launcher')
+    check_functional_entry_permission(commands['manifest'])
     require('MANAGE_EXTERNAL_STORAGE' not in commands['manifest'], 'broad storage permission introduced')
     branding_manifest = helper.read_stable_file(source / helper.MANIFEST, 'branded source manifest').decode('utf-8')
     require('android:icon="@mipmap/forever_ic_launcher"' in branding_manifest, 'branded app icon binding is missing')

@@ -19,6 +19,43 @@ sys.modules[HELPER_SPEC.name] = helper
 HELPER_SPEC.loader.exec_module(helper)
 
 
+def test_auditor_requires_permission_free_functional_entry_only():
+    manifest_dump = '''E: manifest
+  E: application
+    E: activity
+      A: android:name(0x01010003)="app.gamenative.ForeverFunctionalPocActivity" (Raw: "app.gamenative.ForeverFunctionalPocActivity")
+      A: android:exported(0x01010010)=(type 0x12)0xffffffff
+      E: intent-filter
+        A: android:name(0x01010003)="android.intent.action.MAIN"
+    E: activity
+      A: android:name(0x01010003)="app.gamenative.ForeverWineSupervisorActivity"
+      A: android:permission(0x01010006)="android.permission.DUMP"
+'''
+    module.check_functional_entry_permission(manifest_dump)
+
+    inherited_permission = manifest_dump.replace(
+        '  E: application\n',
+        '  E: application\n    A: android:permission(0x01010006)="android.permission.DUMP"\n',
+    )
+    with pytest.raises(ValueError, match='application requires a caller permission'):
+        module.check_functional_entry_permission(inherited_permission)
+
+    protected_entry = manifest_dump.replace(
+        '      A: android:exported',
+        '      A: android:permission(0x01010006)="android.permission.DUMP"\n      A: android:exported',
+    )
+    with pytest.raises(ValueError, match='functional entry Activity requires'):
+        module.check_functional_entry_permission(protected_entry)
+
+    ambiguous = manifest_dump.replace(
+        '    E: activity\n      A: android:name(0x01010003)="app.gamenative.ForeverWineSupervisorActivity"',
+        '    E: activity\n      A: android:name(0x01010003)="app.gamenative.ForeverFunctionalPocActivity"\n'
+        '    E: activity\n      A: android:name(0x01010003)="app.gamenative.ForeverWineSupervisorActivity"',
+    )
+    with pytest.raises(ValueError, match='missing or ambiguous'):
+        module.check_functional_entry_permission(ambiguous)
+
+
 def test_descriptor_delta_accepts_ui_but_rejects_unrelated_classes():
     module.check_descriptor_delta({'Lapp/gamenative/ForeverClientProcStatus;'}, set())
     with pytest.raises(ValueError, match='unapproved DEX descriptor'):
