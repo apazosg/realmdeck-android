@@ -491,6 +491,31 @@ class ForeverClientUpdaterTest {
     }
 
     @Test
+    fun archiveOrderBulkOrdinalLookupPreservesInputOrderAndRejectsUnknownOrCancelledRequests() {
+        Fixture().use { fixture ->
+            val paths = fixture.makePaths()
+            val keys = fixture.catalog.withObjects({ false }) { records -> records.map { it.ekey }.toList() }
+            val orderDirectory = File(paths.work, ".forever-client-archive-order").apply { check(mkdir()) }
+            ForeverClientArchiveOrder.open(fixture.catalog, orderDirectory) { false }.use { order ->
+                val requested = keys.reversed()
+                assertEquals(requested.map(order::ordinalOf), order.ordinalsOf(requested) { false })
+                assertThrows(IllegalStateException::class.java) {
+                    order.ordinalsOf(listOf("ff".repeat(16)), { false })
+                }
+                assertThrows(java.util.concurrent.CancellationException::class.java) {
+                    order.ordinalsOf(requested, { true })
+                }
+                assertThrows(IllegalArgumentException::class.java) {
+                    order.ordinalsOf(listOf(requested.first(), requested.first()), { false })
+                }
+                assertThrows(IllegalArgumentException::class.java) {
+                    order.ordinalsOf(List(ForeverClientUpdateCatalog.MAX_OBJECT_KEYS_PER_QUERY + 1) { requested.first() }) { false }
+                }
+            }
+        }
+    }
+
+    @Test
     fun pastedCascSourcePlansOnlyTheDeltaAndRejectsACorruptIndexedObjectForReuse() {
         val configAssets = configAssetsOrSkip()
         Fixture().use { fixture ->

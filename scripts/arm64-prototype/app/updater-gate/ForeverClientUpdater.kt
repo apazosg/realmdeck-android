@@ -819,25 +819,31 @@ class ForeverClientUpdater(
             checkpointIdentity,
             cancelled,
         ) { staged ->
-            staged.forEach { saved ->
+            staged.chunked(ForeverClientUpdateCatalog.MAX_OBJECT_KEYS_PER_QUERY).forEach { batch ->
                 checkCancelled(cancelled)
-                val record = try {
-                    catalog.objectByKey(saved.ekey)
+                val records = try {
+                    catalog.objectsByKeys(batch.map { it.ekey }, cancelled)
                 } catch (missing: NoSuchElementException) {
                     throw IllegalStateException("resumable CASC checkpoint contains an object outside the admitted target", missing)
                 }
-                if (record.ekey != saved.ekey.lowercase(Locale.ROOT) ||
-                    record.contentKey != saved.contentKey.lowercase(Locale.ROOT) ||
-                    record.encodedSize != saved.encodedSize || record.decodedSize != saved.decodedSize
-                ) {
-                    throw IllegalStateException("resumable CASC checkpoint object differs from the admitted target manifest")
-                }
-                val ordinal = archiveOrder.ordinalOf(record.ekey)
-                if (seen[ordinal]) throw IllegalStateException("resumable CASC checkpoint repeats an admitted object")
-                seen.set(ordinal)
-                checkpointed = Math.addExact(checkpointed, 1L)
-                if (checkpointed > archiveOrder.objectCount) {
-                    throw IllegalStateException("resumable CASC checkpoint exceeds the admitted target count")
+                val ordinals = archiveOrder.ordinalsOf(batch.map { it.ekey }, cancelled)
+                batch.indices.forEach { index ->
+                    checkCancelled(cancelled)
+                    val saved = batch[index]
+                    val record = records[index]
+                    if (record.ekey != saved.ekey.lowercase(Locale.ROOT) ||
+                        record.contentKey != saved.contentKey.lowercase(Locale.ROOT) ||
+                        record.encodedSize != saved.encodedSize || record.decodedSize != saved.decodedSize
+                    ) {
+                        throw IllegalStateException("resumable CASC checkpoint object differs from the admitted target manifest")
+                    }
+                    val ordinal = ordinals[index]
+                    if (seen[ordinal]) throw IllegalStateException("resumable CASC checkpoint repeats an admitted object")
+                    seen.set(ordinal)
+                    checkpointed = Math.addExact(checkpointed, 1L)
+                    if (checkpointed > archiveOrder.objectCount) {
+                        throw IllegalStateException("resumable CASC checkpoint exceeds the admitted target count")
+                    }
                 }
             }
         }

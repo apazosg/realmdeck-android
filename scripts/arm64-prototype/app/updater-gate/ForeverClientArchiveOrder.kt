@@ -37,6 +37,36 @@ internal class ForeverClientArchiveOrder private constructor(
         }
     }
 
+    /** Resolve a bounded block of checkpoint keys with one archive-order query. */
+    fun ordinalsOf(ekeys: List<String>, cancelled: () -> Boolean): List<Int> {
+        require(ekeys.size in 1..ForeverClientUpdateCatalog.MAX_OBJECT_KEYS_PER_QUERY) {
+            "archive-order key batch is outside its bound"
+        }
+        active(cancelled)
+        val keys = ekeys.map { it.lowercase(Locale.ROOT).also { key ->
+            require(KEY.matches(key)) { "invalid archive-order encoding key" }
+        } }
+        require(keys.toSet().size == keys.size) { "archive-order key batch contains duplicates" }
+        val positions = keys.withIndex().associate { it.value to it.index }
+        val ordinals = IntArray(keys.size) { -1 }
+        val seenOrdinals = HashSet<Int>(keys.size)
+        val literals = keys.joinToString(",") { "X'$it'" }
+        database.rawQuery("SELECT ordinal, ekey FROM schedule WHERE ekey IN ($literals)", null).use { cursor ->
+            while (cursor.moveToNext()) {
+                active(cancelled)
+                val key = key(cursor, 1)
+                val position = positions[key] ?: throw IllegalStateException("archive order returned an unrequested key")
+                check(ordinals[position] == -1) { "archive order contains duplicate keys" }
+                val ordinal = ordinal(cursor, objectCount)
+                check(seenOrdinals.add(ordinal)) { "archive order repeats an ordinal" }
+                ordinals[position] = ordinal
+            }
+        }
+        active(cancelled)
+        check(ordinals.all { it >= 0 }) { "archive order is missing a requested key" }
+        return ordinals.toList()
+    }
+
     fun <T> withObjects(cancelled: () -> Boolean, block: (Sequence<ForeverClientUpdateCatalog.ObjectRecord>) -> T): T {
         val started = System.nanoTime()
         var rows = 0L
