@@ -42,11 +42,7 @@ class FakeSocket:
         self.sent.append(bytes(data))
 
 
-def _allow() -> bool:
-    return True
-
-
-def test_guarded_backspace_preserves_report_hold_and_release(monkeypatch):
+def test_press_preserves_report_hold_and_release(monkeypatch):
     events = []
 
     class Socket:
@@ -54,7 +50,7 @@ def test_guarded_backspace_preserves_report_hold_and_release(monkeypatch):
             events.append(("send", report))
 
     monkeypatch.setattr(adapter.time, "sleep", lambda delay: events.append(("sleep", delay)))
-    send = adapter.make_wifi_uhid_send(Socket(), guard=_allow)
+    send = adapter.make_wifi_uhid_send(Socket())
     send(0, 42)
     prefix = struct.pack(">BHH", 13, 1, 8)
     assert events == [
@@ -76,10 +72,10 @@ _RELEASE = struct.pack(">BHH", 13, 1, 8) + bytes(8)
 
 def test_press_and_release_framing_matches_probe_layout() -> None:
     sock = FakeSocket()
-    send = adapter.make_wifi_uhid_send(sock, guard=_allow)
-    send(0, 4)  # 'a' per the reused hid_usage mapping
-    send(2, 31)  # '@' per the reused hid_usage mapping
-    send(1, 4)  # Ctrl+A fixed control from submit_login
+    send = adapter.make_wifi_uhid_send(sock)
+    send(0, 4)  # 'a'
+    send(2, 31)  # '@'
+    send(1, 4)  # Ctrl+A
     assert sock.sent == [
         _expected(0, 4),
         _RELEASE,
@@ -90,46 +86,32 @@ def test_press_and_release_framing_matches_probe_layout() -> None:
     ]
 
 
-def test_rejected_guard_sends_nothing() -> None:
-    for verdict in (False, None, 0, "yes"):
-        sock = FakeSocket()
-        send = adapter.make_wifi_uhid_send(sock, guard=lambda: verdict)
-        with pytest.raises(adapter.WifiUhidGuardError):
-            send(0, 4)
-        assert sock.sent == [] and sock.calls == 0
-
-    def exploding() -> bool:
-        raise RuntimeError("foreign-ui")
-
+def test_arbitrary_modifier_and_usage_are_sent() -> None:
     sock = FakeSocket()
-    send = adapter.make_wifi_uhid_send(sock, guard=exploding)
-    with pytest.raises(adapter.WifiUhidGuardError):
-        send(0, 4)
-    assert sock.sent == [] and sock.calls == 0
+    send = adapter.make_wifi_uhid_send(sock)
+    for modifier, usage in ((8, 4), (4, 4), (0, 99), (255, 255)):
+        send(modifier, usage)
+    assert sock.sent == [
+        _expected(8, 4),
+        _RELEASE,
+        _expected(4, 4),
+        _RELEASE,
+        _expected(0, 99),
+        _RELEASE,
+        _expected(255, 255),
+        _RELEASE,
+    ]
 
 
-def test_opaque_guard_and_socket_text_never_reaches_traceback() -> None:
+def test_opaque_socket_text_never_reaches_traceback() -> None:
     canary = "opaque-canary-9f3a"
-
-    def guarded() -> bool:
-        raise RuntimeError(canary)
-
-    sock = FakeSocket()
-    send = adapter.make_wifi_uhid_send(sock, guard=guarded)
-    with pytest.raises(adapter.WifiUhidGuardError):
-        try:
-            send(0, 4)
-        except adapter.WifiUhidGuardError:
-            assert canary not in traceback.format_exc()
-            raise
-    assert sock.sent == [] and sock.calls == 0
 
     class CanarySocket(FakeSocket):
         def sendall(self, data: bytes) -> None:
             self.calls += 1
             raise OSError(canary)
 
-    send = adapter.make_wifi_uhid_send(CanarySocket(), guard=_allow)
+    send = adapter.make_wifi_uhid_send(CanarySocket())
     with pytest.raises(adapter.WifiUhidError, match="transport-failed"):
         try:
             send(0, 4)
@@ -138,22 +120,14 @@ def test_opaque_guard_and_socket_text_never_reaches_traceback() -> None:
             raise
 
 
-def test_guard_is_required_and_has_no_default() -> None:
-    with pytest.raises(adapter.WifiUhidError):
-        adapter.make_wifi_uhid_send(FakeSocket(), guard=None)  # type: ignore[arg-type]
-    with pytest.raises(TypeError):
-        adapter.make_wifi_uhid_send(FakeSocket())  # type: ignore[call-arg]
-
-
 def test_invalid_modifier_usage_rejected_without_device_traffic() -> None:
     sock = FakeSocket()
-    send = adapter.make_wifi_uhid_send(sock, guard=_allow)
+    send = adapter.make_wifi_uhid_send(sock)
     for modifier, usage in (
-        (8, 4),  # GUI modifier is never used by the login
-        (4, 4),  # Alt modifier is never used by the login
-        (0, 99),  # unknown usage
         (0, 256),
+        (256, 0),
         (-1, 4),
+        (0, -1),
         (True, 4),  # bool is not an HID byte
     ):
         with pytest.raises(adapter.WifiUhidError):
@@ -165,16 +139,16 @@ def test_invalid_modifier_usage_rejected_without_device_traffic() -> None:
 
 def test_release_attempted_even_when_press_fails() -> None:
     sock = FakeSocket(fail_on=1)
-    send = adapter.make_wifi_uhid_send(sock, guard=_allow)
+    send = adapter.make_wifi_uhid_send(sock)
     with pytest.raises(adapter.WifiUhidError, match="transport-failed"):
         send(0, 4)
     assert sock.calls == 2
     assert sock.sent == [_RELEASE]
 
 
-def test_send_is_compatible_with_submit_login_guards() -> None:
+def test_send_is_compatible_with_submit_login() -> None:
     sock = FakeSocket()
-    send = adapter.make_wifi_uhid_send(sock, guard=_allow)
+    send = adapter.make_wifi_uhid_send(sock)
     phases: list[str] = []
     credentials = login.Credentials("aB1", "cD2")
     login.submit_login(
