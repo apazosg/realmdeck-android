@@ -1394,6 +1394,16 @@ object ForeverCasc {
         var privateVerifyMs = 0L
         var appendAndForceMs = 0L
         var checkpointMs = 0L
+        // Flat writer-owned append subphase sums, all nanoseconds. Segment
+        // planning and generation (before source resolution) are excluded;
+        // segmentTransitionNanos covers actual open/header write/index-record
+        // insertion inside appendAndForceMs. These are diagnostic children,
+        // not a wall-clock partition. Copy is buffered stream time, not USB bandwidth.
+        var segmentTransitionNanos = 0L
+        var objectHeaderCopyNanos = 0L
+        var indexPutNanos = 0L
+        var groupFlushNanos = 0L
+        var groupForceNanos = 0L
         // Cumulative staged-replay verification breakdown for successful
         // flags=2 cases only. One holder per writer, never per object.
         val stagedReplayTimings = StagedReplayTimings()
@@ -1437,8 +1447,12 @@ object ForeverCasc {
                         ?: throw IllegalStateException("resumable CASC commit group has no open segment")
                     beforeDurableGroup()
                     val dataForceStarted = System.nanoTime()
+                    val flushStarted = System.nanoTime()
                     segment.flush()
+                    groupFlushNanos = Math.addExact(groupFlushNanos, System.nanoTime() - flushStarted)
+                    val forceStarted = System.nanoTime()
                     forceFile(File(outputDataFiles, "data.%03d".format(batchArchiveId)))
+                    groupForceNanos = Math.addExact(groupForceNanos, System.nanoTime() - forceStarted)
                     appendAndForceMs += (System.nanoTime() - dataForceStarted) / 1_000_000
 
                     val checkpointStarted = System.nanoTime()
@@ -1801,6 +1815,7 @@ object ForeverCasc {
                         val appendStarted = System.nanoTime()
                         run {
                             if (plannedSegment != null) {
+                                val segmentTransitionStarted = System.nanoTime()
                                 archive?.close()
                                 archive = null
                                 val openedFile = File(outputDataFiles, "data.%03d".format(plannedId))
@@ -1824,20 +1839,25 @@ object ForeverCasc {
                                 nextArchiveId = plannedId + 1
                                 offset = SEGMENT_HEADER_SIZE.toLong()
                                 segmentCount++
+                                segmentTransitionNanos = Math.addExact(segmentTransitionNanos, System.nanoTime() - segmentTransitionStarted)
                             }
 
                             val currentArchive = archive ?: throw IllegalStateException("incremental CASC segment was not opened")
                             val currentId = archiveId
                             val objectOffset = offset
+                            val objectHeaderCopyStarted = System.nanoTime()
                             val localHeader = localHeader(ekeyBytes, total, currentId * ARCHIVE_LIMIT + objectOffset, 0)
                             currentArchive.write(localHeader)
                             copyFile(temporary, currentArchive, cancelled)
+                            objectHeaderCopyNanos = Math.addExact(objectHeaderCopyNanos, System.nanoTime() - objectHeaderCopyStarted)
                             val entry = IndexEntry(ekeyBytes.copyOfRange(0, 9), currentId, objectOffset, total)
                             val record = ExistingIndexRecord(spec.ekey, entry, 0, Long.MAX_VALUE, targetSeen = true)
+                            val indexPutStarted = System.nanoTime()
                             if (table.put(record)) {
                                 bucketCounts[bucket]++
                                 totalRecords++
                             }
+                            indexPutNanos = Math.addExact(indexPutNanos, System.nanoTime() - indexPutStarted)
                             offset += total
                             written++
                             newObjectBytes = Math.addExact(newObjectBytes, spec.encodedSize)
@@ -1859,7 +1879,7 @@ object ForeverCasc {
                             }
                         }
                         if (written % COMMIT_TIMING_BATCH_OBJECTS == 0L) {
-                            diagnostics.info("CASC commit batch newObjects=$written newBytes=$newObjectBytes sourceResolveMs=$sourceResolveMs privateVerifyMs=$privateVerifyMs appendAndForceMs=$appendAndForceMs checkpointMs=$checkpointMs elapsedMs=${(System.nanoTime() - writerStarted) / 1_000_000}")
+                            diagnostics.info("CASC commit batch newObjects=$written newBytes=$newObjectBytes sourceResolveMs=$sourceResolveMs privateVerifyMs=$privateVerifyMs appendAndForceMs=$appendAndForceMs checkpointMs=$checkpointMs elapsedMs=${(System.nanoTime() - writerStarted) / 1_000_000} segmentTransitionNanos=$segmentTransitionNanos objectHeaderCopyNanos=$objectHeaderCopyNanos indexPutNanos=$indexPutNanos groupFlushNanos=$groupFlushNanos groupForceNanos=$groupForceNanos")
                         }
                     } finally {
                         if (temporary.exists() && !temporary.delete()) {
@@ -1891,7 +1911,7 @@ object ForeverCasc {
                     diagnostics.info("CASC prefix verification complete objects=${freeze.count} bytes=${coordinator.ackedBytes.get()} elapsedMs=${(System.nanoTime() - barrierStarted) / 1_000_000}")
                 }
                 if (written > 0L && written % COMMIT_TIMING_BATCH_OBJECTS != 0L) {
-                    diagnostics.info("CASC commit final newObjects=$written newBytes=$newObjectBytes sourceResolveMs=$sourceResolveMs privateVerifyMs=$privateVerifyMs appendAndForceMs=$appendAndForceMs checkpointMs=$checkpointMs elapsedMs=${(System.nanoTime() - writerStarted) / 1_000_000}")
+                    diagnostics.info("CASC commit final newObjects=$written newBytes=$newObjectBytes sourceResolveMs=$sourceResolveMs privateVerifyMs=$privateVerifyMs appendAndForceMs=$appendAndForceMs checkpointMs=$checkpointMs elapsedMs=${(System.nanoTime() - writerStarted) / 1_000_000} segmentTransitionNanos=$segmentTransitionNanos objectHeaderCopyNanos=$objectHeaderCopyNanos indexPutNanos=$indexPutNanos groupFlushNanos=$groupFlushNanos groupForceNanos=$groupForceNanos")
                 }
                 if (checkpointIdentity != null && !overlap && checkpointObjectsReused != checkpointObjectCount) {
                     throw IllegalStateException("resumable CASC stage contains objects outside the complete target manifest")
@@ -1904,6 +1924,13 @@ object ForeverCasc {
                     } catch (flushFailure: Throwable) {
                         if (flushFailure !== t) flushFailure.addSuppressed(t)
                         failure = flushFailure
+                    }
+                }
+                if (written > 0L && written % COMMIT_TIMING_BATCH_OBJECTS != 0L) {
+                    try {
+                        diagnostics.info("CASC commit final newObjects=$written newBytes=$newObjectBytes sourceResolveMs=$sourceResolveMs privateVerifyMs=$privateVerifyMs appendAndForceMs=$appendAndForceMs checkpointMs=$checkpointMs elapsedMs=${(System.nanoTime() - writerStarted) / 1_000_000} segmentTransitionNanos=$segmentTransitionNanos objectHeaderCopyNanos=$objectHeaderCopyNanos indexPutNanos=$indexPutNanos groupFlushNanos=$groupFlushNanos groupForceNanos=$groupForceNanos")
+                    } catch (_: Throwable) {
+                        // Diagnostics must not replace the operation failure.
                     }
                 }
                 if (overlap) {

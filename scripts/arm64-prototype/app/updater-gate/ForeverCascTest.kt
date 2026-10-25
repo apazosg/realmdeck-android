@@ -902,6 +902,9 @@ class ForeverCascTest {
     @Test
     fun resumableTargetWriterKeepsVerifiedSegmentAndTruncatesOnlyItsUncheckpointedTail() {
         val root = tempDir()
+        val logs = LogCapture()
+        val logger = java.util.logging.Logger.getLogger("ForeverClientUpdate")
+        logger.addHandler(logs)
         try {
             val objects = (0..1).map { index ->
                 val decoded = "resume-object-$index".toByteArray()
@@ -949,6 +952,11 @@ class ForeverCascTest {
                 )
             }
             assertTrue(firstPass is java.util.concurrent.CancellationException)
+            val timing = logs.records.map { it.message }.single { it.startsWith("CASC commit final newObjects=1") }
+            listOf("segmentTransitionNanos=", "objectHeaderCopyNanos=", "indexPutNanos=", "groupFlushNanos=", "groupForceNanos=").forEach { key ->
+                val value = timing.substringAfter(key).substringBefore(' ').toLong()
+                assertTrue("$key must be nonnegative", value >= 0L)
+            }
             assertEquals(1, sourceCalls)
             val dataSegment = File(target, "data.000")
             val oneObjectEnd = 480L + 30L + objects.first().first.encodedSize
@@ -1020,6 +1028,7 @@ class ForeverCascTest {
                 { false },
             )
         } finally {
+            logger.removeHandler(logs)
             delete(root)
         }
     }
