@@ -8,7 +8,7 @@ logs, device captures, private working directories or unrelated Git history.
 Existing English guides, release notes and licensing remain authoritative for
 published artifacts. Branch validation does not retroactively validate a release.
 
-## Implementation being transferred
+## Transferred implementation
 
 - Home-integrated preparation, explicit final consent and guarded pause/resume.
 - Smoothed network speed/ETA, distinct from reuse, verification and activation.
@@ -22,6 +22,39 @@ published artifacts. Branch validation does not retroactively validate a release
   contiguous tails after capacity returns. Quotas are not increased.
 - Aggregate-only diagnostics for head readiness, HTTP phases, preparation and
   physical storage revalidation. No identity-validation checks are removed.
+
+## Public-branch source validation
+
+Commit `78525d2` selectively ports the reviewed implementation onto public commit
+`457056e`, without merging internal history. Public guides, licensing and the
+baseline manifest permission/theme policy remain unchanged. The unrelated APK
+publication-notice feature is excluded; this is not a new release.
+
+Canonical reconstruction and compilation of the mixed public-branch sources
+completed. The selected Kotlin regressions produced **301 passes, three optional
+skips and one failure** across 305 cases. The skips are the opt-in native-index
+diagnostic and two external real-catalog checks. The failing resolver test,
+`oneResolverBuildsDifferentFingerprintsAndReusesOnlyVerifiedCompletedOutput`,
+expects an exception that is not thrown. Replacing both resolver source and test
+with their `origin/main` versions reproduces the same assertion at the same line;
+it is a known baseline failure, not a new port regression.
+
+Focused host validation initially reported 102 passes and two failures; the two
+manifest/auditor families subsequently passed all 30 cases after removing an
+unrelated manifest-policy change. The remaining baseline expectations concern
+Account unavailable-state wording and an older release-version pair. They were
+not changed to make the port appear green. Independent source/privacy and
+recovery/concurrency review found no actionable issue in the selected port.
+
+Validation was interrupted by a host restart. Six empty staged Git blobs were
+restored to their exact object IDs without moving references or changing source;
+only identified empty generated Gradle transform-cache entries were quarantined
+before retrying compilation. Git integrity checks passed afterward. This does
+not establish the underlying cause of the interrupted writes.
+
+These checks validate source reconstruction and targeted regressions, **not** a
+signed APK, physical acceptance or the 3.2-MB/s target. No APK was assembled or
+installed and no device was operated for this public-branch port.
 
 ## Recorded evidence and limits
 

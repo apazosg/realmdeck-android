@@ -36,14 +36,19 @@ prediction of the final speedup is not a prerequisite for a small proven fix.
 
 - [x] Create `perf/download-bottlenecks` from the public `origin/main`, retaining
   the internal worktree and history separately.
-- [ ] Port the reviewed download implementation and necessary dependencies only.
+- [x] Port the reviewed download implementation and necessary dependencies only.
   Exclude unrelated APK publication notices and internal operational documents.
 - [x] Reconcile specifications and public-safe measurement notes; remove private
   approval quotations without changing the approved behavior.
-- [ ] Check focused host tests, source admissions and relevant Kotlin regressions;
+- [x] Check focused host tests, source admissions and relevant Kotlin regressions;
   independently review recovery/concurrency and release-authority changes.
-- [ ] Commit only task-owned changes; verify the public base is an ancestor and
+  Canonical reconstruction and mixed-source compilation completed: 301 Kotlin
+  tests passed, three optional cases skipped, and one failure reproduced unchanged
+  on the public baseline. Host checks also retain two pre-existing failures;
+  see the validation notes rather than treating the suite as fully green.
+- [x] Commit only task-owned changes; verify the public base is an ancestor and
   no internal history or generated/private artifacts have been introduced.
+  Source port: `78525d2`; no push, APK assembly or device operation.
 - [ ] Profile the dominant preparation consumer and storage checks before changing
   their implementation. Repeated path walks alone do not prove redundant guards.
 - [ ] Validate each subsequent bounded improvement and repeat comparable physical
