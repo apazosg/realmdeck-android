@@ -1165,22 +1165,30 @@ class ForeverClientUpdater(
             buildState.fingerprint?.size ?: 0L,
             JOURNAL_AND_MARGIN_RESERVE,
         )
-        val workspaceBytes = maxOf(
+        val workspaceAdditionalBytes = maxOf(
             (privateRequired - privateResume.occupiedBytes).coerceAtLeast(0L),
             privatePlannerBytes,
         )
+        // Owned raws and verification scratch can disappear during normal
+        // progress. Crediting them against consent would make its private
+        // ceiling grow again on Resume. Keep the full conservative reserve
+        // for sourceless consent, but retain the same occupied-byte credit
+        // and planner floor when checking the currently needed free space.
+        val workspaceBytes = if (target.sourceDataFiles == null) maxOf(privateRequired, privatePlannerBytes)
+            else workspaceAdditionalBytes
         val cascStageOccupied = Math.addExact(
             resume.retainedSegmentBytes,
             Math.addExact(resume.finalizingIndexBytes, resume.reclaimableScratchBytes),
         )
         val destinationBytes = (destinationRequired - cascStageOccupied - existingStageInputBytes).coerceAtLeast(0L)
         val peak = Math.addExact(workspaceBytes, destinationBytes)
+        val additionalPeak = Math.addExact(workspaceAdditionalBytes, destinationBytes)
         val sharedFileStore = ForeverClientUpdateCatalog.sharedCapacity(privateWorkDirectory.toPath(), destination.root.toPath())
         val privateAvailable = ForeverClientUpdateCatalog.availableBytes(privateWorkDirectory.toPath())
         val privateAvailableWithArchiveIndex = Math.addExact(privateAvailable, archiveOrder?.fileBytes ?: 0L)
         val destinationAvailable = ForeverClientUpdateCatalog.availableBytes(destination.root.toPath())
-        val enough = if (sharedFileStore) privateAvailableWithArchiveIndex >= peak else
-            privateAvailableWithArchiveIndex >= workspaceBytes && destinationAvailable >= destinationBytes
+        val enough = if (sharedFileStore) privateAvailableWithArchiveIndex >= additionalPeak else
+            privateAvailableWithArchiveIndex >= workspaceAdditionalBytes && destinationAvailable >= destinationBytes
         val snapshot = snapshotHash(
             target.sourceRevision,
             target.storageMarker,

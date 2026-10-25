@@ -1545,6 +1545,59 @@ class ForeverClientUpdaterTest {
     }
 
     @Test
+    fun retiringPrivateTransferScratchDoesNotInvalidateSourcelessResumeConsent() {
+        val configAssets = configAssetsOrSkip()
+        Fixture(directEncodedSizeOverride = ForeverClientUpdateCatalog.MAX_SUPPORTED_ENCODED_OBJECT_BYTES).use { fixture ->
+            val paths = fixture.makePaths()
+            val destination = fixture.destination(paths)
+            val updater = fixture.updater(paths, configAssets) { record, workDir, _, progress ->
+                if (record.encodedSize == fixture.directEncodedSize) {
+                    // A real resumable partial, sparse so the fixture never
+                    // allocates or transfers a large encoded object.
+                    RandomAccessFile(File(workDir, "${record.ekey}.part"), "rw").use { it.setLength(4L shl 20) }
+                    throw java.util.concurrent.CancellationException("leave an owned transfer partial")
+                }
+                File(workDir, "${record.ekey}.blte").apply {
+                    writeBytes(fixture.rawFor(record))
+                    progress(length())
+                }
+            }
+            val initial = updater.plan(destination)
+            assertThrows(java.util.concurrent.CancellationException::class.java) {
+                updater.execute(destination, initial, ForeverClientUpdateConsent(
+                    initial.planId, initial.downloadBytes, initial.peakAdditionalBytes,
+                    initial.privateWorkBytes, initial.destinationBytes,
+                ))
+            }
+            assertNoLiveFetchWorkers("scratch consent regression")
+            assertWorkspaceWritesSettled(paths)
+            val resumed = fixture.updater(paths, configAssets) { _, _, _, _ -> error("replanning must not fetch") }
+            resumed.recover(destination)
+            val withPartial = resumed.plan(destination)
+            val consent = ForeverClientUpdateConsent(
+                withPartial.planId, withPartial.downloadBytes, withPartial.peakAdditionalBytes,
+                withPartial.privateWorkBytes, withPartial.destinationBytes,
+            )
+            val partial = workspaceObjectsDir(paths).listFiles().orEmpty().single { it.extension == "part" }
+            assertEquals(4L shl 20, partial.length())
+            // Simulate normal retirement/eviction of owned scratch, not a
+            // destination, catalog, source or consent change.
+            assertTrue(partial.delete())
+            val withoutPartial = resumed.plan(destination)
+            assertEquals(withPartial.planId, withoutPartial.planId)
+            assertEquals(withPartial.downloadBytes, withoutPartial.downloadBytes)
+            assertTrue(
+                "retiring private scratch must not require another consent",
+                ForeverClientUpdateExecution.canResume(withoutPartial, consent, withPartial.sourceRevision),
+            )
+            assertEquals(withPartial.privateWorkBytes, withoutPartial.privateWorkBytes)
+            assertEquals(withPartial.destinationBytes, withoutPartial.destinationBytes)
+            assertEquals(withPartial.peakAdditionalBytes, withoutPartial.peakAdditionalBytes)
+            assertTrue(withoutPartial.hasEnoughSpace)
+        }
+    }
+
+    @Test
     fun planMovesVerificationTemporaryCostFromDestinationToPrivateWork() {
         val configAssets = configAssetsOrSkip()
         Fixture(directEncodedSizeOverride = ForeverClientUpdateCatalog.MAX_SUPPORTED_ENCODED_OBJECT_BYTES).use { fixture ->

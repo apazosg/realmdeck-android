@@ -357,6 +357,10 @@ fun ForeverClientManagementDialog(
                         Text("Versión: ${readyPlan.version}")
                         Text("Descarga: ${ForeverFunctionalUiText.clientBytes(readyPlan.downloadBytes)}")
                         Text("Espacio adicional: ${ForeverFunctionalUiText.clientBytes(readyPlan.peakAdditionalBytes)}")
+                        if (!readyPlan.privateAndDestinationShareFileStore) {
+                            Text("Almacenamiento de la app: hasta ${ForeverFunctionalUiText.clientBytes(readyPlan.privateWorkBytes)}")
+                            Text("Volumen del cliente: hasta ${ForeverFunctionalUiText.clientBytes(readyPlan.destinationBytes)}")
+                        }
                         if (!readyPlan.hasEnoughSpace) Text("No hay espacio suficiente.", color = MaterialTheme.colorScheme.error)
                         Button(
                             enabled = readyPlan.hasEnoughSpace,
