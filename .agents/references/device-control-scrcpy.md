@@ -1,84 +1,83 @@
-# Referencia: control del dispositivo mediante scrcpy (UHID)
+# Referencia: control del dispositivo mediante scrcpy
 
-> Conocimiento operativo para controlar la UI del teléfono de pruebas sin
-> `adb shell input`. Los valores concretos (serial/endpoint, rutas de
-> herramientas, versión y SHA-256 del servidor fijado) viven solo en
-> `private/device-control.md`, ignorado por Git. Este documento se puede
-> publicar: no contiene identificadores de dispositivo ni secretos.
+> Guía operativa para controlar el dispositivo de desarrollo por ADB Wi-Fi.
+> Los valores concretos (serial/endpoint, rutas, versión y SHA-256 del servidor)
+> están en `private/device-control.md`, ignorado por Git.
+
+## Contexto
+
+El teléfono es un dispositivo dedicado a desarrollo, con ADB Wi-Fi habilitado.
+Se puede usar de forma completa: instalar y desinstalar APKs, lanzar
+actividades, reiniciar, capturar pantalla, transferir archivos y controlar la
+UI. No hay un flujo de autorización por acción ni una lista cerrada de
+operaciones.
+
+La única separación es de publicación: los identificadores del dispositivo y
+las capturas con datos de cuenta no se versionan.
 
 ## Por qué scrcpy UHID
 
-En los dispositivos de prueba HyperOS, `adb shell input tap/swipe/text` falla
-con `SecurityException: INJECT_EVENTS`. Esa denegación no se rodea con root,
-con ajustes de desarrollador adicionales ni cambiando la configuración de
-seguridad.
+En HyperOS, `adb shell input tap/swipe/text` suele fallar con
+`SecurityException: INJECT_EVENTS`. scrcpy evita esa vía: su servidor crea un
+teclado UHID en el dispositivo y recibe las pulsaciones por el canal de control.
+Funciona sin root y sin tocar los ajustes de seguridad.
 
-El servidor oficial de scrcpy crea un teclado **UHID** en el dispositivo y
-recibe las pulsaciones por su canal de control. La vía fue verificada: el
-teclado aparece en `dumpsys input` y Tab cambia el foco sin modificar permisos.
-No se usa el cliente gráfico ni se habilitan vídeo, audio o portapapeles.
+## Opciones de uso
 
-## Reglas obligatorias
+### Cliente scrcpy completo
 
-1. **Autorización explícita por ventana de interacción.** Aprobar un plan no
-   autoriza instalar, reiniciar, matar procesos, pausar/reanudar descargas ni
-   confirmar costes. Pedir autorización antes de cada acción con efecto.
-2. **Solo navegación por teclado.** No enviar texto ni credenciales salvo
-   autorización explícita para un envío concreto. Nunca registrar credenciales
-   en logs, capturas, artefactos o documentación.
-3. **Sin cambios de seguridad.** No habilitar `INJECT_EVENTS`, no usar root, no
-   modificar ajustes de desarrollador ni desactivar verificaciones.
-4. **Por defecto, sin vídeo, audio ni portapapeles.** Cualquier excepción
-   requiere autorización explícita. No capturar pantallas de cuenta o login.
-5. **Comprobar el contexto antes de cada tecla.** La actividad en primer plano
-   debe ser el paquete propio; el dump de UI debe contener solo ese paquete y
-   ningún `EditText` ni `password=true`. Si no se cumple, no se envía nada.
-6. **Teclas permitidas por defecto:** Tab, Enter, Escape, espacio, flechas y
-   Home. Cualquier otra combinación requiere revisión y autorización.
-7. **Una acción cada vez,** verificando el estado posterior. No repetir Enter
-   «por si acaso» ni encadenar acciones sin observar el resultado.
-8. **Cierre y limpieza siempre:** destruir el UHID, cerrar el socket, terminar
-   el servidor, retirar el `adb forward` y borrar el jar remoto. Los artefactos
-   van fuera del repositorio y se sanean antes de publicar extractos.
-9. **Servidor fijado.** Usar solo el servidor oficial registrado en
-   `private/device-control.md` y verificar su SHA-256 antes de cada uso. No
-   descargar ni actualizar scrcpy durante una sesión.
-10. **Serial fuera de Git.** Exportar `WOWFOREVER_ADB_SERIAL` en la terminal; no
-    incrustarlo en scripts, contratos ni documentación versionada.
+Si el cliente oficial está instalado en el host:
 
-## Procedimiento (host)
+```bash
+scrcpy -s "$WOWFOREVER_ADB_SERIAL" --keyboard=uhid
+```
 
-Variables definidas en `private/device-control.md`:
+Vídeo, audio, portapapeles y control están disponibles según los flags del
+cliente. `--keyboard=uhid` es la opción que funcionó en los dispositivos
+HyperOS.
 
-- `$WOWFOREVER_ADB` — `adb` oficial de platform-tools.
-- `$WOWFOREVER_ADB_SERIAL` — serial USB o `ip:puerto` de ADB Wi-Fi.
-- `$WOWFOREVER_SCRCPY_SERVER` — jar `scrcpy-server` oficial fijado.
-- SHA-256 esperado del jar (en el mismo fichero privado).
+### Solo servidor (sin cliente gráfico)
 
-Pasos:
+Es la vía usada en las pruebas históricas: no hay vídeo/audio/portapapeles y el
+control se hace por socket. Pasos:
 
-1. Confirmar autorización y que responde el dispositivo correcto:
+1. Verificar que el dispositivo responde:
    `"$WOWFOREVER_ADB" -s "$WOWFOREVER_ADB_SERIAL" get-state`.
-2. Verificar el SHA-256 del jar antes de publicarlo.
-3. Publicarlo en `/data/local/tmp/` con un nombre único y abrir
-   `adb forward tcp:0 localabstract:scrcpy_<scid>`.
-4. Arrancar el servidor con `tunnel_forward=true video=false audio=false
-   control=true clipboard_autosync=false power_on=false cleanup=false`.
-5. Conectar al socket de control, consumir el byte de handshake y crear el
+2. Publicar el jar fijado:
+   `adb -s "$WOWFOREVER_ADB_SERIAL" push "$WOWFOREVER_SCRCPY_SERVER" /data/local/tmp/scrcpy-server.jar`.
+3. Abrir el forward:
+   `adb -s "$WOWFOREVER_ADB_SERIAL" forward tcp:0 localabstract:scrcpy_<scid>`.
+4. Arrancar el servidor:
+
+   ```bash
+   adb -s "$WOWFOREVER_ADB_SERIAL" shell \
+     "CLASSPATH=/data/local/tmp/scrcpy-server.jar app_process / \
+      com.genymobile.scrcpy.Server 5.0.1 scid=<scid> tunnel_forward=true \
+      video=false audio=false control=true clipboard_autosync=false \
+      power_on=false cleanup=false"
+   ```
+
+5. Conectar al puerto local del forward, leer el byte de handshake y crear el
    teclado UHID (mensaje 12) con el descriptor de teclado boot.
-6. Antes de cada pulsación, aplicar la comprobación de contexto de la regla 5;
-   después enviar la pulsación (mensaje 13) y su release.
-7. Al terminar, destruir el UHID (mensaje 14) y limpiar.
+6. Enviar pulsaciones con el mensaje 13 (`>BHH` tipo 13, id 1, longitud 8,
+   reporte de 8 bytes) y su release.
+7. Destruir el UHID (mensaje 14) al terminar.
 
-La implementación de referencia auditada está fuera del repositorio; la ruta
-local figura en `private/device-control.md`. El adaptador
-[`functional_login_uhid.py`](../../scripts/diagnostics/android-process/functional_login_uhid.py)
-documenta el framing y las obligaciones de guarda para un envío de login ya
-autorizado; no crea transporte ni autoriza nada por sí mismo.
+El probe histórico
+`/home/adrian/wowforever-artifacts/work/wifi-uhid-control-20261017/probe-uhid.py`
+implementa este flujo y limita las teclas a navegación (Enter, Escape, Tab,
+espacio y flechas). Para escribir texto, usa el cliente scrcpy o amplía el
+helper; el servidor acepta los mensajes de texto y control del protocolo.
 
-## Si falta la configuración privada
+## Notas prácticas
 
-El checkout público no incluye `private/device-control.md`. No inventes
-seriales, endpoints, hashes ni rutas: pide los valores al responsable local y
-crea el fichero ignorado antes de operar. Sin él, la única acción válida es
-leer o diagnosticar sin controlar la UI.
+- El endpoint Wi-Fi cambia al reconectar o emparejar. Comprobar con
+  `adb devices -l` y actualizar `private/device-control.md`.
+- El serial se pasa por `WOWFOREVER_ADB_SERIAL` para no incrustarlo en scripts
+  versionados.
+- El servidor y su SHA-256 están fijados en la ficha privada para reproducir
+  las pruebas; se puede usar otra versión oficial si se actualiza esa ficha.
+- Cerrar el forward y el proceso del servidor al terminar evita sesiones
+  huérfanas; el jar remoto se puede borrar o reutilizar.
+- Los artefactos y capturas van fuera del repositorio. No versionar seriales,
+  IPs, pantallas de cuenta o login.

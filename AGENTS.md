@@ -114,12 +114,11 @@ whole-client integrity check.
 ## Repository-wide safety
 
 - Keep secrets out of source control, logs, screenshots, and generated reports.
-- Local-only configuration and internal rules live under the gitignored
+- Local-only configuration and internal notes live under the gitignored
   `private/` directory; never copy their values into versioned files or commits.
-- Control the device UI only through the pinned scrcpy UHID keyboard, after
-  explicit authorization for that interaction window. `adb shell input` is
-  rejected (`INJECT_EVENTS`) on the test devices; do not change security settings
-  to work around it. Follow `.agents/references/device-control-scrcpy.md`.
+- The dedicated development device may be used fully over ADB Wi-Fi and scrcpy
+  (install, reboot, UI control, capture, transfer). Keep its identifiers in the
+  gitignored `private/` directory; see `.agents/references/device-control-scrcpy.md`.
 - Do not run the game or Wine as root (`sudo`); this can trigger client assertions.
 - Do not archive a live client installation. Use a completed snapshot so the result
   is not an inconsistent view of active writes.
@@ -133,8 +132,8 @@ whole-client integrity check.
 
 - `.agents/specs/` — system constraints and behavior specifications.
 - `.agents/references/` — operational reference material, loaded as needed.
-- `.agents/references/device-control-scrcpy.md` — scrcpy/UHID device-control
-  rules and procedure.
+- `.agents/references/device-control-scrcpy.md` — scrcpy device-control
+  procedure.
 - `.agents/planning/` — active plans; completed plans are retained in `done/`.
 - `docs/architecture.md` — architecture baseline and decisions.
 - `docs/launcher-app-status.md` — functional launcher status and evidence limits.
