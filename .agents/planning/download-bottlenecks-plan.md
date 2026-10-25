@@ -6,7 +6,11 @@ date: 2026-10-25
 
 # Download performance work
 
-## Proposed next implementation — pending approval
+## Approved next implementation — in progress
+
+The user approved this exact trade-off on 2026-10-25. Implement the bounded
+change and its regressions, then independently review and measure an audited
+candidate; do not add another diagnostic-only release first.
 
 Stop adding diagnostic-only releases for the force helper. The measured next
 candidate is increasing the maximum durable CASC commit group from four to sixteen
@@ -20,10 +24,10 @@ This deliberately allows up to sixteen objects in an unacknowledged group and
 reduces the frequency of its light storage check; it does not bound bytes or time.
 Full admission, segment-open, resume and activation checks remain. A crash may
 require more unacknowledged staging work to be replayed, not loss of acknowledged
-progress. Sixteen is a proposed maximum, not a promise that every flush reaches
+progress. Sixteen is the approved maximum, not a promise that every flush reaches
 that size. Fewer forces are expected, but wall-time savings are not guaranteed.
-Obtain approval of this trade-off and reconcile affected storage/recovery specs
-before implementation. Then make the change and perform one validation run;
+Reconcile affected storage/recovery specs before implementation, then make the
+change and perform one validation run;
 further profiling is not a prerequisite to trying this measured, bounded change.
 
 ## Latest append diagnosis
