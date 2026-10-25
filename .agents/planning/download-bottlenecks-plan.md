@@ -6,6 +6,18 @@ date: 2026-10-25
 
 # Download performance work
 
+## Latest append diagnosis
+
+C144 completed a 608.682-second observation and paused normally. Its force helper
+accounts for 191.320 seconds, 92.16% of measured append child clocks but 30.24% of
+the aligned 632.612-second writer interval. This includes pathname validation,
+channel open, `force(true)` and close; it does not yet isolate the sync syscall.
+The 0.7994-MB/s payload cohort had much smaller objects than the prior C143 sample,
+so this is not a controlled regression comparison. Assess retained-channel safety
+and/or helper-internal timings before selecting a bounded optimization. No change
+to group size, force cadence, descriptor ownership or storage coverage is implied.
+Merge remains deferred as requested until diagnosis, improvement and remeasurement.
+
 ## Approved scope
 
 The measurement candidate will use version code 143 and version name

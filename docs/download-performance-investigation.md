@@ -25,9 +25,54 @@ The certificate matches C143 and the packaged version is 144. A fresh paused,
 no-guest, Wi-Fi and writable-USB preflight passed before replacement. Installation
 succeeded; before launch, all three owner/receipt/checkpoint hashes and stat
 fields matched exactly, and the installed APK hash matched the audited candidate.
-The consented ten-minute measurement has been initiated, with preparation counted
-separately. It is not yet complete; no C144 throughput result is claimed.
-Merge and any further optimization remain deferred until this diagnosis.
+The completed measurement below counts preparation separately. Merge and any
+further optimization remain deferred until the diagnosis and next bounded change.
+
+### Completed C144 observation
+
+The operation completed 608.682 seconds of numeric payload observations and
+paused normally, with Resume available and zero active fetch callbacks or HTTP
+requests. Rounded useful-network bytes increased by 486.590 MB: **0.7994 MB/s**
+(display bounds 0.79933–0.79950). Five approximately two-minute windows measured
+1.038 / 1.413 / 0.556 / 0.151 / 0.811 MB/s. This is not a matched-object A/B:
+the aligned writer cohort averaged 19,955 CASC bytes per object, versus 105,921
+in the prior C143 interval. It processed 40.06 objects/s versus 35.54. CASC bytes
+are not useful-network bytes; neither comparison establishes that the diagnostic
+change caused a speed regression or that the 3.2-MB/s goal is sustained.
+
+Across periodic committed samples 256–25,600 (632.612 writer seconds), the new
+nested clocks measured:
+
+| Append suboperation | Seconds | Share of measured child-clock sum |
+|---|---:|---:|
+| Group force helper | 191.320 | 92.16% |
+| Local header and private-to-segment copy | 10.718 | 5.16% |
+| Ordinary index insertion/bookkeeping | 4.738 | 2.28% |
+| Buffered group flush | 0.824 | 0.40% |
+| Segment transition | 0 | 0% |
+
+The **force helper**, not isolated `force(true)`, is the dominant measured child.
+It checks the pathname for symlink/regular-file shape, opens a fresh write channel,
+forces it and closes it. Its 191.320 seconds are about **30.24% of this writer
+interval**, not 92% of the entire download. Removing the whole helper cost would
+therefore not double throughput, and is not an approved or safe optimization.
+The old append clock reports 193.409 seconds; summed nanosecond children exceed
+it by 14.192 seconds because the old clock truncates per operation. They must not
+be forced into an exact partition or added to the outer clock.
+
+The same writer interval reports 164.284 seconds of source resolution, 77.903
+of private copy/authentication and 26.596 of checkpoint work. Final run counters
+record 25,620 committed objects, 167.032 seconds of future wait and 64.741 seconds
+of raw retirement; these final counters have different boundaries and are not
+additional disjoint costs. Producer budget wait is concurrent. Preparation still
+consumed roughly fifteen minutes before payload and is a separate unresolved cost.
+
+Next assess whether avoiding repeated channel reopening can preserve required
+path and ownership checks, or whether internal helper phase timings are needed
+before choosing that change. No force-frequency, commit-group, validation-policy
+or descriptor-lifetime change is implemented by this diagnostic. Evidence is the
+C144 scoped log, payload samples, append/throughput/pipeline summaries and final
+pause capture, retained outside source control.
 
 ## C143 directed storage-boundary candidate
 
