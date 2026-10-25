@@ -202,3 +202,12 @@ la comprobación Gradle integrada usa JDK 17, no se confunden ambos entornos.
 
 Optimización versionada en `c1bc7a1`; no APK, operación de dispositivo ni mejora
 física acreditada. La aceptación integrada y de recorrido completo sigue abierta.
+
+## Auditoría del objetivo (cierre pendiente)
+
+| Entregable | Evidencia | Pendiente |
+|---|---|---|
+| Menor preparación al iniciar/reanudar | Menos rehashes y tiempos host del inspector sin fuente; `c1bc7a1`, cuatro focales PASS | Recorrido completo y primer byte Android, sin confundir pausa viva y proceso muerto |
+| Primera pulsación efectiva, sin repetir | Guard síncrono y pending handoff revisados en `ForeverClientManagement.kt`; conserva flujo habitual 3/1 acciones | Veredicto de suite final y prueba real de interacción; cambios UI aún sin commit |
+| Garantías intactas | Review independiente de capacidad/cotas; qualify, replan, consentimiento, crypto, Wi-Fi y durabilidad no eliminados | Suite integrada completa no acreditada |
+| Entrega versionada y honesta | Optimización y notas en commits separados; sin APK ni operación física | Versionar UI después de verificación; no cerrar objetivo/plan por el ahorro de un subcomponente |
