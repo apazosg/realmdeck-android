@@ -8,6 +8,11 @@ date: 2026-10-25
 
 ## Approved scope
 
+The measurement candidate will use version code 143 and version name
+`0.2.119-light-storage`, following the installed code 142. The user confirmed
+continuing with that correction; do not force a downgrade or uninstall to install
+the earlier code-141 build. Reconstruct and audit the new identity before use.
+
 Continue the approved Home installation, bounded download and recovery work from
 US-008. The user approved transferring the relevant reviewed implementation onto
 a branch based on the public repository. This is a selective source port, not a

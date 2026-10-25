@@ -1,5 +1,37 @@
 # Download performance investigation
 
+## C143 directed storage-boundary candidate
+
+Commit `1632460` implements the approved heavy/light policy for directed,
+sourceless CASC installs only. Full validation remains at admission/resume,
+segment opening and final activation. Before each durable group, including a
+partial group, a light check verifies fresh selection/revision and no-follow
+root/base directory identities. A failed boundary check prevents the group
+checkpoint and raw retirement. Sourced serial and non-directed paths retain
+their existing full per-object checks.
+
+This deliberately changes detection coverage: marker, ancestor and fresh mount
+metadata checks may be deferred across multiple groups until the next full
+boundary. Four objects do not bound elapsed time or bytes. Unacknowledged staging
+writes may occur before a failing group check. The existing narrow pathname-force
+versus open-writer race is not eliminated. These are accepted trade-offs, not
+claims of equivalent coverage or zero risk. Quotas, object authentication,
+checkpoint format, plan identity and force/ack ordering are unchanged.
+
+Four final focused Kotlin regressions passed with no failures or skips, covering
+light identity checks/marker deferral, capability-gated parallel cadence,
+unchanged serial reuse, and failed partial-group/resume boundary checks retaining
+raws. Focused host admission/provenance tests and independent review also passed;
+the historical baseline failures documented below were not silently fixed.
+
+The canonical C143 build (`0.2.119-light-storage`) completed and its
+source/build/payload audit passed. APK SHA-256:
+`af2b21765959dfeab8e93747b108b948bf48e8bb3d185306015ed793f5f7a67b`.
+The signing certificate matches the prior installed candidate. C143 avoids a
+version downgrade from the installed C142; no uninstall, data reset or downgrade
+flag is used. Physical throughput validation is still pending; no speedup is
+claimed from this source change or build.
+
 ## Scope
 
 This branch selectively transfers reviewed download work onto the public source
