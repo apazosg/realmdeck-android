@@ -31,6 +31,11 @@ cambios mínimos de código/UI y pruebas locales (pasos 2–6 y documentación d
 sin operar el teléfono ni publicar una APK. Los cambios de garantías/contrato
 siguen requiriendo propuesta y aprobación explícitas.
 
+Ampliación autorizada: el usuario permite pruebas locales y con Android mediante
+ADB Wi-Fi y, al detectarse servicio foreground activo en C146, eligió «Observar y
+pausar normalmente»: leer progreso, pausa cooperativa por UI y medir reanudación
+de la versión instalada. No autoriza todavía sustituir la app con una candidata.
+
 Solicitud renovada mediante objetivo el 2026-10-25: «Reducir el tiempo de
 preparación inicial al iniciar o restaurar una descarga. mejorar la ui UX para
 que el usuario no tenga que pulsar varias veces hasta iniciar la descarga.»
@@ -112,6 +117,22 @@ costes y la reanudación con una sola acción cuando el plan siga siendo válido
 - Fuerza de datos → fuerza de checkpoint → acknowledgement/retiro de raw; sin reset,
   migración, borrado de staging o reparación/descarga extra implícita.
 
+### Ventana física propuesta — pendiente de autorización separada
+
+- Comprobar primero, de forma no destructiva, dispositivo, destino, espacio y si
+  hay juego/transferencia activos; si los hay, detener la intervención y consultar,
+  no interrumpirlos por cuenta propia.
+- Registrar la línea base disponible en la versión instalada, sin borrar progreso.
+  Preparar/auditar una candidata local e instalarla conservando datos únicamente
+  si el usuario autoriza también esa instalación; no publicar ni subir una APK.
+- Observar primera pulsación, preparación, pausa/reanudación y reconexión de UI;
+  limitar la observación de payload a dos minutos tras arrancar. No presentar esa
+  ventana como prueba de throughput sostenido de diez minutos. Confirmar destino y
+  costes visibles antes de consentir, y consultar si cambian o resultan desconocidos.
+- No resetear/borrar cliente o staging, matar un juego, reiniciar el dispositivo ni
+  cambiar consentimiento entre procesos. Comparar fases/cohortes disponibles y
+  declarar diferencias de caché/progreso; no prometer un A/B causal si no lo es.
+
 ### Medición y aceptación
 
 - Registrar versión/hash, dispositivo/destino, build/catálogo, tamaño del prefijo,
@@ -155,9 +176,12 @@ costes y la reanudación con una sola acción cuando el plan siga siendo válido
   No se elimina ninguna calificación, recorrido ni replanificación.
   Benchmark host actual de 300.000 objetos: cuatro rehashes con pista cero y
   ninguno con conteo exacto; resultados/callbacks idénticos. Véase el informe.
-- [ ] 5. Implementar mejora mínima y regresiones focales; revisar diff y evidencias.
-- [ ] 6. Revisar independientemente límites sensibles; reconstruir/auditar candidata
-  solo si hace falta prueba física. No repetir checks exitosos sin cambio relevante.
+- [x] 5. Implementar mejora mínima y regresiones focales; revisar diff y evidencias.
+  Optimización `c1bc7a1` y UI `633329e`; cuatro focales host y diez tests del servicio
+  aprobados. La interacción física y el recorrido completo siguen pendientes.
+- [x] 6. Revisar independientemente límites sensibles; reconstruir/auditar candidata
+   solo si hace falta prueba física. No repetir checks exitosos sin cambio relevante.
+  Review de algoritmo y concurrencia realizada; no se ha preparado una APK.
 - [ ] 7. Con autorización y estado fresco del dispositivo, medir antes/después sin
   perder progreso ni interferir con un juego/descarga activos; registrar limitaciones.
 - [ ] 8. Reconciliar notas vigentes, revisar staged diff, commits atómicos solo de la
@@ -173,14 +197,21 @@ costes y la reanudación con una sola acción cuando el plan siga siendo válido
   Al iniciar esta fase no se habían modificado código/specs, ejecutado suites ni
   operado dispositivos. La reproducción local ya está autorizada;
   no se da por completo el recorrido del paso 3 con una inspección estática.
-- Acceso/estado actual del teléfono no comprobados. La aprobación del plan no implica
+- Al aprobar el alcance local no se habían comprobado acceso/estado del teléfono.
+  La aprobación del plan no implica
   permiso para detener una partida o transferencia, instalar, reiniciar ni confirmar
-  costes desconocidos; coordinar la ventana física antes de esas operaciones.
+   costes desconocidos; coordinar la ventana física antes de esas operaciones.
+- Actualización física autorizada: ADB Wi-Fi disponible, C146 con descarga activa.
+  UI 17:26–17:27 UTC: 8.0 GiB/71.4 GiB y 0.3 MB/s redondeados. Un único intento de
+  pulsar «Pausar» fue rechazado por Android (`INJECT_EVENTS`); no se ha pausado ni
+  instalado nada. Se requiere pulsación manual para continuar esa medición.
 - Se acredita reducción de trabajo del inspector host (commit `c1bc7a1`, 4/4
   regresiones focales); no reducción global ni física. La compilación integrada
-  sigue pendiente: el primer intento de staging parcial omitió una dependencia
-  overlay existente y se corrigió ese staging, no el código del producto. El
-  guard UI y sus regresiones aún esperan veredicto Gradle de la fuente final.
+  Modern y los diez tests del servicio pasaron con la fuente final de UI y updater
+  (coincidencia comprobada por `cmp`). La copia parcial Legacy seguía incompleta;
+  los focales de capacidad y costes del árbol Modern también pasaron (un test por
+  clase, cero fallos/errores/omitidos, XML 2026-10-25T16:52:04), sin atribuir los
+  problemas de staging al producto. La UI está versionada en `633329e`.
 - Consentimiento persistente tras muerte del proceso y pausa viva son cambios de
   producto fuera del primer alcance. Si resultan necesarios, presentar decisión;
   conservar checkpoint no autoriza a descargar automáticamente.

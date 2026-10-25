@@ -188,26 +188,59 @@ la comprobación Gradle integrada usa JDK 17, no se confunden ambos entornos.
   `/home/adrian/dev/realmdeck-opt/GameNative` falló en compilación: el staging
   parcial de updater omitió `overlay/ForeverClientUpdateCheck.kt`, que sí existe
   en el repositorio. **No es un defecto acreditado del producto ni de la
-  optimización.** Se corrigió el diagnóstico del worker y se solicitó completar
-  esa dependencia antes del siguiente intento; resultado pendiente.
-- La suite `ForeverClientUpdateForegroundServiceTest` se lanzó offline con JDK17
-  en otra copia aislada bajo
-  `/home/adrian/wowforever-artifacts/work/download-resume-gate-20261025/GameNative`.
-  No se ha recibido todavía resultado del test de la fuente final. Sus tres
-  regresiones nuevas comprueban el protocolo pending/segundo reset/start, no
-  interacción Compose. No se presenta como suite aprobada.
+   optimización.** Los intentos posteriores con esa copia parcial revelaron más
+   diferencias con el ensamblado completo; no se corrige el producto para acomodar
+   ese staging. La comprobación focal pasó en el árbol Modern ya compilado.
+- La suite `ForeverClientUpdateForegroundServiceTest` pasó offline con JDK17
+   en otra copia aislada bajo
+   `/home/adrian/wowforever-artifacts/work/download-resume-gate-20261025/GameNative`.
+   `:app:testModernDebugUnitTest --tests
+   app.gamenative.ForeverClientUpdateForegroundServiceTest --offline --no-daemon`:
+   **BUILD SUCCESSFUL**, diez tests, cero fallos/errores/omitidos (XML del
+   2026-10-25T16:42:19). El responsable leyó el XML y comprobó con `cmp` las fuentes
+   finales de Management, Casc, Updater, UpdateService y el test. Sus tres
+   regresiones nuevas comprueban el protocolo pending/segundo reset/start, no
+   interacción Compose. La compilación integrada Modern sí está acreditada.
+- En ese mismo árbol, `ForeverCascTest.targetInspectionCapacityHintKeepsIdenticalPlanAndRejections`
+  y `ForeverClientUpdaterTest.physicalArchiveOrderPlanningKeepsExactConsentCostsStable`
+  pasaron: un test por clase, cero fallos/errores/omitidos, XML del
+  2026-10-25T16:52:04. El responsable leyó ambos XML y comprobó con `cmp` los dos
+  archivos de test contra el repositorio. No se repitieron los diez tests ya verdes
+  ni se ejecutó toda la suite. Los XML de Gradle se reemplazan al filtrar otra
+  ejecución: la ausencia posterior del XML del servicio no invalida su veredicto
+  leído y documentado antes de esta ejecución.
 - Revisión independiente del algoritmo: sin hallazgos bloqueantes. Revisión UI:
   admisión pending validada; ajustes de Pausar y apertura pending inspeccionados
   por el responsable tras la corrección, sin prueba de pulsaciones en dispositivo.
 
-Optimización versionada en `c1bc7a1`; no APK, operación de dispositivo ni mejora
-física acreditada. La aceptación integrada y de recorrido completo sigue abierta.
+Optimización versionada en `c1bc7a1` y corrección UI en `633329e`; no APK, operación
+de dispositivo ni mejora física acreditada. La aceptación del recorrido completo
+sigue abierta.
+
+### Observación física C146 — 2026-10-25
+
+Autorización posterior del usuario: pruebas locales y Android por ADB Wi-Fi;
+ante el servicio activo eligió observar, pausar normalmente y medir reanudación,
+sin instalar todavía otra candidata. Dispositivo `22041216G` (`xaga`, API34),
+paquete `com.wowforever.arm64probe`, C146 / `0.2.122-performance-preview`.
+
+- A las 17:26–17:27 UTC, el servicio de descarga estaba en primer plano y la UI
+  mostraba «Descargando 8.0 GiB de 71.4 GiB», «0.3 MB/s» y «Pausar». Son cifras
+  redondeadas instantáneas; no una medida de throughput ni una prueba de preparación.
+- Se intentó una sola pulsación normal de «Pausar» mediante ADB. Android la rechazó
+  con `SecurityException`: falta `INJECT_EVENTS`. La UI posterior seguía descargando;
+  no se envió una alternativa de pausa por servicio, ni se cambió seguridad,
+  instaló, mató o reinició nada. La pausa/reanudación queda pendiente de interacción
+  manual del usuario o de su decisión sobre los permisos de entrada del dispositivo.
+- Esta sesión instalada no contiene los cambios nuevos. No se atribuyen a ellos
+  sus cifras ni se presenta esta observación como A/B. No hay todavía tiempos a
+  consentimiento/primer byte ni medición de la candidata en Android.
 
 ## Auditoría del objetivo (cierre pendiente)
 
 | Entregable | Evidencia | Pendiente |
 |---|---|---|
 | Menor preparación al iniciar/reanudar | Menos rehashes y tiempos host del inspector sin fuente; `c1bc7a1`, cuatro focales PASS | Recorrido completo y primer byte Android, sin confundir pausa viva y proceso muerto |
-| Primera pulsación efectiva, sin repetir | Guard síncrono y pending handoff revisados en `ForeverClientManagement.kt`; conserva flujo habitual 3/1 acciones | Veredicto de suite final y prueba real de interacción; cambios UI aún sin commit |
-| Garantías intactas | Review independiente de capacidad/cotas; qualify, replan, consentimiento, crypto, Wi-Fi y durabilidad no eliminados | Suite integrada completa no acreditada |
-| Entrega versionada y honesta | Optimización y notas en commits separados; sin APK ni operación física | Versionar UI después de verificación; no cerrar objetivo/plan por el ahorro de un subcomponente |
+| Primera pulsación efectiva, sin repetir | Guard síncrono y pending handoff revisados; conserva flujo habitual 3/1 acciones; diez tests del servicio PASS; `633329e` | Prueba real de interacción, sin equipararla a tests del protocolo |
+| Garantías intactas | Review independiente de capacidad/cotas; qualify, replan, consentimiento, crypto, Wi-Fi y durabilidad no eliminados; compilación Modern y focales de capacidad/costes aprobados | No se ejecutó toda la suite; verificación física de la candidata pendiente |
+| Entrega versionada y honesta | Optimización, UI y notas en commits separados; sin APK ni operación física | No cerrar objetivo/plan por el ahorro de un subcomponente |
