@@ -699,6 +699,12 @@ class ForeverClientUpdateService private constructor(
             verifiedOwnedFiles = ownership.toMap(),
             storageMarkerIdentity = target.identity.id,
             sourceOrigin = sourceOrigin,
+            revalidateCascSegment = if (target.hasDirectedProof() && target.rootIdentity != null && target.baseIdentity != null) {
+                { storage.revalidateForUpdate(target) }
+            } else null,
+            revalidateCascCommitGroup = if (target.hasDirectedProof() && target.rootIdentity != null && target.baseIdentity != null) {
+                { storage.revalidateForUpdateLight(target) }
+            } else null,
         )
     }
 

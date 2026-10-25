@@ -204,6 +204,9 @@ data class ForeverClientUpdateDestination(
     val storageMarkerIdentity: String? = null,
     /** Whether an unowned CASC tree is an explicitly admitted pasted source. */
     val sourceOrigin: ForeverClientSourceOrigin = ForeverClientSourceOrigin.APPROVED_CLIENT,
+    /** Optional internal cadence hooks; absent callers retain full validation. */
+    internal val revalidateCascSegment: (() -> Unit)? = null,
+    internal val revalidateCascCommitGroup: (() -> Unit)? = null,
 )
 
 enum class ForeverClientSourceOrigin { APPROVED_CLIENT, PASTED_SOURCE }
@@ -1627,6 +1630,8 @@ class ForeverClientUpdater(
         overlapIdentity: String,
         archiveOrder: ForeverClientArchiveOrder,
     ): ForeverCasc.IncrementalResult {
+        val reducedStorageCadenceEligible =
+            destination.revalidateCascSegment != null && destination.revalidateCascCommitGroup != null
         val transferred = AtomicLong(0L)
         val lastReported = AtomicLong(0L)
         val progressLock = Any()
@@ -2140,7 +2145,6 @@ class ForeverClientUpdater(
                     }
                 }
             }
-            var sourceRevalidateNanos = 0L
             var verifiedSourceWaitNanos = 0L
             var resolvedSources = 0L
             val sourceDiagnostics = Logger.getLogger("ForeverClientUpdate")
@@ -2193,16 +2197,11 @@ class ForeverClientUpdater(
                     specs,
                     { spec ->
                         checkCancelled(cancelled)
-                        // Per-object, before any destination access or write: the
-                        // storage identity is re-checked for every object, never
-                        // throttled to an interval and never deferred to commit.
-                        val revalidateStarted = System.nanoTime()
                         val entry = pending[spec.ekey]
                             ?: throw IllegalStateException("CASC writer requested an object outside the fetch pipeline")
                         val beforeStorage = fetchPipelineDiagnostics.sourceRequested(entry.diagnosticState, afterRevalidate = false)
                         sourceReadinessForTests?.invoke(false, beforeStorage.first, beforeStorage.second)
-                        destination.revalidate()
-                        sourceRevalidateNanos += System.nanoTime() - revalidateStarted
+                        if (!reducedStorageCadenceEligible) destination.revalidate()
                         pending.remove(spec.ekey)
                         beforePostRevalidateSampleForTests?.invoke()
                         val afterStorage = fetchPipelineDiagnostics.sourceRequested(entry.diagnosticState, afterRevalidate = true)
@@ -2248,7 +2247,6 @@ class ForeverClientUpdater(
                         if ((resolvedSources and 0xffL) == 0L) {
                             sourceDiagnostics.info(
                                 "CASC source timing resolved=$resolvedSources " +
-                                    "revalidateMs=${sourceRevalidateNanos / 1_000_000} " +
                                     "verifiedWaitMs=${verifiedSourceWaitNanos / 1_000_000}",
                             )
                         }
@@ -2306,6 +2304,8 @@ class ForeverClientUpdater(
                         }
                     },
                     replayReaderFactory = replayReaderFactory,
+                    beforeSegmentOpen = if (reducedStorageCadenceEligible) requireNotNull(destination.revalidateCascSegment) else ({ }),
+                    beforeDurableGroup = if (reducedStorageCadenceEligible) requireNotNull(destination.revalidateCascCommitGroup) else ({ }),
                     overlapCoordinator = overlap,
                     commitFlushRequest = budget.commitFlushRequest,
                     targetObjectCount = archiveOrder.objectCount.toInt(),

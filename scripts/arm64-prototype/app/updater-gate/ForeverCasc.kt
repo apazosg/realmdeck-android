@@ -646,6 +646,8 @@ object ForeverCasc {
         commitFlushRequest: AtomicReference<(() -> Boolean)?>? = null,
         targetObjectCount: Int = 0,
         targetMembership: ((String) -> IndexedValue<IncrementalObjectSpec>)? = null,
+        beforeSegmentOpen: () -> Unit = {},
+        beforeDurableGroup: () -> Unit = {},
     ): IncrementalResult = writeIncrementalInternal(
         sourceDataFiles,
         outputDataFiles,
@@ -662,6 +664,8 @@ object ForeverCasc {
         commitFlushRequest = commitFlushRequest,
         targetObjectCount = targetObjectCount,
         targetMembership = targetMembership,
+        beforeSegmentOpen = beforeSegmentOpen,
+        beforeDurableGroup = beforeDurableGroup,
     )
 
     /**
@@ -1283,6 +1287,8 @@ object ForeverCasc {
         commitFlushRequest: AtomicReference<(() -> Boolean)?>? = null,
         targetObjectCount: Int = 0,
         targetMembership: ((String) -> IndexedValue<IncrementalObjectSpec>)? = null,
+        beforeSegmentOpen: () -> Unit = {},
+        beforeDurableGroup: () -> Unit = {},
     ): IncrementalResult {
         val writerStarted = System.nanoTime()
         var firstSourceRequested = false
@@ -1429,6 +1435,7 @@ object ForeverCasc {
                     }
                     val segment = archive
                         ?: throw IllegalStateException("resumable CASC commit group has no open segment")
+                    beforeDurableGroup()
                     val dataForceStarted = System.nanoTime()
                     segment.flush()
                     forceFile(File(outputDataFiles, "data.%03d".format(batchArchiveId)))
@@ -1570,6 +1577,7 @@ object ForeverCasc {
                         nextArchiveId = freeze.prefixMaxId + 1
                     } else if (loaded.lastArchiveId >= 0) {
                         val path = File(outputDataFiles, "data.%03d".format(loaded.lastArchiveId))
+                        beforeSegmentOpen()
                         archive = openAppendArchive(path)
                     }
                 }
@@ -1796,6 +1804,7 @@ object ForeverCasc {
                                 archive?.close()
                                 archive = null
                                 val openedFile = File(outputDataFiles, "data.%03d".format(plannedId))
+                                beforeSegmentOpen()
                                 if (openedFile.exists() || Files.isSymbolicLink(openedFile.toPath())) {
                                     throw IllegalStateException("incremental CASC output segment already exists")
                                 }

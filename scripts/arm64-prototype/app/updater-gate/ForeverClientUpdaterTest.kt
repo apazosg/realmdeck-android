@@ -197,6 +197,44 @@ class ForeverClientUpdaterTest {
         }
     }
 
+    @Test(timeout = 60_000)
+    fun parallelStorageCadenceUsesBoundaryHooksOnlyWithBothCapabilities() {
+        val configAssets = configAssetsOrSkip()
+        Fixture(cascObjectCount = 4, contiguousRangeObjectCount = 3).use { fixture ->
+            fun run(label: String, capabilities: Int): Pair<Long, Int> {
+                val paths = fixture.makePaths(label)
+                val fullChecks = AtomicLong()
+                val segmentChecks = AtomicInteger()
+                val groupChecks = AtomicInteger()
+                val updater = fixture.updater(paths, configAssets) { record, work, _, progress ->
+                    val output = File(work, "${record.ekey}.blte").apply { writeBytes(fixture.rawFor(record)) }
+                    progress(output.length())
+                    output
+                }
+                val destination = fixture.destination(paths).copy(
+                    revalidate = { fullChecks.incrementAndGet(); check(paths.client.isDirectory) },
+                    revalidateCascSegment = if (capabilities >= 1) ({ segmentChecks.incrementAndGet() }) else null,
+                    revalidateCascCommitGroup = if (capabilities == 2) ({ groupChecks.incrementAndGet() }) else null,
+                )
+                val plan = updater.plan(destination)
+                updater.execute(destination, plan, consentFor(plan))
+                if (capabilities == 2) {
+                    assertTrue("eligible write validates before opening CASC segments", segmentChecks.get() > 0)
+                    assertTrue("eligible write validates before durable groups", groupChecks.get() > 0)
+                }
+                if (capabilities == 1) assertEquals("one capability does not activate reduced cadence", 0, segmentChecks.get())
+                return fullChecks.get() to plan.missingObjects.toInt()
+            }
+
+            val fallback = run("fallback", capabilities = 0)
+            val partial = run("partial", capabilities = 1)
+            val reduced = run("reduced", capabilities = 2)
+            assertEquals("one hook alone retains full per-object validation", fallback.first, partial.first)
+            assertEquals("fallback retains per-object full validation", fallback.second.toLong(),
+                fallback.first - reduced.first)
+        }
+    }
+
     @Test(timeout = 30_000)
     fun physicalBatchPressureSchedulesReservedPrefixBeforeWaitingForRemainingMembers() {
         val configAssets = configAssetsOrSkip()

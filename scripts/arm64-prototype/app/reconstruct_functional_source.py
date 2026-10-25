@@ -68,6 +68,10 @@ REVIEWED_CANDIDATE_PROVISIONER_SHA256 = "98c25790d3d126ec9bbf2ead1eb2ba976abece9
 REVIEWED_STORAGE_RECIPE_SHA256 = "df97574d8c5dce73ea53b535cf52e1bd28d556bcb2bcef0eef92f5704a5060df"
 REVIEWED_STORAGE_PROVENANCE_SHA256 = "867d8d4a51b86865d6232d14c7b746f8117bdb7022addbd86eb840eb9e2b1efa"
 REVIEWED_STORAGE_SOURCE_SHA256 = "9497a0aa068f93c3be0d2a64e5ef2b4eab3fbf22510d1510e6ae9df63c622443"
+# Approved heavy/light cadence; all preceding recipe/provenance pairs stay frozen.
+REVIEWED_LIGHT_STORAGE_RECIPE_SHA256 = "79cd0e885609de7e2e5b86e925119e2cd8001e8916b39f2e7334aa01570ce2c2"
+REVIEWED_LIGHT_STORAGE_PROVENANCE_SHA256 = "13a494f47301abfc241b4a4d7cdcfc524dee292d5f743ebf5c3612d6a3963fc5"
+REVIEWED_LIGHT_STORAGE_SOURCE_SHA256 = "23aabcabc3eda09705ed19c433ce565f64baffddf9188f4caa3ba28b391f8189"
 INTERRUPTED_DISPOSITION_MEMBER = "assets/forever/wine-interrupted-run-disposition-contract.json"
 CODE_PROVENANCE_MEMBER = "assets/forever/provenance.json"
 NEW_CONTROLLER_SOURCE = APP_ROOT / "overlay/ForeverLaunchController.kt"
@@ -108,8 +112,8 @@ PINNED_UPDATER_CASC_PREIMAGES = {
 }
 # Native V7 reserve, durable commit groups and exact recovery membership; frames unchanged.
 PINNED_UPDATER_CASC_POSTIMAGES = {
-    "ForeverCasc.kt": "70c3f28dddacee951e4738897a6ac977b281a4bec1d444953061bb49f32fc74b",
-    "ForeverCascTest.kt": "7a0150bf275a3d1af8ee40c604deb1602892aca671f95343a466a16c9a26b871",
+    "ForeverCasc.kt": "09bfe5b8515ecf091e8a3f7ebc7a91dbe23ce7e81905206b0566e5ffb719098d",
+    "ForeverCascTest.kt": "c2a54b7bf4507a2b6def49006dde32359f46feb27eec34614c9a057482cc7bc3",
 }
 # Reviewed reconstruction edit (2026-10-18): TACT-encrypted ('E') BLTE frames are
 # verified without decryption for CASC reconstruction consumers; strict decode is
@@ -127,7 +131,7 @@ BRIDGE_TARGET = Path("app/src/main/java/com/wowforever/launcher/ForeverPatchBrid
 CODE64_NATIVE_MEMBER = "lib/arm64-v8a/libforever_patcher_jni.so"
 FUNCTIONAL_MARKER_MEMBER = "assets/forever/functional-poc/provenance.json"
 SOURCE_VERSION = (62, "0.2.38-automated")
-CANDIDATE_VERSION = (141, "0.2.117-eligible-scan")
+CANDIDATE_VERSION = (143, "0.2.119-light-storage")
 FUNCTIONAL_OVERLAY_NAMES = (
     "ForeverFunctionalPoc.kt",
     "ForeverFunctionalPocActivity.kt",
@@ -333,6 +337,7 @@ def privacy_provenance_pin_for_recipe(recipe_sha256: str) -> str:
         C138_RECIPE_SHA256: C138_PROVENANCE_SHA256,
         REVIEWED_CANDIDATE_RECIPE_SHA256: REVIEWED_CANDIDATE_PROVENANCE_SHA256,
         REVIEWED_STORAGE_RECIPE_SHA256: REVIEWED_STORAGE_PROVENANCE_SHA256,
+        REVIEWED_LIGHT_STORAGE_RECIPE_SHA256: REVIEWED_LIGHT_STORAGE_PROVENANCE_SHA256,
     }
     if recipe_sha256 not in pairs:
         raise ReconstructionError("recipe SHA-256 has no frozen privacy provenance pair")

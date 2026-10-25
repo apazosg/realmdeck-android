@@ -1451,6 +1451,69 @@ class ForeverCascTest {
     }
 
     @Test
+    fun failedDurableGroupHookRetainsRawAndAllowsIdentityBoundResume() {
+        val root = tempDir()
+        try {
+            val decoded = "group-hook-object".toByteArray()
+            val rawBytes = blteRaw(decoded)
+            val raw = file(root, "private/raw.blte", rawBytes)
+            val spec = ForeverCasc.IncrementalObjectSpec(
+                encodedEkey(rawBytes), md5Hex(decoded), rawBytes.size.toLong(), decoded.size.toLong(),
+            )
+            val output = File(root, "client/Data/data")
+            assertTrue(output.parentFile!!.mkdirs())
+            val checkpoint = File(root, "private/checkpoint").apply { assertTrue(mkdirs()) }
+            var segmentHooks = 0
+            var groupHooks = 0
+            var consumed = false
+            val failure = org.junit.Assert.assertThrows(IllegalStateException::class.java) {
+                ForeverCasc.writeTargetIncrementalResumable(
+                    null, output, checkpoint, sequenceOf(spec), { raw }, { false }, "same-plan",
+                    sourceConsumed = { _, _ -> consumed = true },
+                    beforeSegmentOpen = { segmentHooks++ },
+                    beforeDurableGroup = { groupHooks++; throw IllegalStateException("identity changed") },
+                )
+            }
+            assertEquals("identity changed", failure.message)
+            assertEquals(1, segmentHooks)
+            assertEquals("the single-object partial flush is checked", 1, groupHooks)
+            assertFalse(consumed)
+            assertTrue(raw.isFile)
+            val beforeResume = ForeverCasc.inspectResumableCheckpoint(
+                output, checkpoint, sequenceOf(spec), { false }, "same-plan",
+            )
+            assertEquals(0L, beforeResume.completedObjectCount)
+
+            org.junit.Assert.assertThrows(IllegalStateException::class.java) {
+                ForeverCasc.writeTargetIncrementalResumable(
+                    null, output, checkpoint, sequenceOf(spec), { raw }, { false }, "same-plan",
+                    beforeSegmentOpen = { throw IllegalStateException("resume admission changed") },
+                )
+            }
+            assertTrue("failed resumed segment admission retains the raw", raw.isFile)
+
+            var resumedSegmentHooks = 0
+            var resumedGroupHooks = 0
+            val resumed = ForeverCasc.writeTargetIncrementalResumable(
+                null, output, checkpoint, sequenceOf(spec), { raw }, { false }, "same-plan",
+                sourceConsumed = { _, consumedRaw -> assertTrue(consumedRaw.delete()) },
+                beforeSegmentOpen = { resumedSegmentHooks++ },
+                beforeDurableGroup = { resumedGroupHooks++ },
+            )
+            assertEquals(1, resumedSegmentHooks)
+            assertEquals(1, resumedGroupHooks)
+            assertEquals(1L, resumed.writtenObjects)
+            assertFalse(raw.exists())
+            val afterResume = ForeverCasc.inspectResumableCheckpoint(
+                output, checkpoint, sequenceOf(spec), { false }, "same-plan",
+            )
+            assertEquals(1L, afterResume.completedObjectCount)
+        } finally {
+            delete(root)
+        }
+    }
+
+    @Test
     fun targetInspectionTreatsCorruptPhysicalHintAsDownloadMiss() {
         val root = tempDir()
         try {

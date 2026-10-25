@@ -54,6 +54,7 @@ object ForeverFunctionalClientStorage {
     private const val MAX_CLIENT_TREE_ENTRIES = 100_000
     private val processRevision = AtomicLong(0)
     private val revalidationDiagnostics = RevalidationDiagnostics()
+    private val lightRevalidationDiagnostics = LightRevalidationDiagnostics()
 
     internal data class RevalidationDiagnosticSnapshot(
         val calls: Long, val directed: Long, val fallback: Long,
@@ -102,6 +103,32 @@ object ForeverFunctionalClientStorage {
         )
     }
 
+    internal data class LightRevalidationDiagnosticSnapshot(
+        val calls: Long,
+        val failures: Long,
+        val totalNanos: Long,
+    )
+
+    private class LightRevalidationDiagnostics {
+        private val calls = AtomicLong()
+        private val failures = AtomicLong()
+        private val totalNanos = AtomicLong()
+
+        fun record(elapsedNanos: Long, failure: Throwable?) {
+            val callCount = calls.incrementAndGet()
+            if (failure != null && failure !is CancellationException) failures.incrementAndGet()
+            totalNanos.addAndGet(elapsedNanos.coerceAtLeast(0L))
+            if (callCount % 256L == 0L) runCatching {
+                revalidationLogger.info(
+                    "storage light revalidation scope=process calls=$callCount failures=${failures.get()} " +
+                        "totalMs=${totalNanos.get() / 1_000_000}",
+                )
+            }
+        }
+
+        fun snapshot() = LightRevalidationDiagnosticSnapshot(calls.get(), failures.get(), totalNanos.get())
+    }
+
     private class DirectedRevalidationTiming {
         var total = 0L
         var selectionRegistry = 0L
@@ -118,6 +145,7 @@ object ForeverFunctionalClientStorage {
     private val revalidationLogger = Logger.getLogger("ForeverClientUpdate")
 
     internal fun revalidationDiagnosticSnapshot(): RevalidationDiagnosticSnapshot = revalidationDiagnostics.snapshot()
+    internal fun lightRevalidationDiagnosticSnapshot(): LightRevalidationDiagnosticSnapshot = lightRevalidationDiagnostics.snapshot()
 
     internal fun formatAvailableBytes(value: Long): String {
         if (value <= 0) return "No disponible"
@@ -815,6 +843,57 @@ object ForeverFunctionalClientStorage {
             }
         }
 
+        /** Cheap group-boundary proof for directed sourceless updates only. */
+        internal fun revalidateForUpdateLight(target: UpdateTarget) {
+            val started = System.nanoTime()
+            var failure: Throwable? = null
+            try {
+                revalidateForUpdateLightInternal(target)
+            } catch (caught: Throwable) {
+                failure = caught
+                throw caught
+            } finally {
+                lightRevalidationDiagnostics.record(System.nanoTime() - started, failure)
+            }
+        }
+
+        private fun revalidateForUpdateLightInternal(target: UpdateTarget) {
+            if (!target.hasDirectedProof()) throw StorageException("storage_identity_unproven")
+            val expectedRoot = target.rootIdentity ?: throw StorageException("storage_identity_unproven")
+            val expectedBase = target.baseIdentity ?: throw StorageException("storage_identity_unproven")
+            val persisted = persistedSelection() ?: throw StorageException("storage_selection_changed")
+            require(persisted.first == target.identity.id && target.revision == processRevision.get()) {
+                throw StorageException("storage_selection_changed")
+            }
+            val registry = registryEntries().firstOrNull { it.id == target.identity.id }
+                ?: throw StorageException("storage_selection_changed")
+            require(registry.kind == target.identity.kind) { throw StorageException("storage_selection_changed") }
+
+            fun freshDirectoryIdentity(file: File, expected: FileIdentity, code: String): FileIdentity {
+                val attributes = try {
+                    Files.readAttributes(
+                        file.toPath(),
+                        java.nio.file.attribute.BasicFileAttributes::class.java,
+                        LinkOption.NOFOLLOW_LINKS,
+                    )
+                } catch (_: java.nio.file.NoSuchFileException) {
+                    throw StorageException(code)
+                } catch (_: java.io.IOException) {
+                    throw StorageException(code)
+                } catch (_: SecurityException) {
+                    throw StorageException(code)
+                }
+                require(attributes.isDirectory && !attributes.isSymbolicLink) { throw StorageException(code) }
+                val actual = FileIdentity(attributes.fileKey()?.toString()
+                    ?: throw StorageException("storage_identity_unproven"))
+                require(actual == expected) { throw StorageException(code) }
+                return actual
+            }
+
+            freshDirectoryIdentity(target.root, expectedRoot, "storage_root_replaced")
+            freshDirectoryIdentity(requireNotNull(target.admittedAppFilesDirectory), expectedBase, "storage_base_replaced")
+        }
+
         /**
          * Directed revalidation for a USB admission bound to fresh public metadata.
          * Exactly one fresh metadata query per object, zero full snapshots. Any
@@ -1298,7 +1377,19 @@ object ForeverFunctionalClientStorage {
             val base = if (primary) candidate.externalFilesDir.absoluteFile.parentFile else candidate.externalFilesDir.absoluteFile
             val kind = when { primary -> Kind.PRIMARY; candidate.isRemovable -> Kind.REMOVABLE; else -> Kind.OTHER }
             val mount = candidate.mountIdentity ?: mountIdentityFor(candidate.externalFilesDir)
-            val rootShapeValid = !Files.exists(root.toPath(), LinkOption.NOFOLLOW_LINKS) || isDirectory(root)
+            val rootShapeValid = try {
+                Files.readAttributes(
+                    root.toPath(),
+                    java.nio.file.attribute.BasicFileAttributes::class.java,
+                    LinkOption.NOFOLLOW_LINKS,
+                ).isDirectory
+            } catch (_: java.nio.file.NoSuchFileException) {
+                true
+            } catch (_: java.io.IOException) {
+                false
+            } catch (_: SecurityException) {
+                false
+            }
             val nativeRoot = candidate.nativeVolumeRoot
             val nativeNamespaceValid = nativeRoot != null &&
                 candidate.externalFilesDir.absoluteFile.toPath().normalize() ==

@@ -71,7 +71,7 @@ def test_reviewed_overlay_source_deltas_are_exact_and_fail_closed(monkeypatch: p
         "ForeverLaunchController.kt": "8e89d2b0a79af9c6d6470cbf7897fdcb3941437febac96cd819a48258fdd1dac",
         "ForeverProcessDiagnostics.kt": "8011dfbc1b88751fd655745a76ed888a2d2c8aa80a087d243def776196a9299e",
         "ForeverRunStore.kt": "b6b699cbe5cdca69d08409424bae2b66433a34890ea4af1f386b300a99e9d744",
-        "ForeverFunctionalClientStorage.kt": "9497a0aa068f93c3be0d2a64e5ef2b4eab3fbf22510d1510e6ae9df63c622443",
+        "ForeverFunctionalClientStorage.kt": "23aabcabc3eda09705ed19c433ce565f64baffddf9188f4caa3ba28b391f8189",
     }
     baseline = wine.load_code59_source_baseline()
     assert wine.APPROVED_REVIEWED_OVERLAY_DELTAS == expected

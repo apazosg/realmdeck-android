@@ -159,6 +159,18 @@ class ForeverFunctionalClientStorageTest {
     }
 
     @Test
+    fun symlinkAtClientRootIsUnavailable() {
+        val base = Files.createTempDirectory("forever-storage-root-link").toFile()
+        val external = File(base, "files").apply { mkdirs() }
+        val outside = File(base, "outside").apply { mkdirs() }
+        val legacy = File(base, "CustomGames/WoW Forever").apply { parentFile!!.mkdirs() }
+        Files.createSymbolicLink(legacy.toPath(), outside.toPath())
+
+        val option = requireNotNull(service(external, legacy).snapshot().selected)
+        assertFalse(option.available)
+    }
+
+    @Test
     fun selectionLeaseExcludesIoAndStartedGuestCannotBeRolledBack() {
         val guard = ForeverFunctionalClientStorage.ProcessGuard
         val selection = requireNotNull(guard.acquireSelection())
@@ -2067,6 +2079,57 @@ class ForeverFunctionalClientStorageTest {
         assertEquals(queriesAtAdmit + 3, native.queries)
         assertEquals(tree, treeEntries(target.root))
         assertNoProbes(base)
+    }
+
+    @Test
+    @Config(sdk = [34])
+    fun directedLightRevalidationChecksDirectoryIdentityButDefersMarkerValidation() {
+        val base = Files.createTempDirectory("forever-directed-light").toFile()
+        val primaryBase = File(base, "primary/files").apply { mkdirs() }
+        val usbVol = File(base, "usbvol").apply { mkdirs() }
+        val legacy = File(base, "primary/CustomGames/WoW Forever")
+        legacy.parentFile?.mkdirs()
+        val uuid = "usb-light"
+        val mount = "mount:light"
+        val root = File(usbVol, "Android/data/${context.packageName}/files/CustomGames/WoW Forever").apply { mkdirs() }
+        val full = CountingVolumes(listOf(primaryCandidate(primaryBase), nativeUsbCandidate(usbVol, uuid, mount)))
+        val native = CountingNative(validDirectedNative(usbVol, uuid, mount))
+        val storage = directedStorage(full, native, legacy)
+        val identity = storage.snapshot().options.single { it.identity.kind == ForeverFunctionalClientStorage.Kind.REMOVABLE }.identity
+        storage.select(identity)
+        val firstTarget = storage.resolveForUpdate()
+        val diagnosticsBefore = ForeverFunctionalClientStorage.lightRevalidationDiagnosticSnapshot()
+        val primaryIdentity = storage.snapshot().options.single { it.identity.kind == ForeverFunctionalClientStorage.Kind.PRIMARY }.identity
+        storage.select(primaryIdentity)
+        assertStorageFailure("storage_selection_changed") { storage.revalidateForUpdateLight(firstTarget) }
+        storage.select(identity)
+        val target = storage.resolveForUpdate()
+
+        val marker = File(root, ".forever-client-storage")
+        marker.writeText("invalid marker")
+        storage.revalidateForUpdateLight(target)
+        assertStorageFailure("storage_marker_invalid") { storage.revalidateForUpdate(target) }
+
+        marker.delete()
+        val appFiles = requireNotNull(target.admittedAppFilesDirectory)
+        val heldRoot = File(usbVol, "held-client-root")
+        assertTrue(root.renameTo(heldRoot))
+        val oldBase = File(usbVol, "old-app-files")
+        assertTrue(appFiles.renameTo(oldBase))
+        assertTrue(appFiles.mkdirs())
+        val relocatedRoot = File(appFiles, appFiles.toPath().relativize(root.toPath()).toString())
+        assertTrue(relocatedRoot.parentFile!!.mkdirs())
+        assertTrue(heldRoot.renameTo(relocatedRoot))
+        assertStorageFailure("storage_base_replaced") { storage.revalidateForUpdateLight(target) }
+
+        val backup = File(root.parentFile, "root-old")
+        assertTrue(root.renameTo(backup))
+        assertTrue(root.mkdir())
+        assertStorageFailure("storage_root_replaced") { storage.revalidateForUpdateLight(target) }
+        val diagnosticsAfter = ForeverFunctionalClientStorage.lightRevalidationDiagnosticSnapshot()
+        assertEquals(diagnosticsBefore.calls + 4, diagnosticsAfter.calls)
+        assertEquals(diagnosticsBefore.failures + 3, diagnosticsAfter.failures)
+        assertTrue(diagnosticsAfter.totalNanos > diagnosticsBefore.totalNanos)
     }
 
     @Test
