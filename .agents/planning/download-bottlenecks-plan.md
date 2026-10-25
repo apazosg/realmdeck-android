@@ -81,6 +81,20 @@ producer/HTTP concurrent sums cannot be added to the wall-clock partition.
 Preparation remains a separate unresolved latency problem. See the measurement
 notes for denominators and accepted coverage changes.
 
+#### Approved next measurement: split the writer's combined append clock
+
+The user requested investigation of this measured 41% on 2026-10-25. Add only
+bounded, writer-owned aggregate timings for segment transition/open/header work,
+object header and temporary-to-segment copy, index insertion, buffered group flush,
+and segment force. Retain the existing outer clock for comparison and document
+nested work and rounding; buffering means copy/write duration is not pure device
+bandwidth. Do not change copy strategy, buffer sizes, table behavior, force cadence,
+storage checks, checkpoint ordering, quotas or write order in this diagnostic step.
+Use a focused existing writer regression to check counters and preserved failure
+behavior, independently review the integrity-sensitive diff, then reconstruct and
+audit a monotonically newer candidate before an authorized ten-minute phone trial.
+Choose an optimization only after distinguishing these costs.
+
 ### Requested review of validation frequency
 
 The user asks to evaluate whether checks are excessive and whether their number
