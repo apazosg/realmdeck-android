@@ -1,6 +1,6 @@
 ---
 id: public-performance-release-2026-10-25
-state: draft
+state: in-progress
 date: 2026-10-25
 ---
 
@@ -9,7 +9,9 @@ date: 2026-10-25
 The user requested public integration and a new public version while the C145
 download trial runs. Prepare a reviewed experimental prerelease from the public
 performance branch, not a merge of unrelated internal history. Publication and
-remote branch changes wait for approval of this plan and the release gates below.
+remote branch changes remain subject to the release gates below. The user approved
+this plan, including public integration, push and prerelease publication, on
+2026-10-25. Internal history and private operational material remain excluded.
 
 ## Content
 
@@ -49,13 +51,16 @@ remote branch changes wait for approval of this plan and the release gates below
 
 ## Implementation / Action Items
 
-- [ ] Approve scope, prerelease channel and proposed C146 identity.
+- [x] Approve scope, prerelease channel and proposed C146 identity.
 - [ ] Complete and document the active C145 trial and normal final Pause.
-- [ ] Verify current remote refs, public diff and authenticated publishing access.
-  The GitHub CLI was not found on the current PATH; do not expose credentials or
-  change security settings to bypass missing access.
-- [ ] Restore only the functional-entry permission fix; add focused regression
+- [x] Verify current remote refs and authenticated access: public `main` remains
+  at `457056e`; authenticated read-only checks confirm the repository account has
+  push access. No remote mutation has been attempted and no credential is logged.
+- [x] Restore only the functional-entry permission fix; add focused regression
   protection and independent security review without opening diagnostic entries.
+  Commit `26a61d2` restores the known launcher entry; focused manifest/auditor tests
+  pass, including inherited application-permission rejection. Actual APK auditing
+  and ordinary launcher-icon access remain separate pending gates below.
 - [ ] Prepare English release notes and current-status documentation, with known
   baseline test failures and measured-device limitations stated honestly.
 - [ ] Build/audit C146 and verify normal launcher-icon access, upgrade without
@@ -67,8 +72,15 @@ remote branch changes wait for approval of this plan and the release gates below
 
 ## Open Issues
 
-- This plan awaits user approval before implementation, push, merge or release.
+- Scope, C146 identity and gated public publication are approved; passing the
+  remaining gates is still required before publication.
 - C145's completed measurement is still pending. It is not yet public-release
   acceptance, and final C146 binary checks cannot be inherited from C145.
-- Publishing credentials/permissions and remote branch protections remain to be
-  checked read-only. No authenticated publication has been attempted.
+- Authenticated read-only checks succeeded; public `main` is not protected.
+  Final diff/asset review and all remaining release gates still precede any push.
+- On 2026-10-25 the user explicitly reconfirmed permission to redistribute the
+  bundled proprietary components identified in the inherited notices. Record this
+  as the owner's confirmation, not an independent legal audit. No further rights
+  clarification is pending from the user. Preserve component notices and prepare
+  the applicable application source/build materials; do not mislabel a partial
+  runtime-source collection as complete Corresponding Source.
