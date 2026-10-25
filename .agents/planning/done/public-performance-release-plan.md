@@ -1,6 +1,6 @@
 ---
 id: public-performance-release-2026-10-25
-state: in-progress
+state: done
 date: 2026-10-25
 ---
 
@@ -58,12 +58,13 @@ this plan, including public integration, push and prerelease publication, on
   publishing C146 experimentally with these limitations, not as a demonstrated win.
 - [x] Verify current remote refs and authenticated access: public `main` remains
   at `457056e`; authenticated read-only checks confirm the repository account has
-  push access. No remote mutation has been attempted and no credential is logged.
+   push access. Credentials were not logged; subsequent authorized mutations are
+   recorded in the verification section below.
 - [x] Restore only the functional-entry permission fix; add focused regression
   protection and independent security review without opening diagnostic entries.
   Commit `26a61d2` restores the known launcher entry; focused manifest/auditor tests
   pass, including inherited application-permission rejection. Actual APK auditing
-  and ordinary launcher-icon access remain separate pending gates below.
+   and ordinary launcher-icon access were subsequently verified separately.
 - [x] Prepare English release notes and current-status documentation, with known
   baseline test failures and measured-device limitations stated honestly.
 - [x] Build/audit C146 and verify normal launcher-icon access, upgrade without
@@ -73,25 +74,44 @@ this plan, including public integration, push and prerelease publication, on
   actual archive entries and all five asset checksums were checked locally. The
   archive explicitly excludes signing material and private captures, and states
   its partial runtime-source/build-input coverage.
-- [ ] Push the reviewed public branch, integrate via the permitted public-main
+- [x] Push the reviewed public branch, integrate via the permitted public-main
   workflow and tag the exact approved source commit; never import private history.
-- [ ] Publish the prerelease and verify its public metadata and asset hashes.
+- [x] Publish the prerelease and verify its public metadata and asset hashes.
 
 ## Open Issues
 
-- Scope, C146 identity and gated public publication are approved; passing the
-  remaining gates is still required before publication.
+- C146 publication is complete. This closes the release operation, not the
+  continuing performance investigation or general device acceptance.
 - C145 completed normally but measured 0.401 MB/s on a different object cohort.
   Do not publish the group16 policy as a demonstrated end-to-end improvement.
   The user's subsequent instruction to proceed resolves this as an experimental
   publication with explicit non-improvement caveats. C146's own audit and upgrade
   fingerprint checks pass; a MAIN/LAUNCHER start from the ordinary launcher UID
-  was recorded after installation. Asset review and publication verification remain.
+   was recorded after installation. Asset review and publication verification passed.
 - Authenticated read-only checks succeeded; public `main` is not protected.
-  Final diff/asset review and all remaining release gates still precede any push.
+   Final diff/asset review preceded the authorized push and integration.
 - On 2026-10-25 the user explicitly reconfirmed permission to redistribute the
   bundled proprietary components identified in the inherited notices. Record this
   as the owner's confirmation, not an independent legal audit. No further rights
   clarification is pending from the user. Preserve component notices and prepare
   the applicable application source/build materials; do not mislabel a partial
-  runtime-source collection as complete Corresponding Source.
+   runtime-source collection as complete Corresponding Source.
+
+## Publication verification — 2026-10-25
+
+- [PR #1](https://github.com/apazosg/realmdeck-android/pull/1) merged the reviewed
+  public branch without importing internal history. Merge commit:
+  `66092f5bc354ada23bc269bd3cc5da7010379411`.
+- The merge parents match the expected public base and reviewed branch head;
+  its tree matches the reviewed head exactly. Tag `c146-0.2.122-test` points to
+  this merge. The APK's build-source commit remains `26a61d2`, with subsequent
+  release-documentation changes only; no rebuild claim is implied.
+- [C146 release](https://github.com/apazosg/realmdeck-android/releases/tag/c146-0.2.122-test)
+  is publicly accessible with `prerelease=true` and `draft=false`.
+- All six assets are uploaded: APK, application-source archive, README, component
+  notices, build summary and SHA256SUMS. Each server SHA-256 digest matches the
+  checked local asset; unauthenticated API verification independently confirmed
+  metadata, tag target, merged PR and all six digests.
+- C142 attachments were not replaced. No force push or internal-history merge
+  was performed. Performance limitations and partial runtime-source coverage
+  remain explicit in the published notes and assets.
