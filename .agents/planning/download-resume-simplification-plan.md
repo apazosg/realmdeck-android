@@ -1,10 +1,25 @@
 ---
 id: download-resume-simplification-2026-10-25
-state: in-progress
+state: draft
 date: 2026-10-25
 ---
 
 ## Summary
+
+**Límite vigente de esta sesión — observación pasiva:** el usuario reanuda el
+goal únicamente para pasos 3/4 con evidencia existente y logs accesibles en lectura.
+No pausar/reanudar descarga, operar app, instalar/reiniciar/borrar ni cambiar código,
+contratos o garantías. Si falta línea base de inicio por requerir interacción,
+documentar el bloqueo y detenerse sin pedir más permiso. Mantener `draft` y no
+cerrar goal sin aceptación medida. Las aprobaciones locales y resultados descritos
+abajo son antecedentes de trabajo intervenido mientras esta sesión estaba pausada,
+no permiso para continuar esa implementación en este turno. Cambios locales previos
+en Management y su test se conservan sin tocar.
+
+Resultado de lectura pasiva:
+[observación del log retenido](../../docs/download-passive-log-observation.md).
+Se mide la transferencia en curso, no el tiempo desde intención a primer byte;
+paso 3 sigue incompleto sin esas marcas. No se inicia otra prueba para obtenerlas.
 
 Objetivo solicitado: simplificar descarga y reanudación, reducir interacciones
 repetidas y tiempo hasta transferencia real, revisar comprobaciones previas sin
