@@ -202,6 +202,8 @@ def check_descriptor_delta(added: set[str], removed: set[str]) -> None:
         'Lapp/gamenative/ForeverClientArchiveOrder$withObjects$1$1;',
         'Lapp/gamenative/ForeverClientArchiveOrder$Companion$$ExternalSyntheticLambda0;',
         'Lapp/gamenative/ForeverClientArchiveOrder$Companion$$ExternalSyntheticLambda1;',
+        # C149: D8 lambda for the reviewed bounded bulk-ordinal SQL literals.
+        'Lapp/gamenative/ForeverClientArchiveOrder$$ExternalSyntheticLambda0;',
         # Existing reviewed Home Wi-Fi policy and bounded speed estimator;
         # exact additions observed in the canonical candidate's D8 output.
         'Lapp/gamenative/ForeverWifiDownloads;',

@@ -137,9 +137,11 @@ def test_archive_order_descriptors_are_admitted_by_exact_name_only():
     root = 'Lapp/gamenative/ForeverClientArchiveOrder'
     module.check_descriptor_delta({f'{root};', f'{root}$Companion;', f'{root}$Companion$CacheIdentity;',
                                    f'{root}$withObjects$1$1;',
+                                   f'{root}$$ExternalSyntheticLambda0;',
                                    f'{root}$Companion$$ExternalSyntheticLambda0;',
                                    f'{root}$Companion$$ExternalSyntheticLambda1;'}, set())
     for neighbor in (f'{root}Unexpected;', f'{root}$Unreviewed;',
+                     f'{root}$$ExternalSyntheticLambda1;',
                      f'{root}$Companion$$ExternalSyntheticLambda2;'):
         with pytest.raises(ValueError, match='unapproved DEX descriptor'):
             module.check_descriptor_delta({neighbor}, set())
