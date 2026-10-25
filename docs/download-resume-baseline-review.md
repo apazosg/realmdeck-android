@@ -496,6 +496,45 @@ guiones de control no forman parte del producto ni sus expectativas sustituyen e
 contrato aprobado. La reconexión completa al gestor durante transferencia sigue
 pendiente, al igual que acreditar una reducción total de preparación.
 
+### Perfil del trabajo previo a transferir — C148
+
+La prioridad confirmada por el usuario es reducir **acción → transferencia**, no
+solo mejorar un inspector. Se muestreó el proceso debug instalado durante una
+reanudación diagnóstica, sin aceptar otra descarga ni cambiar la APK. Una única
+acción «Reanudar» a las 21:17:34 UTC; ventana de muestreo de 60,155 s iniciada un
+minuto después. Pausa normal a las 21:19:56 UTC y estado «En pausa» confirmado.
+
+Traza ART con muestreo de 10 ms, reloj dual, sin desbordamiento: 202.071 eventos
+de muestreo, cero salidas de pila desparejadas en el análisis. En el worker que
+ejecutaba `checkpointMembership` se atribuyen **44,435 s de pared / 38,761 s CPU**
+a ese recorrido dentro de la ventana. Tiempos inclusivos de sus operaciones:
+
+| Operación | Pared muestreada, incluida en los 44,435 s |
+|---|---|
+| Consulta individual `objectByKey` | 24,260 s |
+| Consulta individual `ordinalOf` | 15,490 s |
+| Lectura `readFullyAt` | 1,708 s |
+| Decodificación `decodeResumeObject` | 0,612 s |
+
+Las dos consultas ocupan **39,750 s (~89,5 %)** del tramo atribuido; son operaciones
+secuenciales, no relojes exteriores sumados. Preparar/ejecutar SQL, cursores y
+asignaciones dominan el perfil, no la lectura pequeña del checkpoint. El muestreo
+añade sobrecoste: estos valores no son duración íntegra de una fase, conteos
+exactos de invocaciones, comparación A/B ni porcentaje extrapolable a los 24 minutos.
+
+Se elige amortizar consultas en lotes **de hasta 256 claves**, usando la API de
+catálogo ya existente y una consulta acotada de ordinales. Se conservan validación
+individual completa, conteo, orden/duplicados globales, cancelación y la posterior
+comprobación independiente. No se elimina un recorrido ni se almacena una confianza
+persistente. La carga posterior del escritor y sus consultas son trabajo distinto;
+no se afirma que este cambio por sí solo quite toda la espera. Implementación,
+regresión focal y revisión siguen en curso antes de otra candidata física.
+
+Artefactos externos retenidos en `physical-trial/membership-profile`:
+`summary.json`, `sampling.trace`, `attribution.json`. El analizador está junto al
+guion diagnóstico en `physical-trial/analyze_membership_trace.py`. La traza cruda
+no se versiona y no se copian identificadores del dispositivo ni datos de cuenta.
+
 ### Retención de evidencia
 
 Los artefactos transitorios anteriores bajo `/tmp/opencode` ya no están

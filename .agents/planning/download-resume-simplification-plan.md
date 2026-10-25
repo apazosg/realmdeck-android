@@ -317,8 +317,17 @@ aceptación. Antes de otra candidata:
 - C148 reconstruida/autenticada, compilación Modern y auditoría del APK exacto
   aprobadas; actualización `install -r` verificada, Home disponible 19:57:58 UTC.
   Comprobación previa sin updater/juego activo; no se borró progreso. Preparación
-  de C148 en curso. Resultado de Resume y reconexión aún pendientes: no cerrar por
+  de C148 medida: Resume válido de una acción, sin reconfirmar, pero hasta 24 minutos
+  hasta transferencia visible. Reconexión completa aún pendiente: no cerrar por
   la compilación o por el ahorro del inspector. Artefactos fuera del repositorio.
+- Perfil C148 actual: en una ventana diagnóstica de 60,155 s, `checkpointMembership`
+  acumula 44,435 s muestreados y sus consultas individuales de catálogo/ordinal
+  39,750 s incluidos (~89,5 %). Lecturas pequeñas: 1,708 s. Muestreo 10 ms sin
+  overflow; no es un A/B ni el tiempo completo de fase. Priorizar lotes de hasta
+  256, sin quitar validaciones individuales, duplicados globales, cancelación ni
+  la comprobación independiente posterior. No optimizar por hipótesis las lecturas
+  ni cambiar políticas de confianza. Regresión/revisión y medida física total
+  siguen siendo necesarias; carga del escritor y otros preludios permanecen.
 - Consentimiento persistente tras muerte del proceso y pausa viva son cambios de
   producto fuera del primer alcance. Si resultan necesarios, presentar decisión;
   conservar checkpoint no autoriza a descargar automáticamente.
