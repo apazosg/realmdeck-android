@@ -10,7 +10,10 @@ Objetivo solicitado: simplificar descarga y reanudación, reducir interacciones
 repetidas y tiempo hasta transferencia real, revisar comprobaciones previas sin
 debilitar las garantías acordadas y resolver cuellos con medidas antes/después.
 Este plan continúa la investigación existente; no reabre la publicación C146 ni
-autoriza otra entrega pública. Pendiente de aprobación antes de implementar.
+autoriza otra entrega pública. **Aprobación parcial vigente:** únicamente pasos 3
+y 4, con instrumentación existente; sin cambios de código, contratos/garantías ni
+operaciones sobre el móvil. El documento permanece en `draft`. Cualquier medida
+que requiera esas operaciones debe detenerse y solicitar autorización.
 
 ## Content
 
@@ -108,6 +111,7 @@ autoriza otra entrega pública. Pendiente de aprobación antes de implementar.
 
 - [x] 1. Registrar objetivo e inspeccionar contratos, evidencia y puntos de entrada.
 - [ ] 2. Aprobar este plan y resolver decisiones que cambien garantías antes de código.
+  Solo pasos 3/4 aprobados; no aprobación global ni de implementación.
 - [ ] 3. Reproducir recorrido y obtener línea base por fases/acciones con entradas
   controladas; usar instrumentación agregada existente antes de añadir otra.
 - [ ] 4. Elegir el cuello prioritario demostrado; documentar qué detecta cada chequeo,
@@ -122,8 +126,11 @@ autoriza otra entrega pública. Pendiente de aprobación antes de implementar.
 
 ## Open Issues
 
-- Pendiente aprobar este plan. No se han modificado código/specs, ejecutado suites
-  ni operado dispositivos en esta sesión.
+- Pasos 3/4 parcialmente ejecutados mediante inspección y evidencia histórica:
+  [informe de diagnóstico](../../docs/download-resume-baseline-review.md).
+  No se han modificado código/specs, ejecutado suites ni operado dispositivos.
+  La reproducción dinámica y línea base actual requieren autorización adicional;
+  no se marcan completos los pasos 3/4 con una inspección estática.
 - Acceso/estado actual del teléfono no comprobados. La aprobación del plan no implica
   permiso para detener una partida o transferencia, instalar, reiniciar ni confirmar
   costes desconocidos; coordinar la ventana física antes de esas operaciones.
