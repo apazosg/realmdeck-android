@@ -3307,6 +3307,7 @@ class ForeverClientUpdaterTest {
             }
             val indexedSpecs = physicalSpecs.mapIndexed { ordinal, spec -> spec.ekey to IndexedValue(ordinal, spec) }.toMap()
             val legacyPrefix = fixture.targetSpecs().sortedBy { it.ekey }.take(40)
+            val legacyFlush = java.util.concurrent.atomic.AtomicReference<(() -> Boolean)?>(null)
             val seedDirectory = File(paths.privateRoot, "legacy-casc-seed").apply { check(mkdir()) }
             legacyPrefix.forEach { spec ->
                 File(seedDirectory, "${spec.ekey}.blte").writeBytes(fixture.rawFor(fixture.catalog.objectByKey(spec.ekey)))
@@ -3317,12 +3318,18 @@ class ForeverClientUpdaterTest {
                     outputDataFiles = cascData,
                     checkpointDirectory = workspace,
                     objects = sequence {
-                        legacyPrefix.forEach { yield(it) }
+                        legacyPrefix.forEachIndexed { index, spec ->
+                            yield(spec)
+                            // Seed the previous four-object durable boundaries,
+                            // independent of the new writer's maximum group size.
+                            if ((index + 1) % 4 == 0) assertTrue(requireNotNull(legacyFlush.get()).invoke())
+                        }
                         throw java.util.concurrent.CancellationException("seed a partial legacy EKey checkpoint")
                     },
                     sourceFor = { spec -> File(seedDirectory, "${spec.ekey}.blte") },
                     cancelled = { false },
                     checkpointIdentity = checkpointIdentity,
+                    commitFlushRequest = legacyFlush,
                     targetObjectCount = physicalSpecs.size,
                     targetMembership = { key ->
                         indexedSpecs[key.lowercase()]
@@ -3333,7 +3340,7 @@ class ForeverClientUpdaterTest {
             seedDirectory.deleteRecursively()
 
             val checkpointedCount = ((checkpointLength(paths) - 40L) / 72L).toInt()
-            assertEquals("all four-object legacy commit groups are durable", 40, checkpointedCount)
+            assertEquals("complete legacy commit groups are durable", legacyPrefix.size, checkpointedCount)
             val checkpointedKeys = ArrayList<String>()
             ForeverCasc.withResumableCheckpointObjects(cascData, workspace, checkpointIdentity, { false }) { saved ->
                 saved.forEach { checkpointedKeys += it.ekey }

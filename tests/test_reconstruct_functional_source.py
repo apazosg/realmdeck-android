@@ -507,7 +507,7 @@ def test_updater_gate_admission_matches_exact_current_kotlin_inventory() -> None
 
 
 def test_candidate_version_and_privacy_hash_pins_match_frozen_recipe_output() -> None:
-    assert module.CANDIDATE_VERSION == (144, "0.2.120-append-breakdown")
+    assert module.CANDIDATE_VERSION == (145, "0.2.121-commit-group-16")
     assert module.C138_DISPOSITION_SHA256 == "c198e20f582b90e5bc691e3e4712e8b2b1ecf33434bf1f86232c30be7fab2ac6"
     assert module.C138_RECIPE_SHA256 == "f3deeab1112963bfa1b805f1fec465375f64801696cbe918c365855755e29127"
     assert module.C138_PROVENANCE_SHA256 == "5254e4a33471f7c9600140a7c5f0ab6e6f90be493c85d1824b386b6723acda35"
@@ -696,8 +696,8 @@ def test_c138_enables_reviewed_assisted_sender_and_marks_capture_check_pending()
     assert "private const val ASSISTED_ENTRY_ENABLED = true" in activity
     marker = module.candidate_marker({}, [], False, {}, {}, {})
     metadata = json.loads(marker)
-    assert metadata["versionCode"] == 144
-    assert metadata["versionName"] == "0.2.120-append-breakdown"
+    assert metadata["versionCode"] == 145
+    assert metadata["versionName"] == "0.2.121-commit-group-16"
     assert metadata["assistedEntrySecurityGate"] == {
         "status": "ENABLED_PHYSICAL_CAPTURE_VERIFICATION_PENDING",
         "enabled": True,

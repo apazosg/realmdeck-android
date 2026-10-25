@@ -18,6 +18,52 @@ import org.junit.Test
 
 class ForeverCascTest {
     @Test
+    fun sixteenObjectDurableGroupRetainsRawSourcesUntilCheckpointBarrier() {
+        val root = tempDir()
+        try {
+            val objects = (0 until 16).map { index ->
+                val decoded = "sixteen-object-group-$index".toByteArray()
+                val rawBytes = blteRaw(decoded)
+                val raw = file(root, "private/raw-$index.blte", rawBytes)
+                Pair(
+                    ForeverCasc.IncrementalObjectSpec(
+                        encodedEkey(rawBytes), md5Hex(decoded), rawBytes.size.toLong(), decoded.size.toLong(),
+                    ),
+                    raw,
+                )
+            }.sortedBy { it.first.ekey }
+            val output = File(root, "client/Data/data")
+            assertTrue(output.parentFile!!.mkdirs())
+            val checkpoint = File(root, "private/checkpoint").apply { assertTrue(mkdirs()) }
+            val checkpointFile = File(checkpoint, ".forever-casc-resume-checkpoint")
+            var groups = 0
+            val result = ForeverCasc.writeTargetIncrementalResumable(
+                null,
+                output,
+                checkpoint,
+                objects.asSequence().map { it.first },
+                { spec -> objects.single { it.first.ekey == spec.ekey }.second },
+                { false },
+                "sixteen-object-group",
+                { _, raw -> assertTrue("raw is retired only after the checkpoint barrier", raw.delete()) },
+                beforeDurableGroup = {
+                    groups++
+                    assertEquals("no object frame is acknowledged before the full group barrier", 40L, checkpointFile.length())
+                    assertTrue("every raw remains available through the data/checkpoint force", objects.all { it.second.isFile })
+                },
+            )
+
+            assertEquals(1, groups)
+            assertEquals(16L, result.writtenObjects)
+            // Sixteen object frames followed by the existing finalization frame.
+            assertEquals(40L + 17L * 72L, checkpointFile.length())
+            assertTrue(objects.none { it.second.exists() })
+        } finally {
+            delete(root)
+        }
+    }
+
+    @Test
     fun buildInfoMatchesPinnedProducerSerialization() {
         val fields = JSONObject()
             .put("branch", "us")

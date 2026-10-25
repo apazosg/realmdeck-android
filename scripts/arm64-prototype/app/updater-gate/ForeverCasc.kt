@@ -359,8 +359,8 @@ object ForeverCasc {
     private const val INDEX_SORT_BATCH_RECORDS = 8_192
     /** Commit-stage timing cadence: aggregates cover that many new objects. */
     private const val COMMIT_TIMING_BATCH_OBJECTS = 256L
-    /** Small durable batches leave room for lookahead within the unchanged raw-key cap. */
-    internal const val RESUMABLE_COMMIT_GROUP_OBJECTS = 4
+    /** Maximum durable batch, bounded by the unchanged raw-key reservation cap. */
+    internal const val RESUMABLE_COMMIT_GROUP_OBJECTS = 16
     private const val INDEX_MERGE_FAN_IN = 32
     private const val MAX_EKEY_HEADER_SIZE = 16 * 1024 * 1024
     private const val MAX_EKEY_HEADER_CHUNKS = 8_192
