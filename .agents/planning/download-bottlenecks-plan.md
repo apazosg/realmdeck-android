@@ -6,7 +6,16 @@ date: 2026-10-25
 
 # Download performance work
 
-## Approved next implementation — in progress
+## Approved sixteen-object implementation — physical validation pending
+
+C145 implements the change below (source commit `040254f`). Recovery and updater
+regressions verify 109 distinct cases across the affected-family and final focused
+runs; one existing opt-in native diagnostic was skipped. Five focused host
+admission/version cases pass. Independent inline-source review found no actionable
+blocker. The canonical 145 build and source/build/payload audit pass; this is not
+yet evidence of physical throughput or completed installation. Earlier four-object
+and C143 candidate descriptions below are historical; this approved policy and
+the C145 identity supersede their group-size and version details.
 
 The user approved this exact trade-off on 2026-10-25. Implement the bounded
 change and its regressions, then independently review and measure an audited
@@ -37,9 +46,9 @@ accounts for 191.320 seconds, 92.16% of measured append child clocks but 30.24% 
 the aligned 632.612-second writer interval. This includes pathname validation,
 channel open, `force(true)` and close; it does not yet isolate the sync syscall.
 The 0.7994-MB/s payload cohort had much smaller objects than the prior C143 sample,
-so this is not a controlled regression comparison. Assess retained-channel safety
-and/or helper-internal timings before selecting a bounded optimization. No change
-to group size, force cadence, descriptor ownership or storage coverage is implied.
+so this is not a controlled regression comparison. The subsequent user-approved
+group-size change is specified above; retained-channel ownership and force-helper
+internals remain unchanged. No additional change is authorized by the diagnostic.
 Merge remains deferred as requested until diagnosis, improvement and remeasurement.
 
 ## Approved scope

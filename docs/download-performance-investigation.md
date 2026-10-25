@@ -1,5 +1,36 @@
 # Download performance investigation
 
+## C145 durable groups of up to sixteen
+
+Source commit `040254f` applies the approved maximum-group change from four to
+sixteen objects. Pressure, rollover and end-of-stream still flush smaller groups.
+The 34-key/1-GiB raw budget, sixteen fetch workers, object authentication,
+checkpoint format/identity and data-force → checkpoint-force → acknowledgement/
+raw-retirement ordering remain unchanged. More unacknowledged staging can require
+replay, and the light group check runs less frequently; acknowledged progress is
+not deliberately discarded. This is an optimization, not another diagnostic-only
+candidate, but fewer force calls do not guarantee a particular wall-time saving.
+
+The two affected Kotlin families initially verified 108 cases, with one new-test
+assertion missing the existing finalization frame and one opt-in native skip.
+After correcting that assertion and strengthening the legacy-prefix fixture to
+flush every four objects explicitly, the two final focused cases passed. Across
+the runs, 109 distinct cases are verified and one optional diagnostic remains
+skipped; this is not a claim of one final all-green full-suite run. Five focused
+host admission/version cases pass. Independent inline-source review found no
+actionable blocker and did not independently execute tests.
+
+The canonical build completed in 4m53s. Its source/build/payload audit passed;
+version 145 is `0.2.121-commit-group-16`, signed with the prior certificate.
+APK SHA-256:
+`486445e0623b86e8779fd190c2afd1a0742daccaf346c19826520736fc6aff7b`.
+The reviewed CASC sources match the canonical staged sources. A fresh paused,
+no-guest, Wi-Fi and writable-USB preflight preceded replacement installation.
+Before launch, all three progress hashes and size/inode/mtime fields matched
+exactly, as did the installed APK hash. The fresh-consent ten-minute observation
+is in progress; preparation is separate, and the helper owns the final Pause.
+No C145 throughput result is claimed yet. Merge remains deferred.
+
 ## C144 append-clock diagnostic
 
 C144 (`0.2.120-append-breakdown`) adds five local aggregate clocks inside the
