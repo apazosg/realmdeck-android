@@ -20,8 +20,9 @@ merge of unrelated histories or a new release. Preserve public guides, licensing
 and sanitization boundaries. Do not push without authorization.
 
 The engineering target is at least **3,200,000 useful network bytes/second**,
-twice the user's reported earlier 1.6 MB/s. It is not an end-user SLA or a measured
-result. Improve demonstrated bottlenecks incrementally and remeasure; a complete
+twice the user's reported earlier 1.6 MB/s. It is not an end-user SLA. One completed
+C143 window now exceeds it; repeatability and whole-client behavior remain open.
+Improve demonstrated bottlenecks incrementally and remeasure; a complete
 prediction of the final speedup is not a prerequisite for a small proven fix.
 
 ## Existing behavior to preserve
@@ -62,6 +63,23 @@ prediction of the final speedup is not a prerequisite for a small proven fix.
   reuse/retry/cohort limitations.
 
 ## Open Issues
+
+### Completed C143 measurement and next bottleneck
+
+The confirmed repeat completed 608.073 seconds of actual payload observation at
+3.878 decimal MB/s (rounded-counter bounds 3.790–3.966), then paused with no active
+fetch callbacks or HTTP requests. This exceeds 3.2 MB/s for this window, not as a
+general guarantee or matched-object before/after proof. Five subwindows fluctuate
+substantially; a second completed comparable observation is still needed.
+
+The aligned writer interval now spends 40.85% in the combined segment append/copy,
+index insertion and force clock, 19.10% in private copy/authentication, and 12.21%
+in source resolution. Investigate these combined clocks before choosing another
+optimization: do not label all append time USB force or all private time crypto.
+The raw retirement timer accounts for part of the unclassified writer time;
+producer/HTTP concurrent sums cannot be added to the wall-clock partition.
+Preparation remains a separate unresolved latency problem. See the measurement
+notes for denominators and accepted coverage changes.
 
 ### Requested review of validation frequency
 
@@ -179,7 +197,7 @@ Validate absent/file/link roots and existing update guards, independently review
 the safety change and exact source admission, then measure the physical profile
 before retaining it as a performance improvement.
 
-The latest measured candidate averages about 1.516 MB/s, below both the reported
+Before C143, the long measured candidate averaged about 1.516 MB/s, below both the reported
 1.6-MB/s reference and the 3.2-MB/s target. Different sequential object cohorts
 are not a controlled A/B comparison. See the
 [measurement summary](../../docs/download-performance-investigation.md).

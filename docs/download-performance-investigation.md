@@ -29,8 +29,57 @@ source/build/payload audit passed. APK SHA-256:
 `af2b21765959dfeab8e93747b108b948bf48e8bb3d185306015ed793f5f7a67b`.
 The signing certificate matches the prior installed candidate. C143 avoids a
 version downgrade from the installed C142; no uninstall, data reset or downgrade
-flag is used. Physical throughput validation is still pending; no speedup is
-claimed from this source change or build.
+flag is used. The interrupted observation and the subsequent completed measurement
+are distinguished below; compilation alone was not throughput evidence.
+
+### Completed C143 repeat
+
+The same audited APK completed an uninterrupted observation of **608.073 seconds**
+with 50 numeric payload samples. Rounded useful-network counters increased by
+approximately **2,358.038 MB**, giving **3.878 decimal MB/s**. Endpoint display
+rounding bounds the result to **3.790–3.966 MB/s**. This execution therefore
+exceeds the 3.2-MB/s engineering target even at the lower rounding bound. It is
+one successful window, not proof of whole-client throughput or a matched-object
+causal speedup over the reported 1.6-MB/s reference.
+
+Five approximately two-minute subwindows measured **3.589 / 7.623 / 1.923 /
+3.463 / 2.599 MB/s**. Their actual durations differ; GiB display quantization
+makes the later subwindows particularly imprecise. These are not five independent
+trials. The operation ended paused with Resume available, all 8,451 callbacks
+completed, and zero active callbacks and HTTP requests. It durably committed
+22,992 new objects; retained prepared raws are not active network requests.
+
+An aligned writer interval, from 256 to 22,784 newly committed objects, excludes
+initial replay and measures **633.894 seconds**. It is not the UI sample interval:
+
+| Writer clock | Seconds | Share of this writer interval |
+|---|---:|---:|
+| Segment opening, append/copy, index insertion and data force | 258.935 | 40.85% |
+| Private copy plus EKey/BLTE/content verification | 121.066 | 19.10% |
+| Source resolution, including future readiness wait | 77.430 | 12.21% |
+| Checkpoint append/force | 24.025 | 3.79% |
+| Outside those clocks | 152.438 | 24.05% |
+
+Nearby pipeline samples attribute 61.377 seconds to post-commit raw validation,
+unlink and directory force, which is outside the four writer clocks. Future wait
+is nested in source resolution, not an additional 77.602-second phase. Producer
+budget sleep (213.990 seconds) and HTTP phase totals run concurrently and must
+not be added to this partition. In a separate sparse process interval, 5,632
+light group checks took 21.217 seconds, about 3.767 ms per check, with no failures.
+Absent full-check logs do not imply zero full checks: they log only every 256 calls.
+
+The dominant measured phase has shifted to append/copy/index/force; the current
+clock does **not** isolate USB write bandwidth, force latency or index updates.
+Private verification also includes a temporary-file copy, not cryptography alone.
+Those distinctions should guide the next bounded investigation before changing
+durability, object verification or the accepted storage policy. Preparation is
+still separate: the fresh execution target inspection took 163.663 seconds.
+
+Evidence retained outside Git: the confirmed repeat's original UI samples and
+scoped log, throughput/pipeline/light-storage summaries and aligned writer-clock
+summary. A preceding Resume recalculation stopped at fresh consent with no
+payload; it is not part of this speed measurement. No reset, client duplication,
+quota increase or write-order change was used.
 
 ### Interrupted C143 physical observation
 
@@ -149,7 +198,8 @@ written bytes are not interchangeable with useful network bytes.
 
 ## Next work
 
-The target remains **at least 3.2 decimal MB/s**, not yet demonstrated. Profile and
+The target remains **at least 3.2 decimal MB/s**, now exceeded in one completed
+C143 window but not yet established as repeatable or whole-client throughput. Profile and
 remove proven inefficiencies incrementally, retaining integrity, storage identity,
 Wi-Fi, consent and recovery guarantees. Measure preparation separately; a faster
 preparation phase is not increased payload throughput. No ready-first writer,
