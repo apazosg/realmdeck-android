@@ -331,3 +331,15 @@ aceptación. Antes de otra candidata:
 - Consentimiento persistente tras muerte del proceso y pausa viva son cambios de
   producto fuera del primer alcance. Si resultan necesarios, presentar decisión;
   conservar checkpoint no autoriza a descargar automáticamente.
+- C149 contiene `a8f086d`: lotes <=256, regresiones focales y revisión aprobadas;
+  reconstrucción/build final y auditoría fuente/payload PASS, actualización local
+  verificada sin reset. Primera preparación única: respuesta +2,963 s, inspector
+  178,687 s desde +113,067 s, resumen +440,830 s. Plan visible 70532/Unidad USB,
+  descarga 62,8 GiB y adicional 65,0 GiB (app/cliente 1,7/63,2). No se ha confirmado
+  payload: se solicitó aprobación de ese plan para medir el tiempo total y reabrir
+  el gestor. No dar por terminada la optimización por la reducción host de consultas.
+- La extensión de lotes a otros lectores requiere preservar CRC/layout/ordinales,
+  tail recuperable y límite congelado `cpByteEnd`. No adelantar el stream de entrada
+  del escritor sin analizar backpressure de las cotas raw: no es un cambio aprobado
+  por el mero resultado del perfil. Elegir el siguiente ajuste solo con evidencia
+  del recorrido restante y sin eliminar guardas ni añadir confianza entre leases.

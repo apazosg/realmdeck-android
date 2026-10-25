@@ -535,6 +535,69 @@ Artefactos externos retenidos en `physical-trial/membership-profile`:
 guion diagnóstico en `physical-trial/analyze_membership_trace.py`. La traza cruda
 no se versiona y no se copian identificadores del dispositivo ni datos de cuenta.
 
+### C149: consultas agrupadas y preparación inicial
+
+Corrección `a8f086d`: la membresía previa al inspector usa lotes de hasta 256
+claves. `ordinalsOf` restaura el orden de entrada y rechaza claves/ordinales
+duplicados, ausentes, inválidos o fuera de rango; la ocupación temporal se limita
+al lote. Se conservan las comprobaciones individuales del catálogo, el bitset
+global, cancelación y el contraste independiente posterior. No se elimina ningún
+recorrido ni se reutiliza una prueba de validación entre operaciones.
+
+- Dos regresiones de pausa/reanudación y checkpoint legacy pasaron (XML
+  21:18:46); el nuevo focal de orden/rechazos/cancelación/límite de lote pasó
+  con la fuente final (XML 21:28:33, un test, cero fallos/errores/omitidos).
+  Las tres fuentes coinciden con las compiladas. Revisión independiente sin
+  hallazgos, sin repetir los checks ya verdes.
+- Microbenchmark **Python/SQLite de host**, no Kotlin/Android: 356.000 claves
+  del orden físico, warmup de 2.000 por ruta y tres repeticiones. **712.000 →
+  2.782 consultas**; mediana **12,430 → 3,120 s** en Python 3.14.4/SQLite 3.46.1.
+  Coinciden todas las tuplas EKey/CKey/tamaños y los ordinales en orden de entrada.
+  Orden fijo referencia → lotes; no se extrapola ese cociente a la preparación.
+  La captura anterior `.json` empleó otras versiones y otros tiempos: no se
+  mezclan sus medianas con el resultado final `.txt`. Script, fixture-hashes y
+  resultados se retienen bajo `work/checkpoint-membership-batch-20261025`.
+
+C149 local / `0.2.125-checkpoint-startup-test` (`d6347e1`): tres focales de
+identidad aprobados. Reconstrucción autenticada; frente a C148 cambian solo
+Gradle, marcador, ArchiveOrder, Updater y UpdaterTest. Tras fallos de compresión
+y reinicios del servidor, se esperó al proceso serializado existente sin iniciar
+otro build: **BUILD SUCCESSFUL en 9m 36s**, 68 tareas. No se repitió reconstrucción
+ni tests completados.
+
+El audit falló cerrado ante el nuevo descriptor D8 exacto
+`Lapp/gamenative/ForeverClientArchiveOrder$$ExternalSyntheticLambda0;`. Su DEX se inspeccionó:
+delega únicamente al formateador `ordinalsOf` de literales hex validados. Se
+admitió solo ese nombre (`569b52f`), con test que sigue rechazando el vecino
+`Lambda1` y revisión independiente sin hallazgos; no se añadió un prefijo amplio.
+El APK no cambió ni se recompiló para modificar el auditor del host.
+
+Auditoría final **PASS_SOURCE_BUILD_AND_PAYLOAD_AUDIT**, 2.226 fuentes y 178
+payloads: **484.909.535 bytes**, SHA-256
+`2c463ab342b07265834230053d08f380901c8e3b59a0a3ca5545a147605440d6`.
+Recibo, logs, pruebas de origen DEX y auditoría persisten bajo
+`work/download-checkpoint-c149-20261025`. Con updater inactivo, sin guest y APK
+cotejado, `install -r` iniciado a las 21:54:30 UTC confirmó versión 149 y Home.
+Sin reset, desinstalación ni publicación.
+
+Preparación observada de C149:
+
+- Abrir gestor único **21:56:49.674104 UTC**; «Continuar» único
+  **21:57:11.261832 UTC**. Primera respuesta observada a **+2,963 s**.
+- Inspector **+113,067–291,754 s**, **178.687 ms**; 1.144.978 objetos, sin rehashes.
+  El stream completo registró 4.473 bloques y 178.688 ms; sus relojes se anidan.
+- Resumen visible a **+440,830 s (7 min 21 s)**: versión `1.60.1.70532`, Unidad
+  USB, descarga **62,8 GiB**, adicional **65,0 GiB**, cotas app/cliente
+  **1,7/63,2 GiB**. Se detuvo **sin confirmar payload**.
+- El inspector comenzó antes que en C148 (+201,369 s), pero no hay A/B controlado
+  de caché/cohorte ni un tiempo exacto de resumen C148. No confundir estos 440,830 s
+  hasta el resumen con los 948/1.454 s posteriores a Descargar/Resume de C148.
+  Falta medir el inicio real de transferencia con el plan C149 autorizado.
+
+El nuevo plan se presentó para confirmación al usuario; todavía no se registra
+una aprobación ni se pulsa «Descargar». La reconexión completa al gestor también
+queda pendiente. Los artefactos C149 están en `physical-trial/prepare-summary.json`.
+
 ### Retención de evidencia
 
 Los artefactos transitorios anteriores bajo `/tmp/opencode` ya no están
