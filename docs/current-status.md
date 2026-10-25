@@ -1,5 +1,10 @@
 # Current status
 
+Download engineering on `perf/download-bottlenecks` is documented separately in
+the [performance investigation](download-performance-investigation.md). That
+source work does not change the published-preview evidence below or constitute
+a new release.
+
 **Evidence snapshot: 2026-10-23.** RealmDeck Android is an experimental Android
 ARM64 launcher project, not a general release. The current public preview is
 [C142, RealmDeck Android 0.2.118 · Preview](https://github.com/apazosg/realmdeck-android/releases/tag/c142-0.2.118-test)
