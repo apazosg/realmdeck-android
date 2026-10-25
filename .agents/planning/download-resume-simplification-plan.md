@@ -153,11 +153,11 @@ costes y la reanudación con una sola acción cuando el plan siga siendo válido
 - «Restaurar» se trata inicialmente como reanudar una descarga interrumpida,
   distinguiendo pausa del mismo proceso y reapertura tras cierre; no incluye
   restaurar copias de seguridad ni persistir consentimiento entre procesos.
-- Pasos 3/4 parcialmente ejecutados mediante inspección y evidencia histórica:
+- Paso 3 parcialmente ejecutado; paso 4 respaldado ya por benchmark host actual:
   [informe de diagnóstico](../../docs/download-resume-baseline-review.md).
   Al iniciar esta fase no se habían modificado código/specs, ejecutado suites ni
   operado dispositivos. La reproducción local ya está autorizada;
-  no se marcan completos los pasos 3/4 con una inspección estática.
+  no se da por completo el recorrido del paso 3 con una inspección estática.
 - Acceso/estado actual del teléfono no comprobados. La aprobación del plan no implica
   permiso para detener una partida o transferencia, instalar, reiniciar ni confirmar
   costes desconocidos; coordinar la ventana física antes de esas operaciones.
