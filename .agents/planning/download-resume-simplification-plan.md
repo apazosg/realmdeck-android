@@ -15,6 +15,13 @@ y 4, con instrumentación existente; sin cambios de código, contratos/garantía
 operaciones sobre el móvil. El documento permanece en `draft`. Cualquier medida
 que requiera esas operaciones debe detenerse y solicitar autorización.
 
+Solicitud renovada mediante objetivo el 2026-10-25: «Reducir el tiempo de
+preparación inicial al iniciar o restaurar una descarga. mejorar la ui UX para
+que el usuario no tenga que pulsar varias veces hasta iniciar la descarga.»
+Se reutiliza este plan para no abrir un trabajo paralelo equivalente. Establecer
+el objetivo no se interpreta como aprobación de los pasos pendientes ni como
+permiso para operar el dispositivo.
+
 ## Content
 
 ### Punto de partida comprobado
@@ -49,6 +56,15 @@ que requiera esas operaciones debe detenerse y solicitar autorización.
   separados; no aumentar cuotas ni cambiar el orden del escritor por intuición.
 
 ### Alcance y decisiones propuestas
+
+Propuesta para esta solicitud: aprobar diagnóstico local reproducible y mejora
+mínima de código/UI dentro de las garantías siguientes (pasos 2–6 y documentación
+del 8). La prueba física del paso 7 requiere una autorización separada. Antes de
+implementar, concretar el cuello con evidencia y registrar cualquier cambio de
+comportamiento en UC/AC para aprobación; no eliminar controles solo porque se
+invocan más de una vez. Dar respuesta visual inmediata a la primera pulsación y
+evitar reentradas durante la preparación; conservar la confirmación final de
+costes y la reanudación con una sola acción cuando el plan siga siendo válido.
 
 1. Mantener el contrato UX aprobado: instalación ≤3 acciones habituales y Resume
    en una acción para el plan aún válido. Suprimir reentrada/pantallas/confirmaciones
@@ -126,6 +142,10 @@ que requiera esas operaciones debe detenerse y solicitar autorización.
 
 ## Open Issues
 
+- Pendiente de aprobación del alcance local de implementación propuesto arriba.
+  «Restaurar» se trata inicialmente como reanudar una descarga interrumpida,
+  distinguiendo pausa del mismo proceso y reapertura tras cierre; no incluye
+  restaurar copias de seguridad ni persistir consentimiento entre procesos.
 - Pasos 3/4 parcialmente ejecutados mediante inspección y evidencia histórica:
   [informe de diagnóstico](../../docs/download-resume-baseline-review.md).
   No se han modificado código/specs, ejecutado suites ni operado dispositivos.
