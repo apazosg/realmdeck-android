@@ -1,6 +1,7 @@
 # Velocidad de transferencia: diagnóstico pequeño/grande
 
-Fecha: 2026-10-26. Goal `5caa6403-5b8f-47dc-ba95-ba40fbbe686e`.
+Fecha: 2026-10-26. Goal original `5caa6403-5b8f-47dc-ba95-ba40fbbe686e`;
+continuación autorizada `fd7baae8-8a14-47b0-8452-6d8f7434217e`.
 **C155 supera la tasa agregada, pero falta validar por tamaño. Goal abierto.**
 
 El [plan aprobado](../.agents/planning/download-transfer-speed-plan.md) se centra
@@ -645,8 +646,17 @@ subventanas positivas y suma exacta de duraciones/bytes de la ventana; todos los
 controles de checkpoint, parada y contadores también pasan. **No se repitió ninguna
 acción UI ni descarga de referencia.** Evidencia: `analysis-boundary-repair.diff`,
 `analysis-boundary-repair-verification.json` y `reference/trial/{analysis,cohort-service}.json`
-en el workspace externo. Continúa solo la instalación/preparación de C157, todavía
-sin confirmar su payload; falta la comparación y no se declara mejora por tamaño.
+en el workspace externo. Falta la comparación y no se declara mejora por tamaño.
+
+C157 se instaló una vez, final 18:29:14 UTC: checkpoint exacto de 444.654 objetos
+preservado, cero servicios y cold Home, sin acciones de descarga en el instalador.
+La preparación terminó 18:35:11 sin confirmar payload: mismo cliente/USB,
+57,8 GiB de descarga, 60,0 adicionales, app ≤1,7 y volumen cliente ≤58,3 GiB,
+dentro de los límites consentidos. El límite de tiempo detuvo el goal original;
+reanudarlo no renovó su presupuesto. El usuario autorizó expresamente un sucesor
+de una hora, con el mismo alcance, plan y cinco criterios. Se ejecuta únicamente
+el controlador C157 pendiente, con guardas frescas y pausa automática; no se
+reinstala, repite la preparación ni reduce la ventana fijada por el tiempo disponible.
 
 ## Matriz de aceptación del objetivo
 

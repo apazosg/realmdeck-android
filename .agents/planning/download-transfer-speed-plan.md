@@ -14,11 +14,15 @@ de «5mb» que en ocasiones caen hasta «0.1». Las unidades y condiciones de es
 observaciones aún no están confirmadas; no se convierten en una línea base medida
 ni en un mínimo de velocidad prometido.
 
-Goal: `5caa6403-5b8f-47dc-ba95-ba40fbbe686e`. Este trabajo parte de C152 y se centra
+Goal original: `5caa6403-5b8f-47dc-ba95-ba40fbbe686e`; sucesor autorizado:
+`fd7baae8-8a14-47b0-8452-6d8f7434217e`. Este trabajo parte de C152 y se centra
 en transferencia efectiva, no en volver a optimizar el inicio de la descarga.
 El usuario aprobó este plan el 2026-10-26: «adelante. vamos a ello». Se ejecutan
 diagnóstico, cambios mínimos y ensayos acotados dentro de las garantías y límites
 descritos; no se repite esa aprobación tras un reinicio del servidor.
+Tras agotar el límite temporal, el usuario autorizó «perfecto sigue . crea un
+nuevo objetivo». El sucesor conserva el objetivo, los cinco criterios originales
+y las fases verificadas; no reinicia mediciones ni debilita la aceptación.
 
 ## Content
 
@@ -169,6 +173,12 @@ resuelva ninguna de ellas. Se investiga primero el componente dominante actual.
 
 ## Open Issues
 
+- C157 instalada una vez, final 18:29:14 UTC, conservando el checkpoint exacto de
+  444.654 objetos. Preparación terminada 18:35:11 sin confirmar payload, mismo
+  cliente/USB y costes 57,8/60,0/1,7/58,3 GiB dentro de los límites anteriores.
+  El sucesor ejecuta solo el controlador pendiente de ensayo de 360 s y su análisis,
+  con preflight fresco, guardas de no replay y pausa cooperativa. No se repite C156
+  ni se da el resultado por positivo antes de observarlo.
 - C156 terminó una vez 18:19:27 UTC en pausa y sin trabajo activo: 367,636 s
   visibles, 1,881607 MB/s; checkpoint 435.310 → 444.654, prefix/CRC válidos,
   9.344 objetos (7.611/1.582/151). Desglose homogéneo obtenido, sin comparativa
