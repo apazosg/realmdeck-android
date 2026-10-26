@@ -339,6 +339,50 @@ class ForeverClientUpdaterTest {
         }
     }
 
+    @Test
+    fun cohortDiagnosticsSeparateUsefulReuseFailuresAndMixedGroups() {
+        fun record(size: Long) = ForeverClientUpdateCatalog.ObjectRecord(
+            "0".repeat(32), "1".repeat(32), size, size, "direct", "0".repeat(32), 0, size,
+        )
+        val small = record(65_536)
+        val mediumStart = record(65_537)
+        val mediumEnd = record(1_048_576)
+        val large = record(1_048_577)
+        val diagnostics = FetchPipelineDiagnostics()
+        diagnostics.cohortCompleted(listOf(small, small), listOf(32_768, 0), 30)
+        diagnostics.cohortCompleted(listOf(small), listOf(0), 10)
+        diagnostics.cohortCompleted(listOf(mediumStart, mediumEnd), listOf(65_537, 1_048_576), 20)
+        diagnostics.cohortCompleted(listOf(large), listOf(1_048_577), 50)
+        diagnostics.cohortCompleted(listOf(small, mediumStart), listOf(65_536, 65_537), 40)
+        diagnostics.cohortFailed(listOf(large))
+
+        val lines = ArrayList<String>()
+        val logger = Logger.getLogger("ForeverClientUpdate")
+        val handler = object : Handler() {
+            override fun publish(record: LogRecord) { lines += record.message }
+            override fun flush() = Unit
+            override fun close() = Unit
+        }
+        logger.addHandler(handler)
+        try {
+            diagnostics.log("complete", 0, 0 to 0L)
+        } finally {
+            logger.removeHandler(handler)
+        }
+        val summary = lines.single { it.startsWith("CASC fetch pipeline ") }
+        fun assertCohort(name: String, expected: List<Long>) {
+            val fields = listOf("Callbacks", "Objects", "EncodedBytes", "UsefulBytes", "CallbackNanos", "Failures", "ZeroUseful")
+            fields.zip(expected).forEach { (field, value) ->
+                val key = "cohort$name$field="
+                assertEquals(key, value, summary.substringAfter(key).substringBefore(' ').toLong())
+            }
+        }
+        assertCohort("Small", listOf(2, 3, 196_608, 32_768, 40, 0, 1))
+        assertCohort("Medium", listOf(1, 2, 1_114_113, 1_114_113, 20, 0, 0))
+        assertCohort("Large", listOf(1, 1, 1_048_577, 1_048_577, 50, 1, 0))
+        assertCohort("Mixed", listOf(1, 2, 131_073, 131_073, 40, 0, 0))
+    }
+
     @Test(timeout = 30_000)
     fun pipelineReadinessIsMeasuredBeforeAndAfterStorageRevalidationAndIncludesActualFutureWait() {
         val configAssets = configAssetsOrSkip()
@@ -421,6 +465,13 @@ class ForeverClientUpdaterTest {
             assertTrue(summary.contains("sourceWaitCount=") &&
                 summary.substringAfter("sourceWaitCount=").substringBefore(' ').toLong() > 0L)
             assertTrue(summary.contains("sourceWaitMaxMs="))
+            assertTrue(summary.contains("cohortSmallCallbacks=") &&
+                summary.substringAfter("cohortSmallCallbacks=").substringBefore(' ').toLong() > 0L)
+            assertTrue(summary.contains("cohortSmallUsefulBytes=") &&
+                summary.substringAfter("cohortSmallUsefulBytes=").substringBefore(' ').toLong() > 0L)
+            assertTrue(summary.contains("cohortSmallCallbackNanos=") &&
+                summary.substringAfter("cohortSmallCallbackNanos=").substringBefore(' ').toLong() > 0L)
+            assertTrue(summary.contains("cohortMixedFailures=") && summary.contains("cohortLargeZeroUseful="))
             assertTrue(summary.contains("reservedKeys=0 reservedBytes=0"))
             assertNoLiveFetchWorkers("controlled readiness run")
         }

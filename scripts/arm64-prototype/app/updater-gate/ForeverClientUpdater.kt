@@ -51,8 +51,19 @@ private val DEFAULT_UPDATER_FETCH_BATCH: UpdaterFetchBatch = { records, work, ca
 }
 
 /** Bounded, aggregate-only timings for the sourceless fetch executor. */
-private class FetchPipelineDiagnostics {
+internal class FetchPipelineDiagnostics {
     private val logger = Logger.getLogger("ForeverClientUpdate")
+    private class CohortCounters(
+        val callbacks: AtomicLong = AtomicLong(),
+        val objects: AtomicLong = AtomicLong(),
+        val encodedBytes: AtomicLong = AtomicLong(),
+        val usefulBytes: AtomicLong = AtomicLong(),
+        val callbackNanos: AtomicLong = AtomicLong(),
+        val failures: AtomicLong = AtomicLong(),
+        val zeroUseful: AtomicLong = AtomicLong(),
+    )
+    private val cohortNames = listOf("Small", "Medium", "Large", "Mixed")
+    private val cohorts = Array(cohortNames.size) { CohortCounters() }
     private val batchGroups = AtomicLong()
     private val batchHistogram = AtomicLongArray(ForeverClientUpdateTransfer.MAX_BATCH_OBJECTS + 1)
     private val singles = AtomicLong()
@@ -120,6 +131,36 @@ private class FetchPipelineDiagnostics {
         callbacksCompleted.incrementAndGet()
     }
 
+    /** Concurrent fetch service time, excluding future publication; not wall-clock throughput. */
+    fun cohortCompleted(records: List<ForeverClientUpdateCatalog.ObjectRecord>, fetchedBytes: List<Long>, durationNanos: Long) {
+        val index = cohortIndex(records)
+        val counters = cohorts[index]
+        val usefulBytes = fetchedBytes.sumOf { it.coerceAtLeast(0L) }
+        counters.callbacks.incrementAndGet()
+        counters.objects.addAndGet(records.size.toLong())
+        counters.encodedBytes.addAndGet(records.sumOf { it.encodedSize })
+        counters.usefulBytes.addAndGet(usefulBytes)
+        counters.callbackNanos.addAndGet(durationNanos.coerceAtLeast(0L))
+        if (usefulBytes == 0L) counters.zeroUseful.incrementAndGet()
+    }
+
+    fun cohortFailed(records: List<ForeverClientUpdateCatalog.ObjectRecord>) {
+        // Failed and cancelled fetches contribute no successful bytes or service time.
+        cohorts[cohortIndex(records)].failures.incrementAndGet()
+    }
+
+    private fun cohortIndex(records: List<ForeverClientUpdateCatalog.ObjectRecord>): Int {
+        val small = records.all { it.encodedSize <= 65_536L }
+        val medium = records.all { it.encodedSize > 65_536L && it.encodedSize <= 1_048_576L }
+        val large = records.all { it.encodedSize > 1_048_576L }
+        return when {
+            small -> 0
+            medium -> 1
+            large -> 2
+            else -> 3
+        }
+    }
+
     /** Counters use one per-entry state lock: completion and resolution cannot double count. */
     fun registered() { outstandingKeys.incrementAndGet() }
     fun completeReady(state: AtomicInteger, future: CompletableFuture<File>, file: File) {
@@ -180,7 +221,17 @@ private class FetchPipelineDiagnostics {
                     "reserveTotalMs=${reserveNanos.get() / 1_000_000} reserveBudgetWaitMs=${reserveWaitNanos.get() / 1_000_000} " +
                     "reserveInheritedRetireMs=${reserveRetireNanos.get() / 1_000_000} " +
                     "sourceConsumedRawMs=${sourceConsumedRawNanos.get() / 1_000_000} " +
-                     ForeverClientUpdateTransfer.diagnosticSnapshot(),
+                    cohortNames.mapIndexed { index, name ->
+                        val cohort = cohorts[index]
+                        "cohort${name}Callbacks=${cohort.callbacks.get()} " +
+                            "cohort${name}Objects=${cohort.objects.get()} " +
+                            "cohort${name}EncodedBytes=${cohort.encodedBytes.get()} " +
+                            "cohort${name}UsefulBytes=${cohort.usefulBytes.get()} " +
+                            "cohort${name}CallbackNanos=${cohort.callbackNanos.get()} " +
+                            "cohort${name}Failures=${cohort.failures.get()} " +
+                            "cohort${name}ZeroUseful=${cohort.zeroUseful.get()}"
+                    }.joinToString(" ") + " " +
+                    ForeverClientUpdateTransfer.diagnosticSnapshot(),
             )
         } catch (diagnosticFailure: Exception) {
             // Diagnostics must never affect fetching, checkpointing, or teardown.
@@ -1912,6 +1963,7 @@ class ForeverClientUpdater(
                     val submittedAtNanos = System.nanoTime()
                     executor.execute {
                         val callbackStartedAtNanos = fetchPipelineDiagnostics.callbackStarted(submittedAtNanos)
+                        var cohortOutcomeRecorded = false
                         try {
                             val fetched = batchFetch.invoke(records, paths.objects, workerCancelled) { key, bytes ->
                                 val index = positions[key.lowercase(Locale.ROOT)]
@@ -1919,11 +1971,18 @@ class ForeverClientUpdater(
                                 reportMemberProgress(records[index], entries[index].fetchedBytes, bytes, offsets[index])
                             }
                             if (fetched.size != entries.size) throw IllegalStateException("archive batch returned the wrong member count")
-                             fetched.forEachIndexed { index, file ->
+                            fetchPipelineDiagnostics.cohortCompleted(
+                                records,
+                                entries.map { it.fetchedBytes.get() },
+                                (System.nanoTime() - callbackStartedAtNanos).coerceAtLeast(0L),
+                            )
+                            cohortOutcomeRecorded = true
+                            fetched.forEachIndexed { index, file ->
                                 fetchPipelineDiagnostics.completeReady(entries[index].diagnosticState, entries[index].future, file)
                                 fetchReadyForTests?.invoke(records[index].ekey)
-                             }
+                            }
                         } catch (failure: Throwable) {
+                            if (!cohortOutcomeRecorded) fetchPipelineDiagnostics.cohortFailed(records)
                             entries.forEach { it.future.completeExceptionally(failure) }
                         } finally {
                             fetchPipelineDiagnostics.callbackFinished(callbackStartedAtNanos)
@@ -1935,11 +1994,19 @@ class ForeverClientUpdater(
                         val submittedAtNanos = System.nanoTime()
                         executor.execute {
                             val callbackStartedAtNanos = fetchPipelineDiagnostics.callbackStarted(submittedAtNanos)
+                            var cohortOutcomeRecorded = false
                             try {
                                 val file = worker(records[index], entry.fetchedBytes)
+                                fetchPipelineDiagnostics.cohortCompleted(
+                                    listOf(records[index]),
+                                    listOf(entry.fetchedBytes.get()),
+                                    (System.nanoTime() - callbackStartedAtNanos).coerceAtLeast(0L),
+                                )
+                                cohortOutcomeRecorded = true
                                 fetchPipelineDiagnostics.completeReady(entry.diagnosticState, entry.future, file)
                                 fetchReadyForTests?.invoke(records[index].ekey)
                             } catch (failure: Throwable) {
+                                if (!cohortOutcomeRecorded) fetchPipelineDiagnostics.cohortFailed(listOf(records[index]))
                                 entry.future.completeExceptionally(failure)
                             } finally {
                                 fetchPipelineDiagnostics.callbackFinished(callbackStartedAtNanos)

@@ -526,6 +526,39 @@ variación temporal de red.
 Artefactos externos: `coalesced/{summary,analysis,steady-pipeline}.json`, checkpoints,
 `updater-filtered.log`, `coalesced-comparison.json`; pipeline completo/exit 0.
 
+## Instrumentación mínima para la comparación por tamaño
+
+Se añaden cuatro cohortes fijas de callbacks: todos los miembros pequeños,
+todos intermedios, todos grandes o **mixto**, sin imputar un grupo mixto a una
+categoría pura. Cada una conserva siete contadores acotados: éxitos, objetos,
+bytes encoded declarados, bytes útiles de progreso, nanosegundos de servicio,
+fallos/cancelaciones y éxitos sin bytes útiles. Se capturan antes de publicar los
+futuros, cuando las entradas todavía no pueden ser retiradas por el writer.
+
+El servicio termina al retornar el fetch, antes de publicar futuros: sus relojes
+son concurrentes, no throughput global, ocupación exacta ni tiempo wire. Los bytes
+útiles conservan la contabilidad existente: máximo del progreso descontando el
+prefijo inicial, sin sumar reuso ni duplicaciones de reintento. Fallos no aportan
+bytes/servicio exitoso; deben declararse al comparar intervalos. Los campos de un
+snapshot son atómicos individualmente, no un vector transaccional; sus fronteras
+siguen censuradas por callbacks concurrentes.
+
+**Cuatro pruebas focales PASS**, cero errores/fallos/skips, JUnit 17:29:05 UTC,
+Gradle offline JDK 17 en 3 min 37 s: contadores puros/mixtos/reuso/fallo, wiring de
+readiness, batch contiguo y cancelación/join. La copia probada coincide con el
+repositorio: updater SHA-256
+`5d29e6664c2e7d4e71743190522ba682f2d95b54a12abcdf07b7ee721946e4dc`, test
+`280ef7cf190fc5e344a2882fb2582b64f70e9a89b8d1c0a89b3b3e2aa8144f77`.
+Máxima línea observada 1.860 bytes UTF-8, dentro del límite de log Android. Los
+intentos anteriores de la copia externa no se aceptan como prueba: contenían el
+test por error bajo `src/main`; se diagnosticó y corrigió antes del run válido.
+
+No cambia la estrategia C155. La revisión independiente de esa concurrencia y sus
+diez regresiones sigue vigente; el nuevo intento de revisar únicamente métricas
+no pudo ejecutarse por indisponibilidad del modelo. El diff diagnóstico y las
+cuatro pruebas nuevas se verificaron en el proceso principal, sin atribuirles una
+revisión independiente que no ocurrió. Evidencia: `cohort-focused-tests/` externo.
+
 ## Pendiente
 
 Completar el desglose por tamaño con idéntica instrumentación y auditar el resultado.

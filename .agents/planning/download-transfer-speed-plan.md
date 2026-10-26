@@ -164,6 +164,12 @@ resuelva ninguna de ellas. Se investiga primero el componente dominante actual.
 
 ## Open Issues
 
+- Desglose agregado implementado sin cambiar la estrategia: cuatro cohortes,
+  siete contadores cada una, capturados antes de publicar futuros. Cuatro checks
+  focales verdes y hashes iguales al repositorio; service concurrente no se llama
+  throughput global. Se prepararán C156 de referencia (algoritmo C152) y C157
+  optimizada (algoritmo C155), con exactamente el mismo delta instrumental,
+  fuentes/inputs cotejados y APK auditada antes de cada ensayo preservador.
 - C155 terminó 17:07:37 UTC en pausa, checkpoint 435.310 válido y cero trabajo
   activo. Ventana visible 615,474 s: 2,266 MB/s frente a 1,939 de C152, +16,90 %
   observado; pressure-tail singles 118 frente a 7.900 de C154. **No basta para
