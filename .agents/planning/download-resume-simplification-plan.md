@@ -229,6 +229,13 @@ rediseño del stream de entrada ni se debilitan garantías.
 - Se difiere compilar la instantánea pequeña C150 ya reconstruida (no instalada).
   La candidata del refactor tendrá una reconstrucción autenticada fresca y recibo
   propio; no se modifica ni reutiliza como si fuera actual el árbol congelado anterior.
+- Implementación `fba5ac8` y revisión de captura concluidas: once focales únicos
+  aprobados, incluidos 300 frames, cola incompleta/cancelación y barreras de ACK/
+  `cpByteEnd`; fuentes reales cotejadas con las compiladas. No se repiten los checks
+  ya verdes ni se presenta la revisión como acceso independiente al repositorio.
+  C151 (`3ca861a`) identifica ambos cambios, con postimages exactas revisadas y
+  cinco tests de reconstrucción/identidad aprobados. Reconstrucción/auditoría y
+  medida física completa aún pendientes; no se declara mejora Android por estos tests.
 
 - Registrar versión/hash, dispositivo/destino, build/catálogo, tamaño del prefijo,
   cachés frías/calientes, red compartida, objetos/tamaños, bytes útiles y reintentos.
@@ -412,8 +419,8 @@ rediseño del stream de entrada ni se debilitan garantías.
   previo a filtros, con fallback intacto. Se reprodujo y corrigió una clasificación
   desplazada; tres focales legacy/cancelación/solapamiento pasan con fuentes finales
   cotejadas. Revisión independiente de la captura final sin hallazgos, sin atribuirle
-  acceso al repositorio ni ejecución de tests. C150 local diferenciada medirá el
-  efecto completo tras reconstrucción/auditoría. Su primera instantánea pequeña se
+  acceso al repositorio ni ejecución de tests. La candidata combinada C151 medirá el
+  efecto completo tras reconstrucción/auditoría. La instantánea pequeña C150 se
   conserva sin compilar; tras la nueva aprobación se integrará el refactor de
   lectores con un recibo fresco. Todavía no hay una mejora física de esos cambios.
 - La extensión de lotes a otros lectores requiere preservar CRC/layout/ordinales,

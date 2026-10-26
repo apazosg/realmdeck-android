@@ -671,7 +671,49 @@ más de 256 frames y fallos con cola incompleta, además de revisión independie
 La instantánea pequeña C150 se reconstruyó/autenticó una vez, sin compilar ni
 instalar. Su recibo y árbol se conservan congelados; se pospone esa APK intermedia
 para medir ambos cambios juntos después de una reconstrucción autenticada fresca.
-La ampliación está aprobada, **no implementada ni acreditada todavía en Android**.
+La ampliación ya está implementada y verificada localmente; **todavía no está
+acreditada en Android**.
+
+### Lectores por lotes: implementación y barreras verificadas
+
+`fba5ac8` agrupa únicamente la admisión de metadatos de los tres lectores del
+checkpoint, con lotes locales de hasta 256 registros. CRC/tipo y límites se
+comprueban antes de almacenar cada frame; cada resultado autoritativo se contrasta
+con su EKey/CKey/tamaños y ordinal, conservando la detección global de duplicados.
+La entrada del writer sigue siendo escalar: no se anticipan 256 objetos bajo la
+cota raw de 34 claves/1 GiB. La fila admitida actual de `c823708` se conserva.
+
+La carga valida todos los pendientes **antes** de truncar una cola incompleta,
+finalizar o reparar. El verificador respeta `cpByteEnd`, crypto y bindings frescos
+por grupo. El ACK del grupo anterior espera la admisión de metadatos del primer
+registro siguiente, como antes; la crypto del siguiente solo condiciona el ACK
+de su propio grupo. No se revoca ni se adelanta una confirmación por agrupar SQL.
+
+**Once focales únicos aprobados** entre las ejecuciones retenidas, no toda la suite:
+equivalencia escalar/bulk con 300 frames y duplicado entre lotes; metadata inválida
+y cancelación antes de reparar una cola incompleta, seguida de reparación válida;
+primera metadata del grupo siguiente inválida sin ACK previo; retiro exacto por
+grupo; checkpoint creciente y reemplazo de inodo; caminos legacy y reanudación
+con dieciséis parciales. Los últimos tres tests dieron cero fallos/errores/omitidos
+(XML 2026-10-26T07:08:43): el fixture corregido, el caso de cola incompleta ampliado
+y la nueva barrera de grupo, sin relanzar los demás verdes. Se ajustó la declaración
+de las dos claves que el fixture quería retirar en modo exacto, no la política de
+ACK de producción. También se
+actualizó una aserción de diagnóstico: los lectores ahora prueban llamadas bulk
+en lugar de exigir fallbacks escalares. Se retuvieron los fallos y su diagnóstico.
+
+Revisión semántica independiente del código capturado, sin hallazgos accionables;
+no tuvo acceso a filesystem ni ejecutó pruebas. El responsable leyó el diff real,
+comprobó los cuatro hashes contra las fuentes compiladas y verificó el staged
+snapshot antes de commit. Logs y XML permanecen en
+`work/checkpoint-readers-refactor-20261026`, fuera del repositorio.
+
+La candidata combinada será **C151 / `0.2.127-checkpoint-readers-test`** (`3ca861a`):
+postimages de Casc/CascTest actualizadas solo a los hashes revisados, con preimages
+históricas, inputs externos y native/privacy pins intactos. Cinco focales Python de
+identidad, staging y rechazo de preimage ajena pasan. Faltan su reconstrucción,
+auditoría exacta y medida del recorrido completo; estos checks no demuestran todavía
+una reducción del tiempo de Android.
 
 ### Retención de evidencia
 
@@ -688,5 +730,5 @@ C148 se guarda en `work/download-resume-c148-20261025/physical-trial`, no en `/t
 |---|---|---|
 | Menor preparación al iniciar/reanudar | Menos trabajo host; C149 completa 860,836/1.225,989 s frente a 948,398/1.453,953 s C148 | Aún 14/20 minutos; siguiente optimización local y medida completa pendientes, sin extrapolaciones |
 | Primera pulsación efectiva, sin repetir | Flujo físico 3/1 acciones; C149 reanuda y reabre UI con el mismo proceso/servicio, sin reconfirmar ni duplicar | Verificar que la siguiente candidata conserve el resultado; sin medida subsegundo ni doble toque deliberado |
-| Garantías intactas | Reviews/focales y procedencia/clasificación del objeto actual verificadas; checkpoint recuperado y pausa normal; cuatro guardas conservadas | Probar y revisar las nuevas barreras de los lectores antes de candidata; no se ejecutó toda la suite |
+| Garantías intactas | Reviews/focales de la fila actual y de los lectores, recuperación/tail/ACK/cpByteEnd probados; cuatro guardas conservadas | Auditoría y prueba física de la candidata combinada; no se ejecutó toda la suite |
 | Entrega versionada y honesta | Baseline y C147–C149 auditadas/instaladas/probadas sin reset; artefactos externos; pausa final y cero servicios | Completar nuevo ajuste y auditoría final del objetivo, no cerrar por ahorro aislado |
