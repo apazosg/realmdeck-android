@@ -137,6 +137,62 @@ resuelva ninguna de ellas. Se investiga primero el componente dominante actual.
 - Terminar cada ensayo mediante pausa cooperativa y comprobar progreso retenido
   y ausencia de trabajo de red/updater activo. No sustituir pausa por un kill.
 
+### Revisión metodológica: descarga mixta y camino crítico (pendiente de aprobación)
+
+El usuario pide medir más tiempo y recuerda que pequeños y grandes convivirán.
+La prueba principal será **mixta, sobre el recorrido real**, no la suma de pruebas
+puras ni una mejora de una clase que perjudique al conjunto. Los controles aislados
+solo se usarán para distinguir hipótesis concretas.
+
+1. **Autoridad y carga.** Usar el catálogo activo admitido de `1.60.1.70532`, no el
+   asset bootstrap `1.60.1.70425`. Ya se copió en lectura, con la app idle, cotejando
+   receipt/target/tamaño/SHA-256; los 9.344 y 9.857 frames nuevos C156/C157 coinciden
+   exactamente con sus prefijos físicos activos. Al checkpoint 454.511, el siguiente
+   prefijo de 20.000 contiene 16.010 pequeños, 3.747 intermedios y 243 grandes,
+   1.484.255.557 bytes encoded. Es una previsión de orden, no de tiempo ni bytes red.
+   Es un tramo `range`, no representación suficiente por sí solo del tráfico
+   `direct` posterior; no se prometerá cobertura global basándose en ese tramo.
+2. **Instrumentación, no tuning.** Mantener la estrategia actual. Añadir solo
+   estados/contadores acotados en updater/transfer: muestreo de pared de 1 Hz con
+   progreso lógico exacto, callbacks/HTTP activos, reserva y ready-ahead, espera
+   real de la cabeza y su tamaño; actividad de cabeceras, lectura, IO privado,
+   autenticación, publicación y callback de progreso. Registrar bytes consumidos
+   del cuerpo HTTP (incluidos reintentos) separados de progreso útil/reuso; no
+   llamarlos bytes wire ni sumar relojes concurrentes. Acumular espera de cabeza
+   por tamaño; costes compartidos de batches mixtos permanecen compartidos.
+   Sin telemetría por objeto masiva, tipos DEX auxiliares, dependencias ni opciones.
+3. **Calibración focal.** Verificar que una espera conocida de futuro/lectura se
+   observa en la categoría correcta y que excepciones/cancelación dejan contadores
+   activos a cero y el sampler parado. Reutilizar latches/fixtures existentes, sin
+   matrices de tests ni volver a correr los diez checks históricos sin motivo.
+   Revisar de forma independiente la concurrencia diagnóstica y auditar la APK
+   exacta con el auditor intacto antes de instalarla conservando el cliente.
+4. **Diagnóstico mixto prolongado.** Ventana prefijada de **1.200 s de payload
+   visible**, excluyendo preparación, subventanas de 120 s y umbral de pausa de
+   6 GiB de progreso nuevo. El primer umbral alcanzado causa pausa cooperativa,
+   no un corte destructivo; el drenaje conserva las cotas existentes de raws.
+   Alcanzar el umbral de datos antes de tiempo deja una ventana censurada, no prueba de estabilidad de
+   veinte minutos. Capturar mezcla real, tamaños/percentiles, origen range/direct,
+   CPU/IO legibles y temperatura sin tocar seguridad ni datos del juego. Si una
+   clase/origen no aparece suficientemente, queda explícitamente sin validar.
+5. **Predicciones antes de cambios.** Distinguir cabeza pendiente con ready-ahead
+   (bloqueo ordenado), cabeza pendiente sin fuentes listas y HTTP en lectura/cabeceras
+   (espera de transporte/fuente), reserva llena sin espera de cabeza (consumidor/
+   commit) y actividad de auth/progreso/IO. Son señales que pueden coexistir, no
+   una partición causal automática ni prueba de limitación CDN. Elegir el coste
+   dominante solo después de correlacionar tiempo de pared, bytes y sus relojes.
+6. **Control discriminante y A/B.** Antes de optimizar, fijar un control capaz de
+   descartar la hipótesis seleccionada. Si hace falta replay mixto en scratch,
+   proponer primero su aislamiento, manifiesto fijo autenticado, orden/tamaños/
+   agrupación, frío/caliente y límites; no inventar autoridad de catálogo ni
+   modificar el checkpoint real. No implementar todavía otro harness o controles
+   que omitan verificaciones. La comparación final requiere carga equivalente y
+   evaluar el conjunto y cada tamaño/origen, no declarar éxito con el +17 % previo.
+
+Esta revisión no modifica los cinco criterios ni autoriza nuevas cuotas, otro
+orden o contratos. El trabajo ya verificado permanece verificado. **Solo está
+completado el punto 1; no se ejecutarán los nuevos puntos hasta aprobar el diseño.**
+
 ### Aceptación y validación
 
 - Línea base actual y comparación posterior con categorías pequeñas/grandes,
@@ -176,6 +232,10 @@ resuelva ninguna de ellas. Se investiga primero el componente dominante actual.
 
 ## Open Issues
 
+- Pendiente aprobar la revisión de método anterior: observación acotada del camino
+  crítico y diagnóstico mixto de veinte minutos antes de otro tuning; replay solo
+  si una hipótesis lo necesita y con diseño específico previo. No hay descarga ni
+  build nuevos activos. La caracterización de catálogo fue solo lectura.
 - **Diagnóstico reabierto; no más ajustes heurísticos antes de aislar el cuello.**
   El usuario cuestiona representatividad y si los cambios atacan el coste dominante.
   C157 terminó 19:41:11 UTC, pausada, checkpoint 454.511 válido y cero trabajo:

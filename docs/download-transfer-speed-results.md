@@ -723,6 +723,39 @@ predicción y un experimento que pueda descartarla antes de cambiar código.
 Se justificará primero cómo lograrlo conservando progreso y límites, sin montar
 un framework ni ejecutar automáticamente otro ensayo por tener más presupuesto.
 
+## Fuente activa y representatividad: revisión de solo lectura
+
+El 20:14:22–20:14:43 UTC se leyó el receipt dinámico activo de C157 y se copió
+solo su catálogo/target, no payload del cliente. App instalada 157, cero servicios
+updater antes/después, ningún guest observado, cero acciones UI ni descarga.
+Checksum del envelope, identidad `1.60.1.70532`, tamaño 99.770.368 bytes y SHA-256
+`cf2da57cc3523238cfc70a8b7c773f92454b58fe83af7f01d5044414c125b032`
+coinciden; el receipt permaneció idéntico durante la copia.
+
+| Clase del catálogo activo | Objetos | % objetos | % bytes encoded | Mediana encoded | P99 encoded |
+|---|---:|---:|---:|---:|---:|
+| Pequeña | 938.288 | 81,95 | 17,24 | 11.283 | 62.870 |
+| Intermedia | 191.363 | 16,71 | 46,93 | 122.686 | 977.781 |
+| Grande | 15.327 | 1,34 | 35,83 | 1.576.355 | 8.690.262 |
+
+El objeto mayor es de 141.273.036 bytes. Los grandes se reparten entre 10.386
+`range` y 4.941 `direct`: medir unos pocos grandes de ~1,4 MB en un tramo range
+no cubre automáticamente los grandes direct ni la cola de tamaños. Debe evaluarse
+la mezcla tanto por objetos como por bytes, además de su contigüidad real.
+
+Con **este catálogo activo**, todos los nuevos frames C156/C157 coinciden en orden
+con sus respectivos prefijos no checkpointed: 9.344/9.857 comparaciones completas,
+sin mismatch. El anterior forecast basado en el asset bootstrap se descarta.
+Al checkpoint 454.511, los siguientes 20.000 objetos físicos contienen
+16.010 pequeños/280.005.673 bytes, 3.747 intermedios/862.538.415 y
+243 grandes/341.711.469. No predice duración, bytes útiles de red o cobertura direct
+ni permite ejecutar otra ventana sin comprobar que el estado sigue igual.
+
+Artefactos externos: `download-controlled-method-20261026/active-catalog/` y
+`catalog-characterization.json`. Las consultas usan main read-only y tablas TEMP
+en memoria, sin modificar el catálogo. Estos datos sustentan el diseño mixto
+prolongado pendiente de aprobación en el plan, no una nueva mejora medida.
+
 ## Matriz de aceptación del objetivo
 
 | Criterio | Evidencia y estado |
