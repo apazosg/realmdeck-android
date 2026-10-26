@@ -857,14 +857,18 @@ class ForeverClientUpdater(
         val record = catalog.objectByKey(ekey)
         return IndexedValue(
             archiveOrder.ordinalOf(record.ekey),
-            ForeverCasc.IncrementalObjectSpec(
-                record.ekey.lowercase(Locale.ROOT),
-                record.contentKey.lowercase(Locale.ROOT),
-                record.encodedSize,
-                record.decodedSize,
-            ),
+            incrementalSpec(record),
         )
     }
+
+    private fun incrementalSpec(
+        record: ForeverClientUpdateCatalog.ObjectRecord,
+    ): ForeverCasc.IncrementalObjectSpec = ForeverCasc.IncrementalObjectSpec(
+        record.ekey.lowercase(Locale.ROOT),
+        record.contentKey.lowercase(Locale.ROOT),
+        record.encodedSize,
+        record.decodedSize,
+    )
 
     private fun buildPlan(
         destination: ForeverClientUpdateDestination,
@@ -1254,11 +1258,28 @@ class ForeverClientUpdater(
     private class Prefetched(
         val spec: ForeverCasc.IncrementalObjectSpec,
         val record: ForeverClientUpdateCatalog.ObjectRecord,
+        val ordinal: Int,
         val fetchedBytes: AtomicLong,
         val future: CompletableFuture<File>,
     ) {
         val diagnosticState = AtomicInteger(0) // 0 pending, 1 ready, 2 resolved
     }
+
+    private data class ProducerObject(
+        val record: ForeverClientUpdateCatalog.ObjectRecord,
+        val ordinal: Int,
+    )
+
+    private data class BareCheckpointObject(
+        val spec: ForeverCasc.IncrementalObjectSpec,
+        val record: ForeverClientUpdateCatalog.ObjectRecord,
+        val ordinal: Int,
+    )
+
+    private data class StagedMembership(
+        val ekey: String,
+        val membership: IndexedValue<ForeverCasc.IncrementalObjectSpec>,
+    )
 
     private object PrefetchEnd
 
@@ -1831,14 +1852,16 @@ class ForeverClientUpdater(
                 fetchPipelineDiagnostics.reserveRetireNanos.addAndGet(System.nanoTime() - retireStarted)
                 return true
             }
-            fun submitReserved(records: List<ForeverClientUpdateCatalog.ObjectRecord>) {
-                if (records.isEmpty()) return
-                val entries = records.map { record ->
+            fun submitReserved(objects: List<ProducerObject>) {
+                if (objects.isEmpty()) return
+                val records = objects.map { it.record }
+                val entries = objects.map { source ->
+                    val record = source.record
                     val spec = ForeverCasc.IncrementalObjectSpec(
                         record.ekey.lowercase(Locale.ROOT), record.contentKey.lowercase(Locale.ROOT),
                         record.encodedSize, record.decodedSize,
                     )
-                    Prefetched(spec, record, AtomicLong(0L), CompletableFuture())
+                    Prefetched(spec, record, source.ordinal, AtomicLong(0L), CompletableFuture())
                 }
                 entries.forEach { fetchPipelineDiagnostics.registered() }
                 synchronized(progressLock) { records.forEach { inFlight[it.ekey] = 0L } }
@@ -1930,31 +1953,32 @@ class ForeverClientUpdater(
                 fetchPipelineDiagnostics.reserveNanos.addAndGet(System.nanoTime() - reserveStarted)
                 if (tearingDown.get()) throw CancellationException("client update was paused or cancelled")
             }
-            fun requestAndSubmitSingle(record: ForeverClientUpdateCatalog.ObjectRecord) {
+            fun requestAndSubmitSingle(objectToSubmit: ProducerObject) {
+                val record = objectToSubmit.record
                 reserveForSingle(record)
-                submitReserved(listOf(record))
+                submitReserved(listOf(objectToSubmit))
             }
-            fun submitReservedGroup(records: List<ForeverClientUpdateCatalog.ObjectRecord>) {
+            fun submitReservedGroup(objects: List<ProducerObject>) {
                 var next = 0
-                while (next < records.size) {
+                while (next < objects.size) {
                     val prefixStart = next
-                    while (next < records.size && reserveImmediately(records[next])) next++
+                    while (next < objects.size && reserveImmediately(objects[next].record)) next++
 
                     if (next == prefixStart) {
                         // With no immediately reservable prefix, block only for
                         // the first remaining member. Then opportunistically
                         // reserve its contiguous successors before submission;
                         // never wait while holding an unscheduled partial group.
-                        reserveForSingle(records[next])
+                        reserveForSingle(objects[next].record)
                         next++
-                        while (next < records.size && reserveImmediately(records[next])) next++
+                        while (next < objects.size && reserveImmediately(objects[next].record)) next++
                     }
 
                     val reservedCount = next - prefixStart
-                    if (reservedCount == 1 && next < records.size && batchFetch != null) {
+                    if (reservedCount == 1 && next < objects.size && batchFetch != null) {
                         fetchPipelineDiagnostics.pressureTailSingles(1)
                     }
-                    submitReserved(records.subList(prefixStart, next))
+                    submitReserved(objects.subList(prefixStart, next))
                 }
             }
             val producer = Thread {
@@ -2045,7 +2069,7 @@ class ForeverClientUpdater(
                                 }
 
                                 var ordinal = 0
-                                val candidates = ArrayList<ForeverClientUpdateCatalog.ObjectRecord>(ForeverClientUpdateTransfer.MAX_BATCH_OBJECTS)
+                                val candidates = ArrayList<ProducerObject>(ForeverClientUpdateTransfer.MAX_BATCH_OBJECTS)
                                 var candidateBytes = 0L
                                 fun flushCandidates() {
                                     if (candidates.isEmpty()) return
@@ -2061,6 +2085,7 @@ class ForeverClientUpdater(
                                         if (ordinal >= archiveOrder.objectCount.toInt()) {
                                             throw IllegalStateException("archive-order producer exceeded the admitted target count")
                                         }
+                                        val sourceOrdinal = ordinal++
                                         val ekey = record.ekey.lowercase(Locale.ROOT)
                                         evictable.remove(ekey)
                                         val spec = ForeverCasc.IncrementalObjectSpec(
@@ -2069,7 +2094,7 @@ class ForeverClientUpdater(
                                             record.encodedSize,
                                             record.decodedSize,
                                         )
-                                        if (checkpointed[ordinal]) {
+                                        if (checkpointed[sourceOrdinal]) {
                                             flushCandidates()
                                             if (overlap != null) {
                                                 // Pre-registration above covers
@@ -2088,20 +2113,20 @@ class ForeverClientUpdater(
                                                 // staged-copy proof could free
                                                 // the inherited quota safely.
                                             }
-                                            if (overlap != null || ekey !in earlyCheckpointedRawKeys) emit(spec)
-                                            ordinal++
+                                            if (overlap != null || ekey !in earlyCheckpointedRawKeys) {
+                                                emit(BareCheckpointObject(spec, record, sourceOrdinal))
+                                            }
                                             return@forEach
                                         }
                                         if (record.sourceKind != "range" ||
                                             record.encodedSize > ForeverClientUpdateTransfer.MAX_BATCH_BYTES
                                         ) {
                                             flushCandidates()
-                                            requestAndSubmitSingle(record)
-                                            ordinal++
+                                            requestAndSubmitSingle(ProducerObject(record, sourceOrdinal))
                                             return@forEach
                                         }
                                         if (candidates.isNotEmpty()) {
-                                            val previous = candidates.last()
+                                            val previous = candidates.last().record
                                             val contiguous = previous.sourceKind == "range" &&
                                                 previous.sourceHash.equals(record.sourceHash, true) &&
                                                 Math.addExact(previous.sourceOffset, previous.encodedSize) == record.sourceOffset
@@ -2110,9 +2135,8 @@ class ForeverClientUpdater(
                                                 flushCandidates()
                                             }
                                         }
-                                        candidates += record
+                                        candidates += ProducerObject(record, sourceOrdinal)
                                         candidateBytes = Math.addExact(candidateBytes, record.encodedSize)
-                                        ordinal++
                                         if (candidates.size == ForeverClientUpdateTransfer.MAX_BATCH_OBJECTS ||
                                             candidateBytes == ForeverClientUpdateTransfer.MAX_BATCH_BYTES
                                         ) flushCandidates()
@@ -2168,13 +2192,25 @@ class ForeverClientUpdater(
             var resolvedSources = 0L
             val sourceDiagnostics = Logger.getLogger("ForeverClientUpdate")
             var pipelineOutcome = "failed"
+            val stagedMembership = AtomicReference<StagedMembership?>()
+            val stagedMembershipHits = AtomicLong()
+            val stagedMembershipFallbacks = AtomicLong()
             try {
                 val specs = sequence {
                     while (true) {
                         when (val next = nextEntry()) {
                             is Prefetched -> {
                                 pending[next.spec.ekey] = next
-                                yield(next.spec)
+                                val staged = StagedMembership(
+                                    next.spec.ekey.lowercase(Locale.ROOT),
+                                    IndexedValue(next.ordinal, incrementalSpec(next.record)),
+                                )
+                                stagedMembership.set(staged)
+                                try {
+                                    yield(next.spec)
+                                } finally {
+                                    stagedMembership.compareAndSet(staged, null)
+                                }
                             }
                             // Checkpoint-committed specs travel bare: the writer
                             // consumes them from its staged output without a fetch.
@@ -2193,6 +2229,22 @@ class ForeverClientUpdater(
                             // group order), so no bare-yield retirement. The
                             // verifier's group ack retires registered leftover
                             // raws and decrements instead.
+                            is BareCheckpointObject -> {
+                                val staged = StagedMembership(
+                                    next.spec.ekey.lowercase(Locale.ROOT),
+                                    IndexedValue(next.ordinal, incrementalSpec(next.record)),
+                                )
+                                stagedMembership.set(staged)
+                                try {
+                                    yield(next.spec)
+                                } finally {
+                                    stagedMembership.compareAndSet(staged, null)
+                                }
+                                if (overlap == null) {
+                                    retireOwnedLeftoverRaw(paths.objects, budget, next.spec.ekey)
+                                    outstandingBare.decrementAndGet()
+                                }
+                            }
                             is ForeverCasc.IncrementalObjectSpec -> {
                                 yield(next)
                                 if (overlap == null) {
@@ -2328,7 +2380,16 @@ class ForeverClientUpdater(
                     overlapCoordinator = overlap,
                     commitFlushRequest = budget.commitFlushRequest,
                     targetObjectCount = archiveOrder.objectCount.toInt(),
-                    targetMembership = { key -> archiveTargetMembership(archiveOrder, key) },
+                    targetMembership = { key ->
+                        val staged = stagedMembership.get()
+                        if (staged != null && staged.ekey == key.lowercase(Locale.ROOT)) {
+                            stagedMembershipHits.incrementAndGet()
+                            staged.membership
+                        } else {
+                            stagedMembershipFallbacks.incrementAndGet()
+                            archiveTargetMembership(archiveOrder, key)
+                        }
+                    },
                 )
                 pipelineOutcome = "complete"
                 result
@@ -2369,7 +2430,12 @@ class ForeverClientUpdater(
                     }
                     budget.reset()
                 } finally {
+                    stagedMembership.set(null)
                     fetchPipelineDiagnostics.log(pipelineOutcome, committedObjects.get(), budget.snapshot())
+                    sourceDiagnostics.info(
+                        "CASC target membership stagedHits=${stagedMembershipHits.get()} " +
+                            "fallbacks=${stagedMembershipFallbacks.get()}",
+                    )
                 }
             }
         }

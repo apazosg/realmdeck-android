@@ -13,6 +13,10 @@ import java.util.concurrent.atomic.AtomicLong
 import java.util.UUID
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.CopyOnWriteArrayList
+import java.util.logging.Handler
+import java.util.logging.LogRecord
+import java.util.logging.Logger
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
@@ -906,9 +910,11 @@ class ForeverClientUpdaterTest {
             val paths = fixture.makePaths()
             val destination = fixture.destination(paths)
             val fetches = AtomicInteger(0)
+            val fetchedEkeys = java.util.Collections.synchronizedList(ArrayList<String>())
             val fetch: (ForeverClientUpdateCatalog.ObjectRecord, File, () -> Boolean, (Long) -> Unit) -> File =
                 { record, work, _, progress ->
                     fetches.incrementAndGet()
+                    fetchedEkeys += record.ekey
                     val output = File(work, "${record.ekey}.blte")
                     output.writeBytes(fixture.rawFor(record))
                     progress(output.length())
@@ -959,11 +965,13 @@ class ForeverClientUpdaterTest {
             val resumePlan = resumeUpdater.plan(destination)
             assertEquals(originalPlan.planId, resumePlan.planId)
             assertTrue("legacy checkpointed object is credited in the plan", resumePlan.downloadBytes < originalPlan.downloadBytes)
+            fetchedEkeys.clear()
             assertThrows(java.util.concurrent.CancellationException::class.java) {
                 resumeUpdater.execute(destination, resumePlan, consentFor(resumePlan), {
                     checkpointLength(paths) > legacyCheckpointBytes
                 })
             }
+            assertFalse("the checkpointed physical row must not be fetched", legacy.ekey in fetchedEkeys)
             assertEquals(ForeverClientRecoveryResult.RESUMABLE_STAGE_AVAILABLE, resumeUpdater.recover(destination).result)
             val secondResumeUpdater = fixture.updater(paths, configAssets, fetch)
             val secondResumePlan = secondResumeUpdater.plan(destination)
@@ -3217,13 +3225,29 @@ class ForeverClientUpdaterTest {
             resumedUpdater.replayReaderFactory = { _ -> created.incrementAndGet(); UpdaterFakeReader() }
             val resumedPlan = resumedUpdater.plan(destination)
             val before = fetched.get()
+            val membershipLogs = CopyOnWriteArrayList<String>()
+            val membershipLogger = Logger.getLogger("ForeverClientUpdate")
+            val membershipHandler = object : Handler() {
+                override fun publish(record: LogRecord) { membershipLogs += record.message }
+                override fun flush() = Unit
+                override fun close() = Unit
+            }
+            membershipLogger.addHandler(membershipHandler)
             var result: ForeverClientUpdateResult? = null
             val run = Thread { result = resumedUpdater.execute(destination, resumedPlan, consentFor(resumedPlan)) }
             run.isDaemon = true
             run.start()
-            joinBounded(run, "overlap resume")
+            try {
+                joinBounded(run, "overlap resume")
+            } finally {
+                membershipLogger.removeHandler(membershipHandler)
+            }
             val done = requireNotNull(result)
             assertTrue("verifier must have run for the non-empty prefix", created.get() > 0)
+            val membership = membershipLogs.single { it.startsWith("CASC target membership stagedHits=") }
+            val counts = Regex("stagedHits=(\\d+) fallbacks=(\\d+)").find(membership)!!.groupValues
+            assertTrue("writer input rows must reuse their admitted metadata and originating ordinal", counts[1].toLong() > 0L)
+            assertTrue("checkpoint readers without a current matching row retain the authoritative lookup", counts[2].toLong() > 0L)
             assertEquals(prefixObjects, done.reusedObjects)
             assertEquals(resumedPlan.totalObjects - prefixObjects, done.writtenObjects)
             assertTrue("resume must fetch the missing tail", fetched.get() > before)
