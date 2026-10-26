@@ -233,6 +233,13 @@ completado; se ejecutan instrumentación y calibración antes del ensayo prolong
 
 ## Open Issues
 
+- C158 autenticada, fuente `673c50e`: cinco calibraciones y tres checks de versión
+  verdes; build Modern offline PASS en 5 min 9 s, auditoría exacta PASS con
+  2.226 fuentes/178 payloads, 2.220 iguales a C152. Solo seis rutas revisadas;
+  auditor intacto. APK 484.950.239 bytes, hash `e8e8e5b9…c58d6dbe`.
+  Cadena de instalación/preparación/diagnóstico mixto lanzada una vez con checkpoint
+  previo 454.511 y guardas frescas. Esperar su resultado original; no replay.
+  Duración/data-trigger son los prefijados, no un SLA ni aceptación de mejora.
 - Revisión de método aprobada expresamente: observación acotada del camino crítico
   y diagnóstico mixto de veinte minutos antes de otro tuning; replay solo si una
   hipótesis lo necesita y con diseño específico previo. La caracterización de

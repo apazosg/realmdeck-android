@@ -796,9 +796,40 @@ aportado como snapshot**, sin acceso al filesystem ni reruns, sin defectos
 accionables; recibió después el GREEN y los hashes exactos. No se presenta como
 inspección independiente de archivos.
 
-Faltan reconstrucción canónica, auditoría de la APK exacta y medición física mixta.
 Estas calibraciones comprueban el instrumento, no una mejora de velocidad ni
-su overhead real en el dispositivo. No se ha iniciado otro ensayo físico.
+su overhead real en el dispositivo.
+
+## C158 autenticada: diagnóstico mixto aprobado
+
+Fuente `673c50e`, versión `158`/`0.2.134-mixed-diagnostics-test`. Reconstrucción
+canónica y build Modern offline JDK 17 PASS en **5 min 9 s**, terminado 21:08:40 UTC.
+Auditoría exacta **PASS_SOURCE_BUILD_AND_PAYLOAD_AUDIT**: 2.226 fuentes matching con
+su receipt y 178 payloads. Frente a C152, 2.220 fuentes idénticas; solo cambian
+updater/transfer, sus dos tests, versión y marker. Inputs, lineage, privacidad y
+payloads intactos; los cuatro hashes generados coinciden con las cinco calibraciones.
+Sin relajar el auditor ni añadir una clase DEX.
+
+APK **484.950.239 bytes**, SHA-256
+`e8e8e5b9a20a44fecfbfdcd66a87ce7889a1f7f6b80b03c0127ecb11c58d6dbe`.
+Evidencia externa: `download-controlled-method-20261026/c158/`, receipt,
+source-comparison, build/audit y `completed-build-evidence.json`.
+
+Cadena física nueva lanzada una vez, no repetición C157: preflight fresco, reemplazo
+preservador desde el checkpoint exacto 454.511, mismo cliente/USB y costes dentro
+de los límites consentidos; preparación nunca confirma payload. Controlador de
+ensayo fija 1.200 s visibles o señal de pausa cooperativa al alcanzar 6 GiB de
+progreso lógico nuevo. Usa el contador exacto del sampler, no el número UI
+redondeado; incluye alineación de recepción de logs con el reloj del controlador.
+La señal no es un hard cap de bytes wire: permite la pausa y el drenaje acotados.
+Si se alcanza antes del tiempo, la ventana se declara censurada, no veinte minutos
+de estabilidad.
+
+Recursos CPU/IO/batería/Wi-Fi cada unos 120 s, solo lectura desde UID shell; no se
+crean procesos nativos del UID de la app mientras actualiza. Permisos denegados o
+timeouts se conservan como datos no disponibles, sin root ni cambios de seguridad.
+Guardas de replay/acciones durables y verificación final En pausa/Reanudar/cero
+servicios. Falta observar el resultado original, validar continuidad e interpretar
+camino crítico y representación real, sin aceptar rendimiento por compilar/auditar.
 
 ## Matriz de aceptación del objetivo
 
