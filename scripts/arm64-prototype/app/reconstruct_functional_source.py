@@ -131,7 +131,7 @@ BRIDGE_TARGET = Path("app/src/main/java/com/wowforever/launcher/ForeverPatchBrid
 CODE64_NATIVE_MEMBER = "lib/arm64-v8a/libforever_patcher_jni.so"
 FUNCTIONAL_MARKER_MEMBER = "assets/forever/functional-poc/provenance.json"
 SOURCE_VERSION = (62, "0.2.38-automated")
-CANDIDATE_VERSION = (149, "0.2.125-checkpoint-startup-test")
+CANDIDATE_VERSION = (150, "0.2.126-current-row-startup-test")
 FUNCTIONAL_OVERLAY_NAMES = (
     "ForeverFunctionalPoc.kt",
     "ForeverFunctionalPocActivity.kt",
