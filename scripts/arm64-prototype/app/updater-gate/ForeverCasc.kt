@@ -315,6 +315,8 @@ internal data class OverlapRawKeyRecord(
 
 object ForeverCasc {
     private val diagnostics = Logger.getLogger("ForeverClientUpdate")
+    private val LOWERCASE_HEX_KEY = Regex("[0-9a-f]{32}")
+    private val CASE_INSENSITIVE_HEX_KEY = Regex("(?i)[0-9a-f]{32}")
     private const val LOCAL_HEADER_SIZE = 30
     private const val SEGMENT_HEADER_SIZE = 480
     private const val ARCHIVE_LIMIT = 1L shl 30
@@ -543,7 +545,7 @@ object ForeverCasc {
         objects.forEach { spec ->
             checkCancelled(cancelled)
             val ekey = spec.ekey.lowercase()
-            require(ekey.matches(Regex("[0-9a-f]{32}"))) { "invalid CASC encoding key in verification request" }
+            require(ekey.matches(LOWERCASE_HEX_KEY)) { "invalid CASC encoding key in verification request" }
             val prefix = ekey.substring(0, 18)
             val previous = requestedByPrefix.putIfAbsent(prefix, ekey)
             if (previous != null && previous != ekey) {
@@ -793,7 +795,7 @@ object ForeverCasc {
                         }
                         val saved = decodeResumeObject(frame)
                         val key = saved.ekey.lowercase()
-                        if (!key.matches(Regex("[0-9a-f]{32}")) || !saved.contentKey.matches(Regex("(?i)[0-9a-f]{32}")) ||
+                        if (!key.matches(LOWERCASE_HEX_KEY) || !saved.contentKey.matches(CASE_INSENSITIVE_HEX_KEY) ||
                             saved.encodedSize !in 1..(ARCHIVE_LIMIT - SEGMENT_HEADER_SIZE - LOCAL_HEADER_SIZE) ||
                             saved.decodedSize < 0 || saved.archiveId !in 0..1023 || saved.offset < SEGMENT_HEADER_SIZE ||
                             (targetMembership == null && key <= previous)
@@ -2474,7 +2476,7 @@ object ForeverCasc {
                             throw IllegalStateException("resumable CASC checkpoint has object data after finalization began")
                         }
                         val record = decodeResumeObject(frame)
-                        if (!record.ekey.matches(Regex("(?i)[0-9a-f]{32}")) || !record.contentKey.matches(Regex("(?i)[0-9a-f]{32}")) ||
+                        if (!record.ekey.matches(CASE_INSENSITIVE_HEX_KEY) || !record.contentKey.matches(CASE_INSENSITIVE_HEX_KEY) ||
                             record.ekey.substring(0, 18) == "0".repeat(18) || record.encodedSize <= 0 || record.decodedSize < 0 ||
                             record.encodedSize > ARCHIVE_LIMIT - SEGMENT_HEADER_SIZE - LOCAL_HEADER_SIZE ||
                             record.archiveId !in 0..1023 || record.offset < SEGMENT_HEADER_SIZE
@@ -2805,9 +2807,9 @@ object ForeverCasc {
     }
 
     private fun validateIncrementalSpec(spec: IncrementalObjectSpec) {
-        require(spec.ekey.matches(Regex("[0-9a-f]{32}"))) { "invalid CASC encoding key" }
+        require(spec.ekey.matches(LOWERCASE_HEX_KEY)) { "invalid CASC encoding key" }
         require(spec.ekey.substring(0, 18) != "0".repeat(18)) { "CASC encoding key has a reserved all-zero 9-byte index prefix" }
-        require(spec.contentKey.matches(Regex("[0-9a-f]{32}"))) { "invalid CASC content key" }
+        require(spec.contentKey.matches(LOWERCASE_HEX_KEY)) { "invalid CASC content key" }
         require(spec.encodedSize >= 0 && spec.decodedSize >= 0) { "negative CASC object size" }
         require(spec.encodedSize <= ARCHIVE_LIMIT - SEGMENT_HEADER_SIZE - LOCAL_HEADER_SIZE) {
             "CASC encoded object exceeds the supported archive limit"
@@ -3805,7 +3807,7 @@ object ForeverCasc {
                         when (frame[0].toInt() and 0xff) {
                             RESUME_OBJECT_FRAME -> {
                                 val record = decodeResumeObject(frame)
-                                if (!record.ekey.matches(Regex("[0-9a-f]{32}")) || !record.contentKey.matches(Regex("[0-9a-f]{32}")) ||
+                                if (!record.ekey.matches(LOWERCASE_HEX_KEY) || !record.contentKey.matches(LOWERCASE_HEX_KEY) ||
                                     record.encodedSize !in 1..(ARCHIVE_LIMIT - SEGMENT_HEADER_SIZE - LOCAL_HEADER_SIZE) ||
                                     record.decodedSize < 0 || record.archiveId !in 0..1023 || record.offset < SEGMENT_HEADER_SIZE
                                 ) {

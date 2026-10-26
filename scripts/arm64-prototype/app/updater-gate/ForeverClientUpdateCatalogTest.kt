@@ -169,9 +169,13 @@ class ForeverClientUpdateCatalogTest {
                 val byKey = catalog.objectByKey(Fixture.DIRECT_EKEY)
                 assertEquals(Fixture.DIRECT_CKEY, byKey.contentKey)
                 assertEquals("direct", byKey.sourceKind)
+                assertEquals(byKey, catalog.objectByKey(Fixture.DIRECT_EKEY.uppercase()))
+                assertEquals(listOf(byKey), catalog.objectsByKeys(listOf(Fixture.DIRECT_EKEY.uppercase())) { false })
                 assertEquals(Fixture.RANGE_EKEY, catalog.objectByKey(Fixture.RANGE_EKEY).ekey)
                 assertThrows(NoSuchElementException::class.java) { catalog.objectByKey("ff".repeat(16)) }
                 assertThrows(IllegalArgumentException::class.java) { catalog.objectByKey("x' OR 1=1 --") }
+                assertThrows(IllegalArgumentException::class.java) { catalog.objectByKey("g".repeat(32)) }
+                assertThrows(IllegalArgumentException::class.java) { catalog.objectByKey(Fixture.DIRECT_EKEY.dropLast(1)) }
 
                 val loose = catalog.looseFiles().single()
                 assertEquals("Interface/patch.mpq", loose.path)

@@ -1818,6 +1818,38 @@ class ForeverCascTest {
     }
 
     @Test
+    fun targetInspectionPreservesHexKeyNormalizationAndRejection() {
+        val root = tempDir()
+        try {
+            val workParent = File(root, "app-cache").also { assertTrue(it.mkdirs()) }
+            val spec = ForeverCasc.IncrementalObjectSpec(
+                "0123456789abcdef".repeat(2), "abcdef0123456789".repeat(2), 7, 9,
+            )
+            val callbacks = mutableListOf<ForeverCasc.IncrementalObjectSpec>()
+            val uppercaseSpec = spec.copy(ekey = spec.ekey.uppercase(), contentKey = spec.contentKey.uppercase())
+            val work = File(workParent, "normalized")
+            val plan = ForeverCasc.inspectTarget(
+                null, work, sequenceOf(uppercaseSpec), { false },
+            ) { admitted, _ -> callbacks += admitted }
+            assertEquals(listOf(uppercaseSpec), callbacks)
+            assertEquals(7L, plan.downloadBytes)
+            assertFalse(work.exists())
+
+            listOf(spec.copy(ekey = spec.ekey.dropLast(1)), spec.copy(contentKey = "g".repeat(32))).forEachIndexed { index, invalid ->
+                val rejectedWork = File(workParent, "rejected-$index")
+                org.junit.Assert.assertThrows(IllegalArgumentException::class.java) {
+                    ForeverCasc.inspectTarget(null, rejectedWork, sequenceOf(invalid), { false }) { _, _ ->
+                        error("malformed keys must not reach the object callback")
+                    }
+                }
+                assertFalse(rejectedWork.exists())
+            }
+        } finally {
+            delete(root)
+        }
+    }
+
+    @Test
     fun targetInspectionRejectsDuplicateAndShortPrefixCollisionAndCleansScratch() {
         val root = tempDir()
         try {

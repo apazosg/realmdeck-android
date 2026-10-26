@@ -690,7 +690,7 @@ class ForeverClientUpdateCatalog @JvmOverloads constructor(
     }
 
     private fun normalizeHex(value: String, description: String): String {
-        require(value.matches(Regex("(?i)[0-9a-f]{32}"))) { "invalid client catalog $description" }
+        require(value.matches(CASE_INSENSITIVE_HEX_KEY)) { "invalid client catalog $description" }
         return value.lowercase(Locale.ROOT)
     }
 
@@ -738,6 +738,7 @@ class ForeverClientUpdateCatalog @JvmOverloads constructor(
         private val EXPECTED_TABLES = setOf("metadata", "objects", "loose")
         private val BASE_RUNTIME_ROLES = setOf("download", "encoding", "install", "root", "size")
         private val VFS_ROLE = Regex("vfs-(?:root|[1-9][0-9]*)")
+        private val CASE_INSENSITIVE_HEX_KEY = Regex("(?i)[0-9a-f]{32}")
         private val METADATA_OBJECT_ROLES = setOf("download", "encoding", "install", "size")
         private val EXPECTED_METADATA_KEYS = setOf(
             "architecture", "build_config_hash", "build_id", "cdn_config_hash", "cdn_file_index_hash",
