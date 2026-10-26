@@ -1,7 +1,7 @@
 # Velocidad de transferencia: diagnóstico pequeño/grande
 
 Fecha: 2026-10-26. Goal `5caa6403-5b8f-47dc-ba95-ba40fbbe686e`.
-**Línea base completada; candidata seleccionada, mejora todavía no demostrada.**
+**C153 no supera la medición; siguiente hipótesis en revisión. Goal abierto.**
 
 El [plan aprobado](../.agents/planning/download-transfer-speed-plan.md) se centra
 en payload. No repite ni atribuye a throughput el trabajo de
@@ -223,12 +223,80 @@ controlador se detuvo al esperar En pausa/Reanudar: un proceso nuevo muestra
 Inicio/Cliente no instalado para esta instalación incompleta. La inspección
 posterior confirma C153, **checkpoint idéntico de 394.140 objetos y cero servicios
 updater**; no hubo Resume ni confirmación de payload ni se vuelve a instalar.
-Se recupera el resumen del mismo cliente `1.60.1.70532`/USB antes del ensayo,
-respetando el destino y los límites de coste ya consentidos. Este arranque frío
+Se recuperó el resumen del mismo cliente `1.60.1.70532`/USB antes del ensayo:
+61,2 GiB de descarga, 63,4 GiB adicionales, app ≤1,7 GiB y cliente ≤61,7 GiB,
+todos dentro de los límites consentidos. Este arranque frío
 es preparación obligatoria de la candidata, no una nueva optimización de inicio.
+
+## C153: ensayo completado, candidata no aceptada
+
+Una sola confirmación Download 14:20:21,108 UTC; payload visible 14:27:42,530
+→ 14:37:54,975; Pause 14:38:23,439; final 14:38:42,948. Los reinicios del servidor
+no repitieron acciones ni análisis: se esperó a los procesos originales.
+
+| Ventana C153 | Duración, s | MB/s decimales de progreso útil UI |
+|---|---:|---:|
+| Total visible | 612,446 | 0,872 |
+| 1 | 122,618 | 1,151 |
+| 2 | 122,067 | 0,631 |
+| 3 | 122,378 | 0,739 |
+| 4 | 121,912 | 0,796 |
+| 5 | 123,471 | 1,039 |
+
+El intervalo aritmético por redondeo es 0,871636–0,871979 MB/s, no un intervalo
+estadístico. Frente a los 1,939 MB/s de C152, la diferencia observada es **−55,0 %**.
+No se acepta C153 como mejora ni se convierte la diferencia de cohortes en una
+causa probada del descenso. C152 usó Resume en el mismo proceso; C153 un proceso
+nuevo tras actualizar y Download desde el resumen recuperado. La preparación
+está excluida, pero cachés/pools, checkpoint, red y composición siguen distintos.
+
+Delta durable de toda la ejecución: **394.140 → 407.694**, 13.554 objetos,
+598.223.733 bytes encoded: pequeños 11.430/282.343.263 bytes, intermedios
+2.098/282.306.317 y grandes 26/33.574.153. Hay representación de ambos extremos,
+pero no MB/s aislados por categoría. El prefix no cambia y todos los CRC son
+válidos. De 792.698 bytes en 26 raws/partials quedan 166.766 en 19; ninguno inicial
+desaparece sin quedar durable o retenido. Balance útil encoded 597.597.801 bytes,
+no wire ni numerador de la ventana UI. Fin En pausa/Reanudar, cero HTTP/servicios,
+7.648/7.648 callbacks completados. Batería 100 % AC, 25,3 → 32,4 °C.
+
+### Reconsideración tras el resultado negativo
+
+Las diferencias entre el primer y último snapshot periódico permiten comparar
+fases sin restar procesos distintos. Sus intervalos son **624,090 s C152** y
+**642,964 s C153**, no los límites UI:
+
+| Diagnóstico del intervalo periódico | C152 | C153 |
+|---|---:|---:|
+| Objetos durables/s | 38,87 | 20,90 |
+| Bytes encoded durables, MB/s (no red) | 1,895 | 0,923 |
+| Peticiones HTTP iniciadas/s | 11,23 | 11,76 |
+| Segundos de callback completado / segundo | 3,19 | 5,86 |
+| Espera de fuente, s | 263,281 | 443,575 |
+| Espera de presupuesto del productor, s | 494,943 | 522,292 |
+| Cabeceras concurrentes, s | 1.322,571 | 2.779,005 |
+| Cabeceras / petición iniciada, ms aproximados | 188,78 | 367,64 |
+
+Los contadores se atribuyen al completar invocaciones y sufren censura de bordes:
+no son ocupación HTTP continua ni TTFB puro. Más paralelismo de callbacks no elevó
+proporcionalmente la tasa de peticiones. No se demuestra un límite del CDN.
+Los costes privados/append por objeto no muestran una causa equivalente al
+descenso: se vuelve a examinar la disponibilidad y admisión, no los forces.
+
+Inspección dirigida: `PrefetchBudget.requestMeasured` duerme **100 ms sin aviso**
+cuando falta capacidad; `release` no despierta al productor. Puede dormir incluso
+si se liberó capacidad entre el primer check y el sleep. Es una demora artificial
+verificable en código, no todavía una explicación única del throughput. Se revisa
+una espera notificada con recheck atómico y el mismo fallback de 100 ms, restaurando
+antes la agrupación original; sin cambiar límites, orden, ACK/retiro ni cadencia.
+
+Artefactos: `candidate/{summary,analysis,steady-pipeline}.json`,
+`baseline/steady-pipeline.json`, `comparison.json`, logs/inventarios privados,
+`steady_pipeline.py` y `analyze_candidate.py`, bajo el mismo directorio externo.
 
 ## Pendiente
 
-Comparación física de la candidata y pausa final preservadora.
+Implementar/verificar la intervención reconsiderada y medir una nueva candidata
+autenticada, conservando el progreso y la pausa final. C153 queda pausada, no se
+reinstala ni se repite su ensayo. El goal **no** cumple todavía la mejora exigida.
 La línea base mide variación actual, pero no demuestra una causa única de todos
 los descensos históricos, throughput aislado por tamaño ni una mejora candidata.

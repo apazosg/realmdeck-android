@@ -151,7 +151,7 @@ resuelva ninguna de ellas. Se investiga primero el componente dominante actual.
   mínimo que falta, sin repetir las investigaciones de inicio C151/C152.
 - [x] 4. Obtener línea base actual de payload pequeño/grande y seleccionar el
   cuello de botella con evidencia suficiente.
-- [x] 5. Implementar la mejora mínima y regresiones focales; revisar garantías.
+- [ ] 5. Implementar la mejora mínima y regresiones focales; revisar garantías.
 - [ ] 6. Validar candidata autenticada y medir antes/después bajo condiciones
   comparables, con pausa final y progreso preservado.
 - [ ] 7. Auditar todos los criterios, documentar límites, hacer commits propios
@@ -159,18 +159,26 @@ resuelva ninguna de ellas. Se investiga primero el componente dominante actual.
 
 ## Open Issues
 
-- Aprobación recibida; línea base C152 terminada, con ambos tamaños y pausa final.
-  Candidata seleccionada: grupos HTTP del productor de dos objetos para repartir
-  trabajo dentro de las mismas 34 claves. No hay mejora de throughput demostrada.
-- Implementación y siete regresiones focales verificadas (RED previo y GREEN),
-  revisión independiente de snapshots sin hallazgos accionables. C153 reconstruida,
-  cotejada, compilada y auditada; queda la comparación física antes de aceptar
-  rendimiento. No se repiten las pruebas ni el build verdes.
-- C153 quedó instalada conservando exactamente los 394.140 objetos del checkpoint,
-  sin updater activo. El proceso nuevo vuelve a Inicio, no a En pausa: el control
-  de instalación se detuvo por esa expectativa UI, sin Resume ni Download. No se
-  reinstala. Se recupera el resumen del mismo cliente/USB antes del ensayo; no se
-  confirma ningún destino ni coste fuera de los límites consentidos para C152.
+- Aprobación recibida; línea base C152 y ensayo C153 terminados con ambos tamaños
+  y pausa final. **C153 no supera la aceptación:** 0,872 MB/s durante 612,446 s
+  frente a 1,939 MB/s/609,206 s de C152. Es una comparación secuencial con cohortes
+  distintas, no una atribución causal del descenso del 55 %. Se reabre el paso 5;
+  no se cierra el goal ni se prueban otros caps a ciegas.
+- El código C153, siete regresiones focales, revisión independiente y auditoría
+  canónica siguen verificados para esa versión; no acreditan rendimiento. No se
+  repiten ese build, pruebas ni ensayo. El siguiente cambio deberá restaurar la
+  agrupación original y pasar sus propias verificaciones por la nueva concurrencia.
+- C153 conservó al instalar los 394.140 objetos y requirió recuperar el resumen
+  desde Inicio. Se confirmó una sola vez el mismo cliente/USB, 61,2 GiB de datos y
+  63,4 GiB adicionales dentro de los límites consentidos. Fin 14:38:42 UTC:
+  En pausa/Reanudar, checkpoint 407.694, cero HTTP/servicios y 7.648 callbacks
+  finalizados. Prefix y CRC válidos; ningún raw inicial perdido. No se repite Download.
+- Revisión del diagnóstico: más callbacks concurrentes no elevaron las peticiones/s
+  observadas (11,23 → 11,76), y la espera de fuente aumentó. Se detectó polling
+  incondicional de 100 ms en el presupuesto, sin aviso al liberar capacidad. La
+  siguiente hipótesis es despertar por liberación, con recheck atómico antes de
+  esperar y fallback de 100 ms; no se afirma que sea la causa única. Está en revisión
+  antes de implementar, sin cambiar cuotas, ACK/retiro, forces ni contrato.
 - «5mb»/«0.1» son observaciones reportadas sin unidad confirmada. Las mediciones
   usarán MB/s decimales y condiciones explícitas; no hace falta suponer la unidad.
 - Cohortes previas: pequeño ≤64 KiB; intermedio >64 KiB–1 MiB; grande >1 MiB.
