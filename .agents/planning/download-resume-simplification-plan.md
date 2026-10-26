@@ -165,7 +165,7 @@ aceptación. Antes de otra candidata:
   la reapertura al gestor con el botón real «Ver descarga». No repetir toda una
   descarga únicamente para corregir una expectativa errónea del guion.
 
-Amortización adicional dentro de las garantías aprobadas: los lectores de
+Propuesta diferida, **no implementada**: los lectores de
 checkpoint posteriores conservan la resolución escalar de metadatos/ordinales
 por frame. La prueba física C149 usa su APK congelada; el trabajo local siguiente
 es independiente y no debe sustituir esa medición:
@@ -186,6 +186,30 @@ es independiente y no debe sustituir esa medición:
   con una modificación acotada, detener ese ajuste para decisión, no relajar una
   guarda. No generar otra candidata hasta acabar las pruebas/revisión; C149 continúa
   su ensayo independiente sin aceptar automáticamente costes nuevos.
+
+La inspección de implementación concluyó que agrupar carga/verificador exigiría
+separar sus fases de validación y mutación/ACK. No se amplía a ese rediseño ni se
+modifica el lector solo para obtener velocidad. Se prioriza una alternativa local:
+reutilizar el registro autoritativo que ya acompaña al objeto exacto entregado por
+el cursor del catálogo al writer, dentro de la misma operación. La comparación
+existente sigue ejecutándose; si no hay una coincidencia inequívoca, usar el lookup
+actual. Un único slot local, seguro entre threads, sin caché entre leases. El ordinal
+debe venir del origen validado antes de encolar (nunca de la posición del consumidor)
+o conservar su consulta actual; no debilitar detección de duplicados. No anticipar
+objetos, tocar CRC/colas/ACK ni ampliar cotas. Exigir pruebas y revisión independiente
+antes de otra candidata; si necesita un refactor amplio, detener también esta opción.
+
+**Ampliación propuesta, pendiente de aprobación:** separar explícitamente
+validación y aplicación por lote en los tres lectores de checkpoint, en vez de
+intentar insertar un buffer en sus bucles actuales. Alcance limitado a esos
+lectores y su callback de metadatos; no rediseñar el input del writer ni cambiar
+formatos, cuotas, autoridad, consentimiento o cadencia de almacenamiento. Resolver
+y contrastar cada lote antes de mutar/ACK/truncar, respetar `cpByteEnd`, y conservar
+el comportamiento escalar por defecto. Reutilizar fixtures para equivalencia,
+metadata inválida con cola torn, cancelación y prefijo solapado; revisión
+independiente obligatoria. Solo después reconstruir/auditar y probar conservando
+progreso. Sin aprobación no se ejecuta esta ampliación; continúa únicamente la
+alternativa pequeña de procedencia del registro ya admitido.
 
 - Registrar versión/hash, dispositivo/destino, build/catálogo, tamaño del prefijo,
   cachés frías/calientes, red compartida, objetos/tamaños, bytes útiles y reintentos.
@@ -358,9 +382,20 @@ es independiente y no debe sustituir esa medición:
   verificada sin reset. Primera preparación única: respuesta +2,963 s, inspector
   178,687 s desde +113,067 s, resumen +440,830 s. Plan visible 70532/Unidad USB,
   descarga 62,8 GiB y adicional 65,0 GiB (app/cliente 1,7/63,2). El usuario respondió
-  «Confirmar y medir» y se lanzó una prueba única y acotada, con pausa final. Esperar
-  su resultado completo para comparar y verificar reapertura; no dar por terminada
-  la optimización por la reducción host de consultas ni repetir la prueba en curso.
+  «Confirmar y medir». Ensayo terminado: Descargar 860,836 s y Resume 1.225,989 s,
+  una acción cada uno; reapertura con mismo proceso/servicio y sin reconfirmar.
+  Pausa final 23:06:25 UTC, después cero servicios activos. No repetir esa prueba.
+  Se observan 88/228 s menos que C148, con caché/cohorte sin controlar; 14/20 minutos
+  siguen excesivos y no son aceptación global. Se valida la alternativa pequeña
+  de procedencia del registro actual; los lotes de lectores están diferidos,
+  sin ampliar ese refactor ni reabrir las correcciones ya verificadas.
+- Alternativa pequeña `c823708`: reutilización de la fila autoritativa y su ordinal
+  previo a filtros, con fallback intacto. Se reprodujo y corrigió una clasificación
+  desplazada; tres focales legacy/cancelación/solapamiento pasan con fuentes finales
+  cotejadas. Revisión independiente de la captura final sin hallazgos, sin atribuirle
+  acceso al repositorio ni ejecución de tests. C150 local diferenciada medirá el
+  efecto completo tras reconstrucción/auditoría; no incluye el refactor amplio
+  pendiente de aprobación ni acredita todavía mejora física.
 - La extensión de lotes a otros lectores requiere preservar CRC/layout/ordinales,
   tail recuperable y límite congelado `cpByteEnd`. No adelantar el stream de entrada
   del escritor sin analizar backpressure de las cotas raw: no es un cambio aprobado

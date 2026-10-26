@@ -597,8 +597,68 @@ Preparación observada de C149:
 El usuario respondió después **«Confirmar y medir»** para ese plan exacto. Se
 lanzó una única prueba de Descargar/pausa/Resume/reapertura, con transferencia
 breve y pausa final; no autoriza otros costes ni descargar todo el cliente. El
-resultado completo y la reconexión todavía están pendientes. Los artefactos C149
+resultado completo y la reconexión se registran a continuación. Los artefactos C149
 están en `physical-trial/prepare-summary.json` y `download-resume-summary.json`.
+
+### C149: recorrido completo y espera restante
+
+- Un «Descargar», Enter **22:29:36.175175 UTC**, dio respuesta observada a +3,011 s
+  y transferencia positiva visible a **+860,836 s (14 min 21 s)**: 25,9 MiB.
+  Una pausa normal a las **22:44:25.696522 UTC** conservó el progreso.
+- Un «Reanudar», Enter **22:45:05.374072 UTC**, respondió a +2,631 s y llegó a
+  transferencia positiva visible a **+1.225,989 s (20 min 26 s)**, sin reconfirmación.
+- «Volver» → Home activo → «Ver descarga» reabrió el progreso: **mismo proceso,
+  mismo servicio, un servicio activo y sin otra confirmación**. Pausa final a las
+  **23:06:25.759508 UTC**; comprobación posterior: «En pausa» y **cero servicios
+  updater activos**. Resultado retenido:
+  `ONE_ACTION_RESUME_AND_ACTIVE_UI_RECONNECT_OBSERVED`.
+- Las ventanas desde transferencia visible hasta Pausar fueron 28,685 y 54,396 s.
+  Son observaciones breves, no throughput sostenido ni instante exacto de primer
+  byte de red. Los commits finales registraron **800/1.336 objetos** y
+  **44.280.540/29.296.869 bytes escritos**, respectivamente; son contadores
+  acumulados por ejecución, no cifras para sumar con cada commit intermedio.
+
+| Desde la acción hasta transferencia visible | C148 | C149 | Diferencia observada |
+|---|---|---|---|
+| Descargar | 948,398 s | 860,836 s | 87,562 s antes |
+| Reanudar | 1.453,953 s | 1.225,989 s | 227,964 s antes |
+
+Mismo destino USB, versión 70532 y 1.144.978 objetos objetivo; el prefijo avanzó y
+no se controlaron caché, temperatura ni cohorte. El muestreo incluye quince
+segundos de espera y el dump. No se presenta esta diferencia con precisión de
+milisegundos como una ganancia causal universal. C146 no llegó a transferencia
+en su ventana acotada: no se inventa un tiempo final para incluirlo en esa tabla.
+
+La mejora de una fase no resuelve aún la preparación larga. Las cargas C149 de
+**357.329/358.129 objetos** tardaron **153.329/153.507 ms**. Sus primeros pedidos de
+fuente llegaron a +848,519/+1.213,053 s (un pedido puede reutilizar un raw). Persisten
+consultas escalares por frame en inspección/carga/verificador posteriores.
+Agrupar esos lectores exige separar validación y mutación/ACK, por lo que esa
+propuesta quedó diferida y su ampliación no está aprobada. La alternativa local
+en validación reutiliza únicamente los metadatos autoritativos del objeto actual
+del cursor, con ordinal de origen y fallback al lookup existente. No rediseña los
+lectores, anticipa objetos ni cambia CRC, cola recuperable, `cpByteEnd` o límites.
+**14/20 minutos no se dan por aceptación final del objetivo.**
+
+La alternativa `c823708` todavía no está instalada. La inspección del responsable detectó
+una consulta al bit de checkpoint con el contador ya incrementado, en vez del
+ordinal del objeto actual. Se devolvió a reparación con una regresión de frontera
+antes de aceptar el cambio. La prueba legacy falló con el desplazamiento y pasa
+tras usar `sourceOrdinal`; también pasan cancelación con dieciséis parciales y
+reanudación, y prefijo solapado: **tres tests, cero fallos/errores/omitidos**, XML
+2026-10-26T06:17:02. Los XML rojo/verde se conservan en
+`work/updater-o1-ordinal-repair-20261026`; el responsable leyó ambos y cotejó las
+dos fuentes finales con las compiladas. La prueba de solapamiento anterior no
+bastaba para acreditar la clasificación. Este defecto no pertenece a C149 y no
+se repitió su ensayo para corregirlo.
+
+La primera revisión independiente no pudo acceder al repositorio y no se cuenta
+como aprobada. La revisión posterior analizó una captura del código final y sus
+contratos de catálogo/CASC, sin hallazgos accionables; el responsable verificó la
+correspondencia de esa captura y sus hashes con los archivos reales. Es revisión
+independiente de código capturado, no verificación independiente de filesystem ni
+de pruebas. El cambio conserva fallback y comprobaciones existentes; la mejora
+de tiempo Android queda pendiente de una candidata diferenciada.
 
 ### Retención de evidencia
 
@@ -613,7 +673,7 @@ C148 se guarda en `work/download-resume-c148-20261025/physical-trial`, no en `/t
 
 | Entregable | Evidencia | Pendiente |
 |---|---|---|
-| Menor preparación al iniciar/reanudar | Menos rehashes y tiempos host; inspectores C147/C148 físicos sin rehashes | Preparación C148 aún de 16/24 minutos; reducción causal total y primer byte exacto no acreditados |
-| Primera pulsación efectiva, sin repetir | Flujo físico abrir/Continuar/Descargar sin acciones extra; C148 Resume válido de una acción sin reconfirmación; diez tests del servicio y cinco focales de reparación PASS | Reconexión completa al gestor; no se midió latencia subsegundo ni doble toque deliberado |
-| Garantías intactas | Review y focales; checkpoint recuperado y pausa normal; cuatro guardas conservadas | No se ejecutó toda la suite; continuar diagnóstico sin eliminar verificaciones |
-| Entrega versionada y honesta | Commits separados; baseline C146 y candidatas C147/C148 auditadas/instaladas/probadas sin reset; estado final pausado | Aceptación global pendiente; no cerrar por ahorro de un subcomponente |
+| Menor preparación al iniciar/reanudar | Menos trabajo host; C149 completa 860,836/1.225,989 s frente a 948,398/1.453,953 s C148 | Aún 14/20 minutos; siguiente optimización local y medida completa pendientes, sin extrapolaciones |
+| Primera pulsación efectiva, sin repetir | Flujo físico 3/1 acciones; C149 reanuda y reabre UI con el mismo proceso/servicio, sin reconfirmar ni duplicar | Verificar que la siguiente candidata conserve el resultado; sin medida subsegundo ni doble toque deliberado |
+| Garantías intactas | Reviews/focales, checkpoint recuperado y pausa normal; cuatro guardas conservadas | Corregir/verificar procedencia y clasificación del objeto actual, cancelación y prefetch antes de candidata; no se ejecutó toda la suite |
+| Entrega versionada y honesta | Baseline y C147–C149 auditadas/instaladas/probadas sin reset; artefactos externos; pausa final y cero servicios | Completar nuevo ajuste y auditoría final del objetivo, no cerrar por ahorro aislado |
