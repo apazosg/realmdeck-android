@@ -149,7 +149,7 @@ resuelva ninguna de ellas. Se investiga primero el componente dominante actual.
 - [x] 2. Aprobar este plan; aprobación explícita «adelante. vamos a ello».
 - [x] 3. Caracterizar tamaños y revisar datos disponibles; precisar el desglose
   mínimo que falta, sin repetir las investigaciones de inicio C151/C152.
-- [ ] 4. Obtener línea base actual de payload pequeño/grande y seleccionar el
+- [x] 4. Obtener línea base actual de payload pequeño/grande y seleccionar el
   cuello de botella con evidencia suficiente.
 - [ ] 5. Implementar la mejora mínima y regresiones focales; revisar garantías.
 - [ ] 6. Validar candidata autenticada y medir antes/después bajo condiciones
@@ -159,21 +159,23 @@ resuelva ninguna de ellas. Se investiga primero el componente dominante actual.
 
 ## Open Issues
 
-- Aprobación recibida; diagnóstico y línea base en curso. Todavía no hay una
-  optimización seleccionada ni una mejora de throughput demostrada.
+- Aprobación recibida; línea base C152 terminada, con ambos tamaños y pausa final.
+  Candidata seleccionada: grupos HTTP del productor de dos objetos para repartir
+  trabajo dentro de las mismas 34 claves. No hay mejora de throughput demostrada.
 - «5mb»/«0.1» son observaciones reportadas sin unidad confirmada. Las mediciones
   usarán MB/s decimales y condiciones explícitas; no hace falta suponer la unidad.
 - Cohortes previas: pequeño ≤64 KiB; intermedio >64 KiB–1 MiB; grande >1 MiB.
   Catálogo base y frames se distinguen; se reutilizan contadores e inventarios
   antes de decidir si hace falta instrumentación adicional. Véase el
   [registro de diagnóstico](../../docs/download-transfer-speed-results.md).
-- Falta terminar la línea base sostenida actual C152 y desglose por tamaño; la evidencia
-  histórica no la sustituye. Puede ser necesaria instrumentación mínima, no una
-  sucesión de APKs diagnósticas sin decisión basada en resultados.
+- Línea base visible: 609,206 s, 1,939 MB/s, con límites por redondeo y categorías
+  a partir del delta de frames; no se infieren velocidades aisladas por tamaño.
+  La candidata debe contrastar mayor ocupación útil contra más coste de petición.
 - Preflight fresco completado: C152 En pausa/Reanudar, sin updater ni guest,
   Wi-Fi y espacio disponibles, checkpoint de 369.794 objetos conservado. Ensayo
   C152 lanzado una sola vez con controlador durable en el directorio externo
-  `download-transfer-speed-20261026/`; tras reinicios no se repite Resume.
+  `download-transfer-speed-20261026/`; terminado en pausa con 394.140 objetos,
+  cero HTTP/servicios y todos los callbacks cerrados. No se repite Resume.
   Si falta evidencia o acceso se registra el bloqueo, no se declara mejora.
-- La intervención concreta se decide después del diagnóstico. Cualquier cambio
+- La intervención no altera contrato ni límites de seguridad. Cualquier cambio
   de seguridad, cuotas, orden de escritura o contrato requiere decisión separada.
