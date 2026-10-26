@@ -163,8 +163,14 @@ resuelva ninguna de ellas. Se investiga primero el componente dominante actual.
   Candidata seleccionada: grupos HTTP del productor de dos objetos para repartir
   trabajo dentro de las mismas 34 claves. No hay mejora de throughput demostrada.
 - Implementación y siete regresiones focales verificadas (RED previo y GREEN),
-  revisión independiente de snapshots sin hallazgos accionables. Quedan build/
-  auditoría de la candidata y comparación física antes de aceptar rendimiento.
+  revisión independiente de snapshots sin hallazgos accionables. C153 reconstruida,
+  cotejada, compilada y auditada; queda la comparación física antes de aceptar
+  rendimiento. No se repiten las pruebas ni el build verdes.
+- C153 quedó instalada conservando exactamente los 394.140 objetos del checkpoint,
+  sin updater activo. El proceso nuevo vuelve a Inicio, no a En pausa: el control
+  de instalación se detuvo por esa expectativa UI, sin Resume ni Download. No se
+  reinstala. Se recupera el resumen del mismo cliente/USB antes del ensayo; no se
+  confirma ningún destino ni coste fuera de los límites consentidos para C152.
 - «5mb»/«0.1» son observaciones reportadas sin unidad confirmada. Las mediciones
   usarán MB/s decimales y condiciones explícitas; no hace falta suponer la unidad.
 - Cohortes previas: pequeño ≤64 KiB; intermedio >64 KiB–1 MiB; grande >1 MiB.

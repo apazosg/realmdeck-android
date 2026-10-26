@@ -198,8 +198,37 @@ sigue independiente y sus pruebas de rangos/autenticación/resume no se modifica
 La revisión no acredita rendimiento: más peticiones pueden contrarrestar el
 paralelismo y la comparación física sigue pendiente.
 
+## C153 autenticada e instalada
+
+Fuente `39c71e4`, retag `9053b35`: C153,
+`0.2.129-two-object-prefetch-test`. Tres pruebas Python focales del retag y pins
+pasan. Reconstrucción canónica nueva: solo difieren de C152 el updater, su test,
+la versión Gradle y el marker; **2.222 de 2.226 archivos idénticos**. Inputs
+autenticados, lineage de controller/bridge y paridad de payload permanecen iguales.
+
+Build Modern offline con JDK 17: **4 min 59 s**. Requiere el mismo `local.properties`
+de C152, que solo declara el SDK: un bootstrap previo de 19 s se detuvo por su
+ausencia, antes de compilar; no se repitieron reconstrucción ni pruebas verdes.
+Auditoría `PASS_SOURCE_BUILD_AND_PAYLOAD_AUDIT`: 2.226 fuentes coincidentes con el
+receipt y 178 payloads, además de firma/ABI/manifest/JNI. Ese conteo de auditoría
+no significa 2.226 archivos idénticos a C152.
+
+APK exacto: **484.925.975 bytes**, SHA-256
+`443114fb12a5876ab188c8e9ec7924edb675b7993c2d79f8c4a4b9c73fe5546a`.
+Artefactos externos: `download-two-object-c153-20261026/`, incluidos receipt,
+`source-comparison.json`, `build.log` y `apk-audit.json`.
+
+Actualización `install -r` confirmada a las 14:05:08 UTC, sin borrar datos. El
+controlador se detuvo al esperar En pausa/Reanudar: un proceso nuevo muestra
+Inicio/Cliente no instalado para esta instalación incompleta. La inspección
+posterior confirma C153, **checkpoint idéntico de 394.140 objetos y cero servicios
+updater**; no hubo Resume ni confirmación de payload ni se vuelve a instalar.
+Se recupera el resumen del mismo cliente `1.60.1.70532`/USB antes del ensayo,
+respetando el destino y los límites de coste ya consentidos. Este arranque frío
+es preparación obligatoria de la candidata, no una nueva optimización de inicio.
+
 ## Pendiente
 
-Candidata autenticada y comparación física.
+Comparación física de la candidata y pausa final preservadora.
 La línea base mide variación actual, pero no demuestra una causa única de todos
 los descensos históricos, throughput aislado por tamaño ni una mejora candidata.
