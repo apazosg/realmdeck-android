@@ -543,7 +543,7 @@ bytes/servicio exitoso; deben declararse al comparar intervalos. Los campos de u
 snapshot son atómicos individualmente, no un vector transaccional; sus fronteras
 siguen censuradas por callbacks concurrentes.
 
-**Cuatro pruebas focales PASS**, cero errores/fallos/skips, JUnit 17:29:05 UTC,
+**Versión inicial: cuatro pruebas focales PASS**, cero errores/fallos/skips, JUnit 17:29:05 UTC,
 Gradle offline JDK 17 en 3 min 37 s: contadores puros/mixtos/reuso/fallo, wiring de
 readiness, batch contiguo y cancelación/join. La copia probada coincide con el
 repositorio: updater SHA-256
@@ -558,6 +558,23 @@ diez regresiones sigue vigente; el nuevo intento de revisar únicamente métrica
 no pudo ejecutarse por indisponibilidad del modelo. El diff diagnóstico y las
 cuatro pruebas nuevas se verificaron en el proceso principal, sin atribuirles una
 revisión independiente que no ocurrió. Evidencia: `cohort-focused-tests/` externo.
+
+La referencia C156 de esa versión compiló en 5 min 11 s, pero la auditoría exacta
+rechazó `FetchPipelineDiagnostics$CohortCounters`: descriptor DEX nuevo no admitido.
+**No se instaló ni se amplió la allowlist.** Se elimina la clase auxiliar mediante
+siete `AtomicLongArray(4)`, conservando los 28 campos y sus significados.
+Dos checks focales adicionales PASS (contabilidad pura/mixta/reuso/fallo y wiring
+readiness), cero fallos/errores/skips, JUnit 17:48:06 UTC; fuente probada idéntica al
+repositorio, SHA-256
+`eb840e5af21774afebd05851988f77a397fbf85535e0692f45ee72f1e73b4e39`;
+test sin cambios. Evidencia: `cohort-array-focused-tests/`. La auditoría permanece
+intacta; hacen falta receipts/builds/APKs nuevos, separados de la referencia rechazada.
+
+El seguimiento instrumental fija **seis minutos visibles por variante** antes de
+observar resultados, con subventanas de dos minutos y todos los callbacks agregados.
+Complementa, no reemplaza, las ventanas sostenidas de diez minutos C152/C155.
+Se informarán cantidades, tamaños medios, miembros por callback, reuso/fallos y
+relojes concurrentes; una muestra insuficiente no permite cerrar la aceptación.
 
 ## Pendiente
 

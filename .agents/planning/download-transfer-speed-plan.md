@@ -95,6 +95,11 @@ reinicio del teléfono ni descarga completa del cliente para medir.
    mínima si es indispensable: ventanas payload de unos diez minutos y subventanas
    de dos minutos, con representación suficiente de tamaños pequeños y grandes.
    Si una ventana no contiene ambos, no inventar una comparación por tamaño.
+   Las ventanas agregadas C152/C155 ya completadas se conservan. El seguimiento
+   instrumental por tamaño utiliza seis minutos visibles por variante, fijados
+   antes de observar resultados (tres subventanas de dos minutos). Es evaluación
+   adicional de todos los callbacks, no sustitución del benchmark de diez minutos;
+   si la representación resulta insuficiente, la aceptación permanece abierta.
 6. Comparar antes/después en el mismo dispositivo, destino, runtime y build de
    cliente, declarando avance del checkpoint, objetos distintos, caché, red y
    temperatura. Priorizar cohortes equivalentes sin resetear progreso. Una
@@ -164,6 +169,13 @@ resuelva ninguna de ellas. Se investiga primero el componente dominante actual.
 
 ## Open Issues
 
+- La primera referencia C156 compiló, pero su auditoría rechazó la nueva clase
+  auxiliar DEX de contadores; no se instaló. Se simplifican a siete
+  `AtomicLongArray(4)` sin ampliar allowlists ni cambiar la auditoría. Dos checks
+  focales nuevos PASS, JUnit 17:48:06 UTC, fuente `eb840e5a…` igual al repositorio.
+  Nuevos receipts/builds/APKs en workspace externo separado; no reutilizar como
+  aceptada la APK rechazada. Host build optimizado puede solaparse con preparación
+  del teléfono de referencia, pero cada instalación exige su propia auditoría PASS.
 - Desglose agregado implementado sin cambiar la estrategia: cuatro cohortes,
   siete contadores cada una, capturados antes de publicar futuros. Cuatro checks
   focales verdes y hashes iguales al repositorio; service concurrente no se llama

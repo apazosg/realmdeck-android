@@ -53,17 +53,14 @@ private val DEFAULT_UPDATER_FETCH_BATCH: UpdaterFetchBatch = { records, work, ca
 /** Bounded, aggregate-only timings for the sourceless fetch executor. */
 internal class FetchPipelineDiagnostics {
     private val logger = Logger.getLogger("ForeverClientUpdate")
-    private class CohortCounters(
-        val callbacks: AtomicLong = AtomicLong(),
-        val objects: AtomicLong = AtomicLong(),
-        val encodedBytes: AtomicLong = AtomicLong(),
-        val usefulBytes: AtomicLong = AtomicLong(),
-        val callbackNanos: AtomicLong = AtomicLong(),
-        val failures: AtomicLong = AtomicLong(),
-        val zeroUseful: AtomicLong = AtomicLong(),
-    )
     private val cohortNames = listOf("Small", "Medium", "Large", "Mixed")
-    private val cohorts = Array(cohortNames.size) { CohortCounters() }
+    private val cohortCallbacks = AtomicLongArray(cohortNames.size)
+    private val cohortObjects = AtomicLongArray(cohortNames.size)
+    private val cohortEncodedBytes = AtomicLongArray(cohortNames.size)
+    private val cohortUsefulBytes = AtomicLongArray(cohortNames.size)
+    private val cohortCallbackNanos = AtomicLongArray(cohortNames.size)
+    private val cohortFailures = AtomicLongArray(cohortNames.size)
+    private val cohortZeroUseful = AtomicLongArray(cohortNames.size)
     private val batchGroups = AtomicLong()
     private val batchHistogram = AtomicLongArray(ForeverClientUpdateTransfer.MAX_BATCH_OBJECTS + 1)
     private val singles = AtomicLong()
@@ -134,19 +131,18 @@ internal class FetchPipelineDiagnostics {
     /** Concurrent fetch service time, excluding future publication; not wall-clock throughput. */
     fun cohortCompleted(records: List<ForeverClientUpdateCatalog.ObjectRecord>, fetchedBytes: List<Long>, durationNanos: Long) {
         val index = cohortIndex(records)
-        val counters = cohorts[index]
         val usefulBytes = fetchedBytes.sumOf { it.coerceAtLeast(0L) }
-        counters.callbacks.incrementAndGet()
-        counters.objects.addAndGet(records.size.toLong())
-        counters.encodedBytes.addAndGet(records.sumOf { it.encodedSize })
-        counters.usefulBytes.addAndGet(usefulBytes)
-        counters.callbackNanos.addAndGet(durationNanos.coerceAtLeast(0L))
-        if (usefulBytes == 0L) counters.zeroUseful.incrementAndGet()
+        cohortCallbacks.incrementAndGet(index)
+        cohortObjects.addAndGet(index, records.size.toLong())
+        cohortEncodedBytes.addAndGet(index, records.sumOf { it.encodedSize })
+        cohortUsefulBytes.addAndGet(index, usefulBytes)
+        cohortCallbackNanos.addAndGet(index, durationNanos.coerceAtLeast(0L))
+        if (usefulBytes == 0L) cohortZeroUseful.incrementAndGet(index)
     }
 
     fun cohortFailed(records: List<ForeverClientUpdateCatalog.ObjectRecord>) {
         // Failed and cancelled fetches contribute no successful bytes or service time.
-        cohorts[cohortIndex(records)].failures.incrementAndGet()
+        cohortFailures.incrementAndGet(cohortIndex(records))
     }
 
     private fun cohortIndex(records: List<ForeverClientUpdateCatalog.ObjectRecord>): Int {
@@ -222,14 +218,13 @@ internal class FetchPipelineDiagnostics {
                     "reserveInheritedRetireMs=${reserveRetireNanos.get() / 1_000_000} " +
                     "sourceConsumedRawMs=${sourceConsumedRawNanos.get() / 1_000_000} " +
                     cohortNames.mapIndexed { index, name ->
-                        val cohort = cohorts[index]
-                        "cohort${name}Callbacks=${cohort.callbacks.get()} " +
-                            "cohort${name}Objects=${cohort.objects.get()} " +
-                            "cohort${name}EncodedBytes=${cohort.encodedBytes.get()} " +
-                            "cohort${name}UsefulBytes=${cohort.usefulBytes.get()} " +
-                            "cohort${name}CallbackNanos=${cohort.callbackNanos.get()} " +
-                            "cohort${name}Failures=${cohort.failures.get()} " +
-                            "cohort${name}ZeroUseful=${cohort.zeroUseful.get()}"
+                        "cohort${name}Callbacks=${cohortCallbacks.get(index)} " +
+                            "cohort${name}Objects=${cohortObjects.get(index)} " +
+                            "cohort${name}EncodedBytes=${cohortEncodedBytes.get(index)} " +
+                            "cohort${name}UsefulBytes=${cohortUsefulBytes.get(index)} " +
+                            "cohort${name}CallbackNanos=${cohortCallbackNanos.get(index)} " +
+                            "cohort${name}Failures=${cohortFailures.get(index)} " +
+                            "cohort${name}ZeroUseful=${cohortZeroUseful.get(index)}"
                     }.joinToString(" ") + " " +
                     ForeverClientUpdateTransfer.diagnosticSnapshot(),
             )
