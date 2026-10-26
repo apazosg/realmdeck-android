@@ -861,6 +861,16 @@ class ForeverClientUpdater(
         )
     }
 
+    private fun archiveTargetMembershipBatch(
+        archiveOrder: ForeverClientArchiveOrder,
+        keys: List<String>,
+        cancelled: () -> Boolean,
+    ): List<IndexedValue<ForeverCasc.IncrementalObjectSpec>> {
+        val records = catalog.objectsByKeys(keys, cancelled)
+        val ordinals = archiveOrder.ordinalsOf(keys, cancelled)
+        return records.indices.map { index -> IndexedValue(ordinals[index], incrementalSpec(records[index])) }
+    }
+
     private fun incrementalSpec(
         record: ForeverClientUpdateCatalog.ObjectRecord,
     ): ForeverCasc.IncrementalObjectSpec = ForeverCasc.IncrementalObjectSpec(
@@ -1049,6 +1059,7 @@ class ForeverClientUpdater(
                 cancelled,
                 checkpointIdentity,
                 targetObjectCount = archiveOrder.objectCount.toInt(),
+                targetMembershipBatch = { keys -> archiveTargetMembershipBatch(archiveOrder, keys, cancelled) },
                 targetMembership = { key -> archiveTargetMembership(archiveOrder, key) },
             )
         } else catalog.withObjects(cancelled) { records ->
@@ -2195,6 +2206,8 @@ class ForeverClientUpdater(
             val stagedMembership = AtomicReference<StagedMembership?>()
             val stagedMembershipHits = AtomicLong()
             val stagedMembershipFallbacks = AtomicLong()
+            val checkpointBatchCalls = AtomicLong()
+            val checkpointBatchKeys = AtomicLong()
             try {
                 val specs = sequence {
                     while (true) {
@@ -2380,6 +2393,12 @@ class ForeverClientUpdater(
                     overlapCoordinator = overlap,
                     commitFlushRequest = budget.commitFlushRequest,
                     targetObjectCount = archiveOrder.objectCount.toInt(),
+                    targetMembershipBatch = { keys ->
+                        archiveTargetMembershipBatch(archiveOrder, keys, cancelled).also {
+                            checkpointBatchCalls.incrementAndGet()
+                            checkpointBatchKeys.addAndGet(keys.size.toLong())
+                        }
+                    },
                     targetMembership = { key ->
                         val staged = stagedMembership.get()
                         if (staged != null && staged.ekey == key.lowercase(Locale.ROOT)) {
@@ -2434,7 +2453,8 @@ class ForeverClientUpdater(
                     fetchPipelineDiagnostics.log(pipelineOutcome, committedObjects.get(), budget.snapshot())
                     sourceDiagnostics.info(
                         "CASC target membership stagedHits=${stagedMembershipHits.get()} " +
-                            "fallbacks=${stagedMembershipFallbacks.get()}",
+                            "fallbacks=${stagedMembershipFallbacks.get()} " +
+                            "checkpointBatchCalls=${checkpointBatchCalls.get()} checkpointBatchKeys=${checkpointBatchKeys.get()}",
                     )
                 }
             }

@@ -3245,9 +3245,9 @@ class ForeverClientUpdaterTest {
             val done = requireNotNull(result)
             assertTrue("verifier must have run for the non-empty prefix", created.get() > 0)
             val membership = membershipLogs.single { it.startsWith("CASC target membership stagedHits=") }
-            val counts = Regex("stagedHits=(\\d+) fallbacks=(\\d+)").find(membership)!!.groupValues
+            val counts = Regex("stagedHits=(\\d+) fallbacks=(\\d+) checkpointBatchCalls=(\\d+) checkpointBatchKeys=(\\d+)").find(membership)!!.groupValues
             assertTrue("writer input rows must reuse their admitted metadata and originating ordinal", counts[1].toLong() > 0L)
-            assertTrue("checkpoint readers without a current matching row retain the authoritative lookup", counts[2].toLong() > 0L)
+            assertTrue("checkpoint readers must resolve fresh authoritative metadata in batches", counts[3].toLong() > 0L && counts[4].toLong() > 0L)
             assertEquals(prefixObjects, done.reusedObjects)
             assertEquals(resumedPlan.totalObjects - prefixObjects, done.writtenObjects)
             assertTrue("resume must fetch the missing tail", fetched.get() > before)

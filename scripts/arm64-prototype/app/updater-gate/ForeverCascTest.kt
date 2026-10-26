@@ -1157,6 +1157,134 @@ class ForeverCascTest {
     }
 
     @Test
+    fun checkpointBulkReadersMatchScalarAcrossBatchesWithoutWriterLookahead() {
+        val fixture = buildOverlapFixture(prefixSize = 300, newSize = 3, name = "bulk-readers")
+        try {
+            val membership = fixture.manifest.mapIndexed { index, spec -> spec.ekey to IndexedValue(index, spec) }.toMap()
+            val batches = java.util.concurrent.CopyOnWriteArrayList<Int>()
+            val bulk: (List<String>) -> List<IndexedValue<ForeverCasc.IncrementalObjectSpec>> = { keys ->
+                assertTrue(keys.isNotEmpty() && keys.size <= 256)
+                assertEquals(keys.size, keys.toSet().size)
+                batches += keys.size
+                keys.map { membership.getValue(it) }
+            }
+            val checkpoint = File(fixture.checkpointDir, ".forever-casc-resume-checkpoint")
+            val original = checkpoint.readBytes()
+            val beforeStage = directFileHashes(fixture.dataFiles)
+            val scalar = ForeverCasc.inspectResumableCheckpoint(
+                fixture.dataFiles, fixture.checkpointDir, emptySequence(), { false }, fixture.identity,
+                targetObjectCount = membership.size, targetMembership = { membership.getValue(it) },
+            )
+            val batched = ForeverCasc.inspectResumableCheckpoint(
+                fixture.dataFiles, fixture.checkpointDir, emptySequence(), { false }, fixture.identity,
+                targetObjectCount = membership.size, targetMembershipBatch = bulk, targetMembership = { membership.getValue(it) },
+            )
+            assertEquals(scalar, batched)
+            assertEquals(listOf(256, 44), batches.toList())
+            assertTrue(original.contentEquals(checkpoint.readBytes()))
+            assertEquals(beforeStage, directFileHashes(fixture.dataFiles))
+
+            // A CRC-valid repeated object in the next batch must still hit the
+            // global ordinal guard, rather than being hidden by query deduplication.
+            val duplicate = original.copyOf()
+            val last = 40 + (fixture.prefixCount - 1) * 72
+            original.copyInto(duplicate, last, 40, 40 + 56)
+            putU32be(duplicate, last + 68, java.util.zip.CRC32().also { it.update(duplicate, last, 68) }.value.toInt())
+            checkpoint.writeBytes(duplicate)
+            org.junit.Assert.assertThrows(IllegalStateException::class.java) {
+                ForeverCasc.inspectResumableCheckpoint(
+                    fixture.dataFiles, fixture.checkpointDir, emptySequence(), { false }, fixture.identity,
+                    targetObjectCount = membership.size, targetMembershipBatch = bulk, targetMembership = { membership.getValue(it) },
+                )
+            }
+            assertTrue(duplicate.contentEquals(checkpoint.readBytes()))
+            checkpoint.writeBytes(original)
+
+            batches.clear()
+            var scalarCalls = 0
+            var sourceCalls = 0
+            val coordinator = CascOverlapCoordinator(retirePrefixRaw = { })
+            val result = ForeverCasc.writeTargetIncrementalResumable(
+                null, fixture.dataFiles, fixture.checkpointDir, fixture.manifest.asReversed().asSequence(),
+                { spec -> sourceCalls++; fixture.rawByKey.getValue(spec.ekey) }, { false }, fixture.identity,
+                replayReaderFactory = { cancelled -> FakeCascReplayReader(cancelled) }, overlapCoordinator = coordinator,
+                targetObjectCount = membership.size, targetMembershipBatch = bulk,
+                targetMembership = { key -> scalarCalls++; membership.getValue(key) },
+            )
+            assertEquals("only the writer's current row uses scalar membership", fixture.manifest.size, scalarCalls)
+            assertEquals("preflight, load and sealed verifier each admit the prefix", 3 * fixture.prefixCount, batches.sum())
+            assertEquals(300L, result.reusedObjects)
+            assertEquals(3L, result.writtenObjects)
+            assertEquals(3, sourceCalls)
+            assertEquals(300L, coordinator.ackedObjects.get())
+            ForeverCasc.verifyExisting(fixture.dataFiles.parentFile!!.parentFile!!,
+                fixture.manifest.map { it.toRuntimeSpec() }, { false })
+        } finally { delete(fixture.root) }
+    }
+
+    @Test
+    fun checkpointBulkFailureAndCancellationPrecedeTornTailRepair() {
+        val fixture = buildOverlapFixture(prefixSize = 3, newSize = 1, name = "bulk-torn-tail")
+        try {
+            val membership = fixture.manifest.mapIndexed { index, spec -> spec.ekey to IndexedValue(index, spec) }.toMap()
+            val checkpoint = File(fixture.checkpointDir, ".forever-casc-resume-checkpoint")
+            checkpoint.appendBytes(byteArrayOf(1, 2, 3))
+            val beforeCheckpoint = directFileHashes(fixture.checkpointDir)
+            val beforeStage = directFileHashes(fixture.dataFiles)
+            var calls = 0
+            org.junit.Assert.assertThrows(IllegalStateException::class.java) {
+                ForeverCasc.writeTargetIncrementalResumable(
+                    null, fixture.dataFiles, fixture.checkpointDir, fixture.manifest.asSequence(),
+                    { error("invalid load must not request payload") }, { false }, fixture.identity,
+                    targetObjectCount = membership.size, targetMembership = { membership.getValue(it) },
+                    targetMembershipBatch = { keys ->
+                        calls++
+                        keys.map { key -> membership.getValue(key).let { admitted ->
+                            if (calls == 2 && key == fixture.manifest[1].ekey)
+                                IndexedValue(admitted.index, admitted.value.copy(contentKey = "ff".repeat(16))) else admitted
+                        } }
+                    },
+                )
+            }
+            assertEquals("the read-only preflight passed, then load rejected metadata", 2, calls)
+            assertEquals(beforeCheckpoint, directFileHashes(fixture.checkpointDir))
+            assertEquals(beforeStage, directFileHashes(fixture.dataFiles))
+
+            calls = 0
+            val cancelled = java.util.concurrent.atomic.AtomicBoolean(false)
+            org.junit.Assert.assertThrows(java.util.concurrent.CancellationException::class.java) {
+                ForeverCasc.writeTargetIncrementalResumable(
+                    null, fixture.dataFiles, fixture.checkpointDir, fixture.manifest.asSequence(),
+                    { error("cancelled load must not request payload") }, { cancelled.get() }, fixture.identity,
+                    targetObjectCount = membership.size, targetMembership = { membership.getValue(it) },
+                    targetMembershipBatch = { keys ->
+                        calls++
+                        keys.map { membership.getValue(it) }.also { if (calls == 2) cancelled.set(true) }
+                    },
+                )
+            }
+            assertEquals(2, calls)
+            assertEquals(beforeCheckpoint, directFileHashes(fixture.checkpointDir))
+            assertEquals(beforeStage, directFileHashes(fixture.dataFiles))
+
+            cancelled.set(false)
+            var fetched = 0
+            val recovered = ForeverCasc.writeTargetIncrementalResumable(
+                null, fixture.dataFiles, fixture.checkpointDir, fixture.manifest.asSequence(),
+                { spec -> fetched++; fixture.rawByKey.getValue(spec.ekey) }, { false }, fixture.identity,
+                targetObjectCount = membership.size, targetMembership = { membership.getValue(it) },
+                targetMembershipBatch = { keys -> keys.map { membership.getValue(it) } },
+            )
+            assertEquals(3L, recovered.reusedObjects)
+            assertEquals(1L, recovered.writtenObjects)
+            assertEquals(1, fetched)
+            assertEquals(0L, (checkpoint.length() - 40L) % 72L)
+            ForeverCasc.verifyExisting(fixture.dataFiles.parentFile!!.parentFile!!,
+                fixture.manifest.map { it.toRuntimeSpec() }, { false })
+        } finally { delete(fixture.root) }
+    }
+
+    @Test
     fun resumableWriterVerifiesObjectsThroughPrivateCheckpointTemporary() {
         val root = tempDir()
         try {
@@ -3242,6 +3370,7 @@ class ForeverCascTest {
                         },
                         overlapCoordinator = coordinator,
                         targetObjectCount = fixture.manifest.size,
+                        targetMembershipBatch = { keys -> keys.map { membership.getValue(it) } },
                         targetMembership = { membership.getValue(it) },
                     ))
                 } catch (t: Throwable) {
@@ -3312,6 +3441,46 @@ class ForeverCascTest {
         override fun close() {}
     }
 
+    @Test
+    fun checkpointBulkRejectsNextGroupMetadataBeforeAcknowledgingThePreviousGroup() {
+        val fixture = buildOverlapFixture(prefixSize = 4, newSize = 0, name = "bulk-next-group-metadata")
+        try {
+            val (_, secondGroup) = splitOverlapFixtureIntoInterleavedGroups(fixture)
+            val membership = fixture.manifest.mapIndexed { index, spec -> spec.ekey to IndexedValue(index, spec) }.toMap()
+            val beforeCheckpoint = directFileHashes(fixture.checkpointDir)
+            val beforeStage = directFileHashes(fixture.dataFiles)
+            val retired = java.util.concurrent.CopyOnWriteArrayList<String>()
+            val coordinator = CascOverlapCoordinator(
+                retirePrefixRaw = { retired += it }, wantedKeys = membership.keys,
+            )
+            membership.keys.forEach { coordinator.registerRawKey(it) }
+            var batches = 0
+            var sourceCalls = 0
+            val failure = org.junit.Assert.assertThrows(IllegalStateException::class.java) {
+                ForeverCasc.writeTargetIncrementalResumable(
+                    null, fixture.dataFiles, fixture.checkpointDir, fixture.manifest.asSequence(),
+                    { sourceCalls++; error("checkpointed objects must not be fetched") }, { false }, fixture.identity,
+                    replayReaderFactory = { cancelled -> FakeCascReplayReader(cancelled) }, overlapCoordinator = coordinator,
+                    targetObjectCount = membership.size, targetMembership = { membership.getValue(it) },
+                    targetMembershipBatch = { keys ->
+                        batches++
+                        keys.map { key -> membership.getValue(key).let { admitted ->
+                            if (batches > 2 && key == secondGroup.first())
+                                IndexedValue(admitted.index, admitted.value.copy(contentKey = "ff".repeat(16))) else admitted
+                        } }
+                    },
+                )
+            }
+            assertEquals("preflight/load, first group, then first next-group frame", 4, batches)
+            assertTrue(failure.message.orEmpty().contains("target manifest"))
+            assertEquals(0, sourceCalls)
+            assertEquals(0L, coordinator.ackedObjects.get())
+            assertTrue(retired.isEmpty())
+            assertEquals(beforeCheckpoint, directFileHashes(fixture.checkpointDir))
+            assertEquals(beforeStage, directFileHashes(fixture.dataFiles))
+        } finally { delete(fixture.root) }
+    }
+
     private fun overlapOfficialStreamOf(fixture: OverlapFixture): OverlapOfficialStream =
         { _, consume -> consume(fixture.manifest.asSequence()) }
 
@@ -3319,13 +3488,17 @@ class ForeverCascTest {
     fun overlapCommitsNewTailWhilePrefixVerificationIsBlocked() {
         val fixture = buildOverlapFixture(prefixSize = 10, newSize = 40, name = "blocked-v")
         try {
+            val membership = fixture.manifest.mapIndexed { index, spec -> spec.ekey to IndexedValue(index, spec) }.toMap()
             val prefixBytes = File(fixture.dataFiles, "data.000").readBytes()
             val gate = java.util.concurrent.CountDownLatch(1)
             val enteredLatch = java.util.concurrent.CountDownLatch(1)
             val gates = ArrayList<GateReader>()
             val retired = java.util.concurrent.CopyOnWriteArrayList<String>()
             // Register leftover raws for two prefix keys: only those retire on group ack.
-            val coordinator = CascOverlapCoordinator(retirePrefixRaw = { retired += it })
+            val coordinator = CascOverlapCoordinator(
+                retirePrefixRaw = { retired += it },
+                wantedKeys = setOf(fixture.manifest[0].ekey, fixture.manifest[3].ekey),
+            )
             coordinator.registerRawKey(fixture.manifest[0].ekey)
             coordinator.registerRawKey(fixture.manifest[3].ekey)
             val logs = LogCapture()
@@ -3363,6 +3536,9 @@ class ForeverCascTest {
                             },
                             overlapCoordinator = coordinator,
                             overlapOfficialStream = overlapOfficialStreamOf(fixture),
+                            targetObjectCount = membership.size,
+                            targetMembershipBatch = { keys -> keys.map { membership.getValue(it) } },
+                            targetMembership = { membership.getValue(it) },
                         )
                     } catch (t: Throwable) {
                         failure = t
@@ -4065,6 +4241,7 @@ class ForeverCascTest {
     fun overlapCheckpointReplacementDuringVerificationFailsWithoutAck() {
         val fixture = buildOverlapFixture(prefixSize = 4, newSize = 2, name = "cp-swap")
         try {
+            val membership = fixture.manifest.mapIndexed { index, spec -> spec.ekey to IndexedValue(index, spec) }.toMap()
             val gate = java.util.concurrent.CountDownLatch(1)
             val enteredLatch = java.util.concurrent.CountDownLatch(1)
             val coordinator = CascOverlapCoordinator(retirePrefixRaw = { })
@@ -4094,6 +4271,9 @@ class ForeverCascTest {
                         },
                         overlapCoordinator = coordinator,
                         overlapOfficialStream = overlapOfficialStreamOf(fixture),
+                        targetObjectCount = membership.size,
+                        targetMembershipBatch = { keys -> keys.map { membership.getValue(it) } },
+                        targetMembership = { membership.getValue(it) },
                     )
                 } catch (t: Throwable) {
                     failure = t
