@@ -831,15 +831,110 @@ Guardas de replay/acciones durables y verificación final En pausa/Reanudar/cero
 servicios. Falta observar el resultado original, validar continuidad e interpretar
 camino crítico y representación real, sin aceptar rendimiento por compilar/auditar.
 
+## C158 parcial: espera de fuente y timeout de cuerpo HTTP
+
+La cadena original terminó exit 1, **sin reintentar**. La app falló antes de la
+pausa temporal/de datos: `SocketTimeoutException` en
+`Http1xStream$FixedLengthSource.read` → `fetchBatchInternal:258`, confirmado en el
+log del mismo PID. No es un error deducido solo de los contadores. El final
+21:45:30 UTC quedó En pausa/Reanudar, cero servicios/HTTP/callbacks y las siete
+fases activas a cero. El postmortem de solo lectura a 21:49:37 confirmó cero
+servicios y el mensaje genérico de error; ninguna nueva acción UI o descarga.
+
+Ventana visible parcial 21:30:37,379–21:44:58,667: **861,288 s, 0,024016 MB/s**
+(límites solo de redondeo 0,023955–0,024077). No son veinte minutos completados ni
+una prueba de estabilidad. El intervalo wall alineado dentro de esas recepciones
+cubre 859,768 s, 859 muestras, sin huecos excluidos; progreso lógico exacto y cuerpo
+consumido aumentan ambos 20.640.113 bytes, 0,024007 MB/s. No son bytes TLS/IP wire.
+
+| Estado observado a 1 Hz | Fracción del intervalo cubierto |
+|---|---:|
+| Writer esperando el futuro de cabeza | 98,49 % |
+| Cabeza pendiente con alguna fuente ready-ahead | 74,16 % |
+| Lectura de cuerpo HTTP activa en algún worker | 94,18 % |
+| Cabeceras activas en algún worker | 18,86 % |
+| Reserva en el máximo de 34 claves | 100 % |
+| Callback de progreso activo | 0,70 % |
+| Force privado de transfer activo | 0,12 % |
+
+Estados no exclusivos, vectores individualmente atómicos y estado sostenido entre
+muestras: no se suman como partición causal. HTTP activo medio 1,91, mediana 2,
+máximo 5, pese al pool de 16; ready-ahead mediano 13. Esto acota el coste actual a
+disponibilidad de fuentes, amplificado por la espera ordenada y la presión de
+claves; **no identifica todavía una causa única CDN/ruta/Wi-Fi/stack Android**.
+El writer registró 2,540 s de verificación privada, 2,663 s append/force y 0,462 s
+checkpoint, frente a 739,860 s de resolución exitosa de fuentes. La espera del
+último futuro fallido también aparece en head/source-wait pero no en el contador
+de resoluciones exitosas; no es un error de reloj.
+
+CPU de la app de unos 105–116 % durante varios intervalos (**100 % = un core**),
+con verificador del prefijo todavía concurrente; no se atribuye toda esa CPU a un
+hilo sin profiling. Ese verificador finalizó 21:42:59 y el timeout llegó 21:45:03.
+Wi-Fi observado: RSSI −41 a −43 dBm, enlace 1.201 Mbps a 5.180 MHz; es tasa PHY,
+**no ancho de banda de Internet**. Temperatura 29,8–31,5 °C. `/proc/PID/io` denegado
+en todas las capturas: IO no disponible, no IO cero.
+En el log capturado del intervalo visible hay 29 eventos GC: suman 0,217 s de
+pausas reportadas, máximo 10,2 ms por evento. No explican por sí solos minutos de
+espera, pero ese log no es un profiler completo ni atribuye la CPU a un hilo.
+
+Continuidad: checkpoint **454.511 → 455.407**, 896 objetos durables y 21.192.677
+bytes encoded, prefix/CRC válidos. Solo 867 pequeños y 29 intermedios, todos range;
+ningún grande. Raw 17 claves/266.841 bytes → 30/413.626; ninguna clave inicial
+perdida sin commit o retención. Balance de entrada completo 21.339.462 bytes.
+El contador writer incluye **902 append**, seis sin completar la barrera durable
+force/checkpoint/ACK del grupo parcial cuando falló la red. Se comprueba retención,
+no se los presenta como durables ni se exige igualdad de esos contadores en un fallo
+no cooperativo.
+
+Evidencia externa `c158/trial/partial-diagnostic-analysis.json`, `analyze_partial.py`,
+1.077 walls con alineación, recursos y `postmortem-complete/` privado. El análisis
+solo leyó datos ya capturados; no repitió el ensayo.
+
+### Control auxiliar de fuente desde host: seis respuestas autenticadas
+
+Manifiesto fijado antes del primer GET: el rango exacto del batch fallido de doce
+pequeños (215.868 bytes), un grande range (1.576.355) y otro direct (2.097.166).
+Orden prefijado `[0,1,2,2,1,0]`, HTTP/1.1 HTTPS oficial, sin redirects/reintentos,
+≤15 s por petición y ≤16 MiB esperado total. Antes de transferir se comprobó que
+el mínimo direct grande supera 2 MiB; el límite individual se fijó en 3 MiB,
+conservando los límites globales y sin elegir por resultados de velocidad.
+
+Terminado 22:16:39 UTC: **6/6 autenticadas**, 7.778.778 bytes. Se verificaron status,
+Content-Range numérico/tamaño/encoding, EKey, tablas/chunks BLTE y CKey decoded.
+Tiempos totales en orden: **1,239 / 0,579 / 0,612 / 0,614 / 2,022 / 0,453 s**.
+El mismo rango fallido puede servirse rápidamente ahora desde Linux; **no demuestra
+que el peer/ruta/Wi-Fi/stack Android fueran correctos durante el fallo**. No es
+throughput Android, carga mixta real ni A/B. No se instaló ningún cuerpo ni se
+modificó el cliente. Evidencia: `c158/source-control/{manifest,summary}.json`,
+headers, cuerpos y verificaciones, más `source_control.py` externo.
+
+Siguiente control discriminante: los mismos objetivos y orden usando el
+`HttpURLConnection` de Android, ligado a una única red Wi-Fi validada, en proceso
+auxiliar **UID shell 2000**, no UID de la app. Sin instalar APK, iniciar UI,
+escribir datos del cliente o tocar su journal; checkpoint antes/después idéntico,
+sin updater/guest. Cada petición conserva deadline de 15 s y los cuerpos se
+autentican en host antes de usarse como evidencia; nunca como datos instalados.
+Fuente/dex y runner se revisan y compilan primero. Si también es lento, apoya una
+limitación fuera del writer; si es rápido, siguen pendientes app-UID, conexiones,
+concurrencia, cachés y diferencias temporales. No autoriza un cambio de algoritmo
+ni equivale a un replay del pipeline mixto.
+
+El primer proceso auxiliar compiló, pero falló cerrado al obtener el contexto
+Android (`InvocationTargetException`), **antes de cualquier GET**. Cero respuestas,
+checkpoint idéntico, cero servicios y scratch propio eliminado. Se conservan
+fuente/dex y reporte; la revisión inicializa el Looper de forma normal y registra
+causas anidadas, sin desactivar restricciones ni modificar C158. Ese fallo del
+instrumento no aporta evidencia de velocidad del teléfono.
+
 ## Matriz de aceptación del objetivo
 
 | Criterio | Evidencia y estado |
 |---|---|
 | Línea base con unidades, ambos tamaños y preparación separada | C152: 609,206 s; UI, frames y raw balance distinguidos. Comprobado. |
-| Diagnóstico sin sumar relojes concurrentes | Contadores y reproducciones locales válidos; **[PENDING]** aislar predominancia con un experimento discriminante. Diagnóstico reabierto. |
+| Diagnóstico sin sumar relojes concurrentes | C158 localiza espera de fuentes: head 98,49 %, cuerpo activo 94,18 % y timeout de cuerpo confirmado. **[PENDING]** discriminar fuente/ruta/cliente y validar la mezcla restante. |
 | Mejora medida y evaluación por tamaño | C156/C157 medidas, pero solo 151/5 grandes y tamaños distintos. +16,90 % C155 y −47,57 % C157 observacionales no validan mejora general. **[PENDING]** comparación representativa. |
 | Garantías, pruebas, revisión sensible y APK autenticada | Diez regresiones y revisión del cambio sensible; cuatro checks iniciales, dos tras simplificar métricas y tres de versión. Ambas APK auditadas; ensayos con prefix/CRC/retención válidos. Comprobado para estos escenarios. |
-| Informe, pausa final, progreso y commits propios | C157 terminó pausada 19:41:11, checkpoint 454.511, cero trabajo activo; commits propios. **[PENDING]** completar el objetivo y archivar plan solo entonces. Sin publicación/push. |
+| Informe, pausa final, progreso y commits propios | C158 falló sin retry; final 21:45:30, checkpoint 455.407 válido, cero trabajo activo y raws retenidos; commits propios. **[PENDING]** completar el objetivo y archivar plan solo entonces. Sin publicación/push. |
 
 ## Pendiente
 

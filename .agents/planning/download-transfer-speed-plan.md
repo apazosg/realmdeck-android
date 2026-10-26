@@ -233,6 +233,29 @@ completado; se ejecutan instrumentación y calibración antes del ensayo prolong
 
 ## Open Issues
 
+- C158 terminó por timeout de lectura HTTP, no completó veinte minutos:
+  861,288 s visibles a 0,024016 MB/s; SocketTimeoutException en
+  FixedLengthSource.read → fetchBatchInternal. Captura de 1.077 walls válida.
+  Checkpoint 454.511 → 455.407 (896 durables), prefix/CRC y retención raw válidos,
+  cero trabajo activo. Writer contó 902 append: seis aún sin checkpoint, no una
+  pérdida de ACK; se conservan sus raws. Mezcla 867 pequeños/29 intermedios/0 grandes.
+  No repetir C158 para llenar el tiempo ni declararla representativa de grandes.
+- Control discriminante auxiliar del punto 6, antes de otro cambio: manifiesto
+  fijo del rango del batch fallido, reconstruido y comprobado con catálogo activo,
+  prefijo durable y partes retenidas, más un grande range y otro direct. Dos pasadas
+  predeterminadas, seis GET HTTPS oficiales HTTP/1.1 desde host, ≤15 s/petición y
+  ≤16 MiB de cuerpo esperado total; verificar status/rango/tamaño, EKey, BLTE/CKey.
+  No se instala ningún blob ni se modifica el teléfono/checkpoint. Un host lento
+  apoya problemas compartidos de fuente/ruta; uno rápido no acredita Android ni
+  elimina diferencias de peer, caché, tiempo, stack o último tramo de red. Es un
+  control de fuente, no benchmark del CLI ni replay/aceptación del pipeline mixto.
+- Ese control host terminó una vez 22:16:39 UTC: seis respuestas autenticadas,
+  7.778.778 bytes, incluyendo el rango fallido en 1,239 y 0,453 s; no repetirlo.
+  Control siguiente acotado en Android: mismos objetivos/orden/deadlines, proceso
+  shell 2000 separado de la app, Wi-Fi validada ligada por petición, sin tocar
+  instalación/journal/progreso y con checkpoint idéntico antes/después. Es
+  transporte auxiliar; diferencias de UID/pool/concurrencia/tiempo se conservan
+  como límites y no sustituyen la validación mixta ni justifican tuning por sí solas.
 - C158 autenticada, fuente `673c50e`: cinco calibraciones y tres checks de versión
   verdes; build Modern offline PASS en 5 min 9 s, auditoría exacta PASS con
   2.226 fuentes/178 payloads, 2.220 iguales a C152. Solo seis rutas revisadas;
