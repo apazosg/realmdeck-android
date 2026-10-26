@@ -708,12 +708,53 @@ comprobó los cuatro hashes contra las fuentes compiladas y verificó el staged
 snapshot antes de commit. Logs y XML permanecen en
 `work/checkpoint-readers-refactor-20261026`, fuera del repositorio.
 
-La candidata combinada será **C151 / `0.2.127-checkpoint-readers-test`** (`3ca861a`):
+La candidata combinada es **C151 / `0.2.127-checkpoint-readers-test`** (`3ca861a`):
 postimages de Casc/CascTest actualizadas solo a los hashes revisados, con preimages
 históricas, inputs externos y native/privacy pins intactos. Cinco focales Python de
-identidad, staging y rechazo de preimage ajena pasan. Faltan su reconstrucción,
-auditoría exacta y medida del recorrido completo; estos checks no demuestran todavía
-una reducción del tiempo de Android.
+identidad, staging y rechazo de preimage ajena pasan. Estos checks por sí solos no
+demuestran una reducción del tiempo de Android.
+
+### C151: construcción auditada y primera preparación
+
+Reconstrucción autenticada fresca en
+`work/download-checkpoint-readers-c151-20261026`, sin reutilizar el árbol pequeño
+C150. Frente al recibo C149 cambian exactamente seis paths: identidad Gradle,
+marker y los cuatro archivos Casc/Updater con sus tests. Se cotejaron seis fuentes
+críticas contra el repositorio. Compilación ModernDebug offline, JDK17 y un único
+worker, **BUILD SUCCESSFUL en 6 min 7 s**; no se repitieron los focales ya verdes.
+
+Auditoría del APK exacto **PASS_SOURCE_BUILD_AND_PAYLOAD_AUDIT**: 2.226 fuentes
+sin cambios, 178 payloads, **484.926.199 bytes**, SHA-256
+`2c8c6f77afefd1dfee5bd1bede897e3829b4a20fbeb283fb5a31c7e88ebcb4e0`.
+No hizo falta ampliar la admisión DEX ni alterar pins externos. Recibo, log y
+auditoría permanecen en ese directorio externo; no prueban integridad completa
+del cliente instalado.
+
+Antes de actualizar se comprobaron C149, cero servicios updater y ningún ejecutable
+guest observado. `install -r` terminó con éxito y PackageManager confirmó C151;
+Home abrió a las 07:37:03 UTC. Sin reset, desinstalación, juego, cambios de seguridad
+ni publicación. La actualización conserva los datos; su progreso se contrasta en
+la prueba, no se da por íntegro solo porque la instalación de la APK funcione.
+
+Primera preparación única: abrir gestor a las **07:41:27.894752 UTC** y
+«Continuar» a las **07:41:49.329068 UTC**. Primera respuesta observada a +2,860 s;
+resumen a **+370,247 s (6 min 10 s)**, con 22 muestras y sin pulsar Descargar.
+Inspector: +114,926 a +303,206 s, **188.279 ms y cero rehashes**, para 1.144.978
+objetos. El stream de orden físico registró 4.473 bloques, con sus tiempos de
+consulta/consumidor incluidos en el total, no sumados otra vez. Los agregados de
+tamaños tardaron 175/196 ms. C149 mostró el resumen a 440,830 s: la diferencia
+observada de 70,583 s no es un A/B causal con caché/cohorte controladas ni tiempo
+hasta transferencia.
+
+El usuario eligió **«Confirmar y medir»** el plan visible `1.60.1.70532`/Unidad USB:
+**62,7 GiB** de descarga, **64,9 GiB** adicionales, app/cliente **1,7/63,2 GiB**.
+Se inició una sola prueba acotada de Descargar, pausa, un Resume y reapertura,
+terminando en pausa y sin aceptar otro coste. La cancelación del shell por reinicio
+del servidor no se interpretó como fallo de la app: se comprobó un único controlador
+todavía activo y se conservó el ensayo, sin repetir pulsaciones ni reconstruir.
+La medida completa y su comparación siguen pendientes del resultado durable.
+Artefactos filtrados en `physical-trial/prepare-summary.json` y
+`physical-trial/download-resume-summary.json`; no se versionan capturas privadas.
 
 ### Retención de evidencia
 
@@ -730,5 +771,5 @@ C148 se guarda en `work/download-resume-c148-20261025/physical-trial`, no en `/t
 |---|---|---|
 | Menor preparación al iniciar/reanudar | Menos trabajo host; C149 completa 860,836/1.225,989 s frente a 948,398/1.453,953 s C148 | Aún 14/20 minutos; siguiente optimización local y medida completa pendientes, sin extrapolaciones |
 | Primera pulsación efectiva, sin repetir | Flujo físico 3/1 acciones; C149 reanuda y reabre UI con el mismo proceso/servicio, sin reconfirmar ni duplicar | Verificar que la siguiente candidata conserve el resultado; sin medida subsegundo ni doble toque deliberado |
-| Garantías intactas | Reviews/focales de la fila actual y de los lectores, recuperación/tail/ACK/cpByteEnd probados; cuatro guardas conservadas | Auditoría y prueba física de la candidata combinada; no se ejecutó toda la suite |
-| Entrega versionada y honesta | Baseline y C147–C149 auditadas/instaladas/probadas sin reset; artefactos externos; pausa final y cero servicios | Completar nuevo ajuste y auditoría final del objetivo, no cerrar por ahorro aislado |
+| Garantías intactas | Reviews/focales de la fila actual y de los lectores, recuperación/tail/ACK/cpByteEnd probados; C151 compilada y APK auditada; cuatro guardas conservadas | Prueba física completa de C151; no se ejecutó toda la suite |
+| Entrega versionada y honesta | Baseline y candidatas auditadas/instaladas sin reset; artefactos externos; C151 con consentimiento real y medición en curso | Resultado completo y auditoría final del objetivo, no cerrar por ahorro aislado |

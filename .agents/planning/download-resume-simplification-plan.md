@@ -423,6 +423,17 @@ rediseño del stream de entrada ni se debilitan garantías.
   efecto completo tras reconstrucción/auditoría. La instantánea pequeña C150 se
   conserva sin compilar; tras la nueva aprobación se integrará el refactor de
   lectores con un recibo fresco. Todavía no hay una mejora física de esos cambios.
+- C151 reconstruida con recibo fresco y seis paths distintos de C149, fuentes
+  cotejadas, build ModernDebug offline SUCCESS (6 min 7 s) y auditoría exacta PASS
+  de 2.226 fuentes/178 payloads. Actualización local verificada sin reset y Home
+  disponible a las 07:37:03 UTC; no compilar ni instalar de nuevo por un reinicio.
+  Primera preparación única: respuesta +2,860 s, inspector 188,279 s sin rehashes,
+  resumen +370,247 s; no equivale a tiempo hasta transferir.
+- El usuario autorizó «Confirmar y medir» el plan C151 visible 70532/Unidad USB,
+  62,7 GiB de descarga y 64,9 GiB adicionales (app/cliente 1,7/63,2). Ensayo completo
+  iniciado una sola vez, con pausa final y sin aceptar otro coste. El controlador
+  sobrevivió al reinicio del servidor; conservar ese ensayo y esperar su resultado,
+  no repetir acciones ni inferir una mejora global de la compilación o el resumen.
 - La extensión de lotes a otros lectores requiere preservar CRC/layout/ordinales,
   tail recuperable y límite congelado `cpByteEnd`. No adelantar el stream de entrada
   del escritor sin analizar backpressure de las cotas raw: no es un cambio aprobado
