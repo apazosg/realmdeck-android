@@ -233,6 +233,19 @@ completado; se ejecutan instrumentación y calibración antes del ensayo prolong
 
 ## Open Issues
 
+- Controles Android cerrados: V3 seis respuestas autenticadas, 23:03:43, y contraste
+  serial/paralelo/paralelo/serial de tres streams, 23:24:26, doce autenticadas.
+  Fases 0,952/2,544/0,730/0,326 s, sin reproducir minutos de bloqueo. Checkpoint
+  455.407 idéntico y cero trabajo del updater; no son aceptación de carga mixta.
+  La política actual no muestra ahorro/Doze/bloqueo, sin probar el estado histórico.
+  No modificar workers, timeout ni ajustes a partir de esos controles.
+- Contraste temporal pendiente, sin cambiar la APK: nuevo Resume desde 455.407,
+  veinte minutos/6 GiB con pausa; solo si reaparece cabeza+body+ready durante diez
+  muestras-segundo, un control fuente shell fijo ≤8 MiB durante ese estado.
+  Solo UID shell/lecturas durante updater; cero run-as/app-data mientras activo.
+  El controlador principal verifica checkpoint/retención antes/después. Marcar la
+  ventana perturbada y CPU por hilo; comparar con verificador de prefijo activo.
+  No replay del cliente, catálogo sintético, reset, nuevos permisos ni tuning.
 - C158 terminó por timeout de lectura HTTP, no completó veinte minutos:
   861,288 s visibles a 0,024016 MB/s; SocketTimeoutException en
   FixedLengthSource.read → fetchBatchInternal. Captura de 1.077 walls válida.

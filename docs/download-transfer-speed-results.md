@@ -926,6 +926,58 @@ fuente/dex y reporte; la revisión inicializa el Looper de forma normal y regist
 causas anidadas, sin desactivar restricciones ni modificar C158. Ese fallo del
 instrumento no aporta evidencia de velocidad del teléfono.
 
+### Android: fuente y concurrencia fuera de la app
+
+El segundo bootstrap falló cerrado, sin GET: AppOps rechazó atribuir `android` al
+UID shell. Se conserva el fallo; la consulta de capacidades usa después el paquete
+propio `com.android.shell`, comprobado con PackageManager, mediante el mismo Binder
+de solo lectura. No se desactivó ninguna restricción, permiso ni comprobación Wi-Fi.
+
+Control V3 terminado 23:03:43 UTC: **6/6 autenticadas**, mismo manifiesto, 7.778.778
+bytes, checkpoint idéntico y cero servicios/UI/instalaciones. Tiempos en orden:
+0,492 / 0,231 / 0,244 / 0,176 / 0,375 / 0,071 s. El campo legacy `statusLine`
+tomaba un header por índice, que aquí era Date: no se usa como prueba de protocolo.
+Status numérico, rango, tamaño y autenticación sí se verificaron.
+
+Contraste adicional prefijado **serial/paralelo/paralelo/serial**, tres objetivos
+idénticos por fase, un proceso y una instancia Network/pool: 12 GET, 15.557.556 bytes
+totales ≤16 MiB, sin reintentos, 15 s por petición. RAM acotada; todo el volcado de
+cuerpos se hizo después de las cuatro fases. Compilación javac/d8 y sintaxis PASS;
+revisión independiente del snapshot del control, sin acceso a archivos ni reruns.
+Terminado 23:24:26: **12/12 autenticadas**, HTTP/1.1 observado con el header correcto,
+checkpoint idéntico, cero servicios/UI y scratch propio eliminado.
+
+| Fase | Segundos para 3.889.389 bytes | Máximo de scopes de petición solapados |
+|---|---:|---:|
+| Serial inicial | 0,952 | 1 |
+| Paralelo primero | 2,544 | 3 |
+| Paralelo segundo | 0,730 | 3 |
+| Serial final | 0,326 | 1 |
+
+Los intervalos monotónicos confirman el solapamiento, no ocupación exacta de sockets.
+Hay variabilidad y penalización de algunas conexiones paralelas, **pero no se
+reprodujeron los minutos bloqueados ni el timeout**. No se cambia el número de
+workers por estas cuatro fases. Son pocos cuerpos, cacheados previamente, UID shell
+y otro momento; no exoneran al proceso de la app ni acreditan rendimiento mixto.
+Evidencia: `device-source-control-v3/`, `device-concurrency-control/{summary,analysis}.json`,
+manifiestos y fuentes/dex/runner externos separados. C158 no se recompiló.
+
+Solo lectura de política actual 23:13:35: app TOP sin bloqueo efectivo, Data Saver,
+ahorro y Doze inactivos, pantalla encendida; timeout de pantalla 2.147.483.647 ms.
+No explica retroactivamente el fallo ni justifica cambiar ajustes de batería.
+
+Próximo contraste dentro del diagnóstico aprobado: **misma C158**, nuevo Resume
+desde 455.407, sin instalar ni repetir los controladores terminados; límite de
+1.200 s visibles/6 GiB lógicos y pausa conservados. Si el camino real vuelve a
+mostrar durante diez muestras-segundo cabeza pendiente, cuerpo activo y ready-ahead,
+se ejecutará una sola vez el control shell de seis GET fijado, durante esa espera.
+Su tráfico ≤8 MiB se marca como perturbación auxiliar, no progreso ni tasa de la app.
+Se añaden lecturas shell de CPU por hilo/status y estado UID, sin procesos nativos
+de la app. Si no aparece el trigger, no se lanza el control. Si fuente auxiliar es
+rápida mientras la app sigue esperando, acota contexto/conexiones/pipeline; si ambas
+se degradan, apoya un recurso/ruta compartido. Ningún resultado autoriza por sí solo
+un ajuste: se contrastará además el periodo de verificación del prefijo.
+
 ## Matriz de aceptación del objetivo
 
 | Criterio | Evidencia y estado |
