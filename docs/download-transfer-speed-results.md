@@ -610,6 +610,44 @@ revalidación del auditor intacto, receipts/source-comparison, build/audit por
 variante y `completed-build-evidence.json`. La pareja anterior rechazada permanece
 separada; ninguna de sus APK se acepta como sustituto.
 
+## C156: referencia instrumental terminada; análisis recuperado
+
+Download 18:04:29 UTC; payload visible 18:12:40,873–18:18:48,509:
+**367,636 s, 1,881607 MB/s** útiles mostrados, límites solo de redondeo
+1,881321–1,881892. Tres subventanas de unos 122 s: 0,823 / 1,964 / 2,858 MB/s.
+Pause 18:19:17; final 18:19:27: En pausa/Reanudar, cero servicios/HTTP/callbacks
+activos y 2.324 callbacks finalizados. Checkpoint 435.310 → **444.654**, prefix y
+CRC válidos; 9.344 objetos nuevos: 7.611 pequeños, 1.582 intermedios, 151 grandes.
+Los 721.611.555 bytes encoded durables de toda la ejecución no son los bytes de
+esa ventana UI ni un contador wire.
+
+Intervalo separado de logs periódicos: 405,941 s. Los siguientes ratios son
+**MB útiles por segundo de servicio de callbacks completados, no throughput
+global ni velocidad de red aislada por clase**:
+
+| Cohorte | Callbacks exitosos | Objetos | Encoded medio/objeto, bytes | Objetos/callback | MB/servicio-s |
+|---|---:|---:|---:|---:|---:|
+| Pequeña homogénea | 1.427 | 6.404 | 15.647 | 4,488 | 0,167164 |
+| Intermedia homogénea | 437 | 978 | 269.941 | 2,238 | 0,666883 |
+| Grande homogénea | 151 | 151 | 1.458.163 | 1 | 1,196391 |
+| Mixta | 298 | 1.747 | 77.548 | 5,862 | 0,619571 |
+
+Un fallo pequeño y cero en las otras cohortes; fallos no aportan bytes/servicio
+exitoso. Ningún éxito sin bytes útiles en ese intervalo. Bytes útiles y encoded
+declarados coinciden para sus éxitos, sin convertirlos en contabilidad de reintentos.
+Los extremos concurrentes y el intervalo distinto de la UI siguen siendo límites.
+
+La cadena se detuvo **después** del ensayo por un `ZeroDivisionError` del informe:
+una frontera de dos minutos coincidía con el último sample, añadido dos veces.
+Se conserva el helper original y se corrige solo la selección de fronteras
+interiores estrictamente crecientes. El análisis de los datos ya capturados pasa:
+subventanas positivas y suma exacta de duraciones/bytes de la ventana; todos los
+controles de checkpoint, parada y contadores también pasan. **No se repitió ninguna
+acción UI ni descarga de referencia.** Evidencia: `analysis-boundary-repair.diff`,
+`analysis-boundary-repair-verification.json` y `reference/trial/{analysis,cohort-service}.json`
+en el workspace externo. Continúa solo la instalación/preparación de C157, todavía
+sin confirmar su payload; falta la comparación y no se declara mejora por tamaño.
+
 ## Matriz de aceptación del objetivo
 
 | Criterio | Evidencia y estado |
@@ -623,7 +661,7 @@ separada; ninguna de sus APK se acepta como sustituto.
 ## Pendiente
 
 Completar el desglose por tamaño con idéntica instrumentación y auditar el resultado.
-C153/C154/C155 terminaron pausadas; no se repiten sus ensayos ni sus checks verdes.
+C153/C154/C155/C156 terminaron pausadas; no se repiten sus ensayos ni sus checks verdes.
 El goal **no** cumple todavía la mejora exigida.
 La línea base mide variación actual, pero no demuestra una causa única de todos
 los descensos históricos ni mejora aislada por tamaño; el uplift agregado de C155

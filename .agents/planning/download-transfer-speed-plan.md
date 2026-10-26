@@ -169,13 +169,21 @@ resuelva ninguna de ellas. Se investiga primero el componente dominante actual.
 
 ## Open Issues
 
+- C156 terminó una vez 18:19:27 UTC en pausa y sin trabajo activo: 367,636 s
+  visibles, 1,881607 MB/s; checkpoint 435.310 → 444.654, prefix/CRC válidos,
+  9.344 objetos (7.611/1.582/151). Desglose homogéneo obtenido, sin comparativa
+  optimizada todavía. La cadena falló solo en el informe por duplicar el último
+  extremo de subventana; fix offline mínimo y partición de duraciones/bytes
+  verificados, sin repetir el ensayo. Continuación separada y protegida únicamente
+  para instalar/preparar C157, sin confirmar payload ni reiniciar progreso.
 - Pareja instrumental nueva autenticada: C156/C157 Modern offline PASS en
   5 min 2 s / 5 min 23 s, ambas auditorías exactas PASS (2.226 fuentes matching,
   178 payloads; 2.222 idénticas C152). Solo updater/test/versión/marker difieren;
   misma instrumentación y auditor intacto. Pipeline host terminado 18:02:55 UTC.
   C156 instalada una vez 17:57:59 conservando 435.310 objetos, sin payload en el
   instalador; al corte 18:03:44 seguía preparando sin confirmación de payload.
-  La cadena física original continúa; no repetir instalaciones/acciones/ensayos.
+  Ese corte es histórico; la referencia terminó después y se recuperó su informe.
+  No repetir instalaciones/acciones/ensayos ya completados.
 - La primera referencia C156 compiló, pero su auditoría rechazó la nueva clase
   auxiliar DEX de contadores; no se instaló. Se simplifican a siete
   `AtomicLongArray(4)` sin ampliar allowlists ni cambiar la auditoría. Dos checks
