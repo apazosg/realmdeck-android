@@ -110,10 +110,10 @@ PINNED_UPDATER_CASC_PREIMAGES = {
     "ForeverCasc.kt": "b482531fb4970ba279448fac22ea69c470093fc8b09917c5b1ec0dd7a9ad57e4",
     "ForeverCascTest.kt": "19cb155b99ea60b3620259974e0fa40694ccd170149b7ce48287ada34c63194f",
 }
-# Reviewed reserve/commit/recovery and bounded checkpoint membership; frames unchanged.
+# Reviewed bounded checkpoint membership and immutable key patterns; frames unchanged.
 PINNED_UPDATER_CASC_POSTIMAGES = {
-    "ForeverCasc.kt": "5905203d3e5af293a1849dc562bc482b976b4bdfe123790a20f1f0a7e2894d19",
-    "ForeverCascTest.kt": "b74822a5872ebaf5a609b1a3ad507cc99bc6b332b048bb412e201675646a35b9",
+    "ForeverCasc.kt": "34f874b0d7d721837667d0d9cece6c996b7918e766706a23f6dc7505c2ff4d5d",
+    "ForeverCascTest.kt": "e5fdba90a4e054150131d6b45fdfc9eafabbfe173eafd88cc3df503a61800408",
 }
 # Reviewed reconstruction edit (2026-10-18): TACT-encrypted ('E') BLTE frames are
 # verified without decryption for CASC reconstruction consumers; strict decode is
@@ -131,7 +131,7 @@ BRIDGE_TARGET = Path("app/src/main/java/com/wowforever/launcher/ForeverPatchBrid
 CODE64_NATIVE_MEMBER = "lib/arm64-v8a/libforever_patcher_jni.so"
 FUNCTIONAL_MARKER_MEMBER = "assets/forever/functional-poc/provenance.json"
 SOURCE_VERSION = (62, "0.2.38-automated")
-CANDIDATE_VERSION = (151, "0.2.127-checkpoint-readers-test")
+CANDIDATE_VERSION = (152, "0.2.128-regex-startup-test")
 FUNCTIONAL_OVERLAY_NAMES = (
     "ForeverFunctionalPoc.kt",
     "ForeverFunctionalPocActivity.kt",
