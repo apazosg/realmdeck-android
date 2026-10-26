@@ -151,7 +151,7 @@ resuelva ninguna de ellas. Se investiga primero el componente dominante actual.
   mínimo que falta, sin repetir las investigaciones de inicio C151/C152.
 - [x] 4. Obtener línea base actual de payload pequeño/grande y seleccionar el
   cuello de botella con evidencia suficiente.
-- [ ] 5. Implementar la mejora mínima y regresiones focales; revisar garantías.
+- [x] 5. Implementar la mejora mínima y regresiones focales; revisar garantías.
 - [ ] 6. Validar candidata autenticada y medir antes/después bajo condiciones
   comparables, con pausa final y progreso preservado.
 - [ ] 7. Auditar todos los criterios, documentar límites, hacer commits propios
@@ -162,6 +162,9 @@ resuelva ninguna de ellas. Se investiga primero el componente dominante actual.
 - Aprobación recibida; línea base C152 terminada, con ambos tamaños y pausa final.
   Candidata seleccionada: grupos HTTP del productor de dos objetos para repartir
   trabajo dentro de las mismas 34 claves. No hay mejora de throughput demostrada.
+- Implementación y siete regresiones focales verificadas (RED previo y GREEN),
+  revisión independiente de snapshots sin hallazgos accionables. Quedan build/
+  auditoría de la candidata y comparación física antes de aceptar rendimiento.
 - «5mb»/«0.1» son observaciones reportadas sin unidad confirmada. Las mediciones
   usarán MB/s decimales y condiciones explícitas; no hace falta suponer la unidad.
 - Cohortes previas: pequeño ≤64 KiB; intermedio >64 KiB–1 MiB; grande >1 MiB.

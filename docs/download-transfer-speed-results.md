@@ -169,8 +169,37 @@ Artefactos adicionales: `baseline/analysis.json`, `baseline/updater-filtered.log
 inventarios/checkpoints privados y `analyze_baseline.py` (análisis offline,
 sin control del dispositivo). El ensayo terminado no se vuelve a ejecutar.
 
+## Implementación y regresiones focales
+
+El cambio de producción añade una constante privada y sustituye solo las tres
+referencias del productor (capacidad inicial y dos condiciones de flush). No se
+cambian transporte, writer, recuperación ni guards. Es una implementación dentro
+de AC-12 y FR-003/FR-004/NFR-001 de US-008; UC/AC, requisitos y límites aprobados
+siguen iguales, sin convertir el valor heurístico dos en un contrato de producto.
+
+La regresión existente de agrupación se adapta a 32 rangos contiguos: exige que
+arranquen 16 callbacks antes de que cualquiera pueda completar sus raws y valida
+pares exactos, objetos completos y ausencia de workers vivos. En C152 sin la
+corrección falla por la barrera esperada (un caso, sin skips). Con la corrección
+pasan **siete casos, cero fallos/errores/skips**: esa regresión, presión de presupuesto
+con prefix y tail, cancelación de batch, prefetch con commit físico ordenado,
+pausa/reanudación sin overdownload y diagnóstico de readiness/future-wait.
+
+JDK 17.0.20.1+1; Gradle offline `:app:testModernDebugUnitTest --tests ...`, copia
+externa aislada del árbol C152. No se altera el árbol autenticado anterior ni se
+repite su ensayo. El fuente probado coincide byte a byte con ambos archivos del
+repositorio. Artefactos: `focused-tests/{red,green}-summary.json`, XML y logs
+Gradle bajo `download-transfer-speed-20261026/`.
+
+Revisión independiente del diff y snapshots de invariantes/test, sin acceso del
+revisor al árbol ni reejecución de checks: sin defectos accionables. La anterior
+expectativa de tres miembros en el productor deja de aplicar; la API de transporte
+sigue independiente y sus pruebas de rangos/autenticación/resume no se modifican.
+La revisión no acredita rendimiento: más peticiones pueden contrarrestar el
+paralelismo y la comparación física sigue pendiente.
+
 ## Pendiente
 
-Intervención mínima, pruebas/revisión, candidata autenticada y comparación física.
+Candidata autenticada y comparación física.
 La línea base mide variación actual, pero no demuestra una causa única de todos
 los descensos históricos, throughput aislado por tamaño ni una mejora candidata.

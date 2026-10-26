@@ -2080,7 +2080,7 @@ class ForeverClientUpdater(
                                 }
 
                                 var ordinal = 0
-                                val candidates = ArrayList<ProducerObject>(ForeverClientUpdateTransfer.MAX_BATCH_OBJECTS)
+                                val candidates = ArrayList<ProducerObject>(PREFETCH_BATCH_OBJECTS)
                                 var candidateBytes = 0L
                                 fun flushCandidates() {
                                     if (candidates.isEmpty()) return
@@ -2142,13 +2142,13 @@ class ForeverClientUpdater(
                                                 previous.sourceHash.equals(record.sourceHash, true) &&
                                                 Math.addExact(previous.sourceOffset, previous.encodedSize) == record.sourceOffset
                                             val exceedsBytes = candidateBytes > ForeverClientUpdateTransfer.MAX_BATCH_BYTES - record.encodedSize
-                                            if (!contiguous || exceedsBytes || candidates.size == ForeverClientUpdateTransfer.MAX_BATCH_OBJECTS) {
+                                            if (!contiguous || exceedsBytes || candidates.size == PREFETCH_BATCH_OBJECTS) {
                                                 flushCandidates()
                                             }
                                         }
                                         candidates += ProducerObject(record, sourceOrdinal)
                                         candidateBytes = Math.addExact(candidateBytes, record.encodedSize)
-                                        if (candidates.size == ForeverClientUpdateTransfer.MAX_BATCH_OBJECTS ||
+                                        if (candidates.size == PREFETCH_BATCH_OBJECTS ||
                                             candidateBytes == ForeverClientUpdateTransfer.MAX_BATCH_BYTES
                                         ) flushCandidates()
                                     }
@@ -3962,6 +3962,11 @@ class ForeverClientUpdater(
          * sink), plus one private verification temporary per largest
          * admitted object. */
         private const val PREFETCH_WORKERS = 16
+        /** Sixteen two-member fetches fit within the existing 34-key bound.
+         * Larger groups concentrate that budget in fewer callbacks, starving
+         * parallel HTTP while the ordered writer waits for its head. This is
+         * a scheduling cap, not a change to the transport's validation limit. */
+        private const val PREFETCH_BATCH_OBJECTS = 2
         private const val PREFETCH_QUEUE_DEPTH = 30
         private const val PREFETCH_MAX_BYTES = (1L shl 30)
         /** Lookahead-32 crash-window bound: up to 32 live in-flight keys plus
