@@ -299,6 +299,7 @@ class ForeverClientUpdaterTest {
         Fixture(cascObjectCount = 10, contiguousRangeObjectCount = 9).use { fixture ->
             val paths = fixture.makePaths()
             val batches = java.util.Collections.synchronizedList(ArrayList<List<String>>())
+            val retiredWithReservation = AtomicInteger()
             val fetch: (ForeverClientUpdateCatalog.ObjectRecord, File, () -> Boolean, (Long) -> Unit) -> File =
                 { record, work, _, progress ->
                     val output = File(work, "${record.ekey}.blte")
@@ -310,6 +311,10 @@ class ForeverClientUpdaterTest {
                 // Three maximum-sized ranges fit. The larger contiguous run
                 // therefore exercises a pressure split and later regrouping.
                 prefetchMaxBytesForTests = fixture.rangeEncodedSize * 3
+                afterRawRetirementForTests = { _, reserved ->
+                    assertTrue("retired raw keeps its reservation until the writer finishes the acknowledgement group", reserved)
+                    retiredWithReservation.incrementAndGet()
+                }
                 batchFetchForTests = { members, work, cancelled, progress ->
                     batches += members.map { it.ekey }
                     members.map { record ->
@@ -326,6 +331,7 @@ class ForeverClientUpdaterTest {
             val result = updater.execute(destination, plan, consentFor(plan))
 
             assertEquals(10L, result.reusedObjects + result.writtenObjects)
+            assertEquals(result.writtenObjects.toInt(), retiredWithReservation.get())
             assertTrue("the initial prefix and a later tail must both use batch fetch", batches.size >= 2)
             assertTrue("pressure regrouping must submit multi-object tail groups", batches.drop(1).all { it.size > 1 })
             assertTrue(batches.flatten().all { it in fixture.contiguousRangeEkeys })

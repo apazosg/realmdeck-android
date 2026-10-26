@@ -330,6 +330,7 @@ class ForeverClientUpdater(
     internal var sourceReadinessForTests: ((Boolean, Boolean, Int) -> Unit)? = null
     internal var fetchReadyForTests: ((String) -> Unit)? = null
     internal var beforePostRevalidateSampleForTests: (() -> Unit)? = null
+    internal var afterRawRetirementForTests: ((String, Boolean) -> Unit)? = null
     private val targetSummary = validatedTargetSummary()
     private val targetCatalogSha256 = catalog.verifiedSha256.lowercase(Locale.ROOT).also {
         require(it.matches(HASH_PATTERN)) { "verified client catalog SHA-256 is malformed" }
@@ -1421,11 +1422,18 @@ class ForeverClientUpdater(
             }
         }
         fun release(key: String) {
+            releaseAll(listOf(key))
+        }
+        fun releaseAll(keys: List<String>) {
             synchronized(monitor) {
-                reservations.remove(key.lowercase(Locale.ROOT))?.let {
-                    reservedBytes = (reservedBytes - it).coerceAtLeast(0L)
-                    monitor.notifyAll()
+                var released = false
+                for (key in keys) {
+                    reservations.remove(key.lowercase(Locale.ROOT))?.let {
+                        reservedBytes = (reservedBytes - it).coerceAtLeast(0L)
+                        released = true
+                    }
                 }
+                if (released) monitor.notifyAll()
             }
         }
         fun snapshot(): Pair<Int, Long> = synchronized(monitor) { reservations.size to reservedBytes }
@@ -2203,13 +2211,30 @@ class ForeverClientUpdater(
                     }
                 }
             }.apply { isDaemon = true; start() }
+            // Writer-owned, bounded by the acknowledgement group. Retire and
+            // force each raw as before, but expose the group's free capacity
+            // together, not one slot at a time while ACK callbacks are running.
+            val retiredRawKeys = ArrayList<String>(ForeverCasc.RESUMABLE_COMMIT_GROUP_OBJECTS)
+            var retiredSources = 0
+            fun releaseRetiredBudget() {
+                if (retiredSources == 0) return
+                budget.releaseAll(retiredRawKeys)
+                // Keep drainPossible true until that capacity is actually free.
+                submittedUncommitted.addAndGet(-retiredSources)
+                retiredSources = 0
+                retiredRawKeys.clear()
+            }
             fun nextEntry(): Any {
+                releaseRetiredBudget()
                 var idleChecks = 0
                 while (true) {
-                // Only the physical-order writer persists groups or retires raws.
+                    // Only the physical-order writer persists groups or retires raws.
                     // An empty queue may mean the producer cannot reserve its
                     // next object until this partial group's budget is freed.
-                    if (queue.isEmpty()) budget.commitFlushRequest.get()?.invoke()
+                    if (queue.isEmpty()) {
+                        budget.commitFlushRequest.get()?.invoke()
+                        releaseRetiredBudget()
+                    }
                     queue.poll(2, TimeUnit.SECONDS)?.let { return it }
                     producerCrash.get()?.let { throw it }
                     checkCancelled(cancelled)
@@ -2359,6 +2384,9 @@ class ForeverClientUpdater(
                     cancelled,
                     cascCheckpointIdentity(destination, plan.sourceRevision, paths.stageReceipt),
                     { spec, raw ->
+                        check(retiredSources < ForeverCasc.RESUMABLE_COMMIT_GROUP_OBJECTS) {
+                            "retired CASC sources exceed the bounded writer acknowledgement group"
+                        }
                         val rawValidationStarted = System.nanoTime()
                         val entry = try {
                             val key = spec.ekey.lowercase(Locale.ROOT)
@@ -2396,12 +2424,13 @@ class ForeverClientUpdater(
                             // while a sibling raw of this key persists instead
                             // of freeing bytes for a file still on disk.
                             if (!Files.exists(File(paths.objects, "${spec.ekey}.part").toPath(), LinkOption.NOFOLLOW_LINKS)) {
-                                budget.release(spec.ekey)
+                                retiredRawKeys += spec.ekey
                             }
                         } finally {
                             fetchPipelineDiagnostics.sourceConsumedRawNanos.addAndGet(System.nanoTime() - rawRetireStarted)
                         }
-                        submittedUncommitted.decrementAndGet()
+                        retiredSources++
+                        afterRawRetirementForTests?.invoke(spec.ekey, budget.hasReservation(spec.ekey))
                         val committed = committedObjects.get()
                         if (committed > 0L && committed % FETCH_DIAGNOSTIC_OBJECT_INTERVAL == 0L) {
                             fetchPipelineDiagnostics.log("progress", committed, budget.snapshot())
@@ -2430,6 +2459,7 @@ class ForeverClientUpdater(
                         }
                     },
                 )
+                releaseRetiredBudget()
                 pipelineOutcome = "complete"
                 result
             } catch (cancelledFailure: CancellationException) {

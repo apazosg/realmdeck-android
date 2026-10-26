@@ -151,7 +151,7 @@ resuelva ninguna de ellas. Se investiga primero el componente dominante actual.
   mínimo que falta, sin repetir las investigaciones de inicio C151/C152.
 - [x] 4. Obtener línea base actual de payload pequeño/grande y seleccionar el
   cuello de botella con evidencia suficiente.
-- [ ] 5. Implementar la mejora mínima y regresiones focales; revisar garantías.
+- [x] 5. Implementar la mejora mínima y regresiones focales; revisar garantías.
 - [ ] 6. Validar candidata autenticada y medir antes/después bajo condiciones
   comparables, con pausa final y progreso preservado.
 - [ ] 7. Auditar todos los criterios, documentar límites, hacer commits propios
@@ -200,6 +200,13 @@ resuelva ninguna de ellas. Se investiga primero el componente dominante actual.
   durante rollover puede contener la siguiente fuente ya resuelta. No hace falta
   cambiar el writer CASC, sus pins o contrato para acumular retiros hasta ese
   punto del consumidor. La mejora de throughput sigue pendiente.
+- Corrección local verificada: reservas de raws ya retirados se liberan en un
+  solo monitor al avanzar el consumidor, tras flush parcial antes de esperar y
+  al retornar el writer. Contador drenable reducido después de liberar; error
+  conserva reservas hasta join/reset. Sin cambios CASC/pins ni cuotas. Misma
+  regresión RED→GREEN, diez checks focales sin fallo/error/skip, copia probada
+  igual al repositorio y revisión independiente del snapshot sin defectos
+  accionables. Falta reconstruir/auditar y medir la nueva candidata.
 - «5mb»/«0.1» son observaciones reportadas sin unidad confirmada. Las mediciones
   usarán MB/s decimales y condiciones explícitas; no hace falta suponer la unidad.
 - Cohortes previas: pequeño ≤64 KiB; intermedio >64 KiB–1 MiB; grande >1 MiB.

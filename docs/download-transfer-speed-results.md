@@ -405,10 +405,45 @@ ACK, retiros/forces individuales y writer/formato CASC; no se prueba otro cap.
 Evidencia externa: `wakeup/{summary,analysis,steady-pipeline}.json`, checkpoints,
 `updater-filtered.log`, `wakeup-comparison.json` y pipeline C154 completo/exit 0.
 
+## Corrección de la granularidad: verificación local
+
+Se conserva el monitor de C154, pero no se vuelve a notificar tras cada raw nuevo.
+El consumidor acumula, como máximo, 16 reservas de fuentes ya reconocidas,
+retiradas y con su unlink forzado; no acumula bytes ni pospone los retiros/forces.
+Libera esas reservas atómicamente antes de tomar la siguiente entrada, después
+del flush parcial por presión **antes** de esperar la cola, y al retornar el
+writer para el último grupo. El contador `submittedUncommitted` se reduce después
+de liberar, evitando una ventana de falso «no queda trabajo drenable». Las
+reservas de claves con `.part` hermano se conservan. En error/cancelación no se
+invita trabajo nuevo: se mantienen hasta el join/reset ya existente.
+
+Todo queda en `ForeverClientUpdater.kt`; no se cambia el writer CASC, sus pins,
+API, formato, cadencia ni orden. El estado es exclusivo del writer, no del
+verificador de prefix ni de los workers. El rollover no se deduce del mapa de
+fuentes pendientes: ese mapa puede contener ya la próxima fuente resuelta.
+
+La regresión existente de regrouping bajo presupuesto para tres objetos se
+refuerza con una observación nullable, conforme a los hooks de prueba existentes:
+cada raw retirado conserva su reserva hasta el handoff del consumidor. Con la
+liberación individual de C154 falla exactamente esa aserción: **RED, 1 prueba / 1
+fallo esperado**, sin error ni skip. Sin cambiar el test, la corrección pasa
+**10 pruebas / 0 fallos, errores o skips**, offline JDK 17 en **1 min 17 s**:
+recheck antes de wait, cuotas/deuda/drain/evicción, batch exacto, presión con un
+objeto, regrouping, cancelación y join, paralelismo con orden físico, 16 parciales
+y resume, readiness y barrera durable de 16 raws CASC.
+
+Evidencia externa en `coalesced-focused-tests/`: `red-summary.json`,
+`green-summary.json`, XML y logs; la copia probada coincide byte a byte con el
+repositorio. Revisión independiente del snapshot suministrado sin defectos
+accionables (sin acceso a filesystem ni reejecución de checks); GREEN contrastado
+localmente con los XML y hashes exactos. Ni estos checks ni la eliminación
+de fragmentación local acreditan velocidad física: aún falta candidata
+autenticada y comparación con C152, incluidos tamaños grandes.
+
 ## Pendiente
 
-Corregir y verificar la granularidad del presupuesto, y medir una nueva candidata
-autenticada frente a C152. C153/C154 terminaron pausadas; no se repiten sus ensayos.
+Reconstruir/auditar una candidata con la corrección verificada y medirla frente a
+C152. C153/C154 terminaron pausadas; no se repiten sus ensayos.
 El goal **no** cumple todavía la mejora exigida.
 La línea base mide variación actual, pero no demuestra una causa única de todos
 los descensos históricos, throughput aislado por tamaño ni una mejora candidata.
