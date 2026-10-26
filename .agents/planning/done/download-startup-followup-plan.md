@@ -1,6 +1,6 @@
 ---
 id: download-startup-followup-2026-10-26
-state: in-progress
+state: done
 date: 2026-10-26
 ---
 
@@ -12,6 +12,14 @@ lo. continuemos, crea un goal». Objetivo nuevo
 La referencia es C151: confirmar → transferencia visible 494,323 s; Resume →
 transferencia visible 772,468 s; Continue → resumen 370,247 s. No se repiten su
 build, pruebas ni ensayo completo ya verificados.
+
+Resultado final C152: confirmar → transferencia visible **422,589 s** y Resume →
+transferencia visible **667,502 s**, mejoras observadas de **14,5 % / 13,6 %**
+respecto a C151. Se conservan flujo 3/1, consentimiento, progreso y reapertura de
+una única instancia; estado final fresco En pausa/Reanudar, C152 y cero servicios
+updater. La comparación no es un A/B controlado y todavía requiere unos 7/11 min.
+El [informe final](../../../docs/download-startup-followup-results.md) contiene
+método, fases, límites y auditoría de los cinco criterios del goal.
 
 ## Content
 
@@ -118,8 +126,17 @@ Se inició una sola vez `physical-trial/download_resume.py`, con lock y guardia
 contra sobreescribir/repetir un ensayo existente. Antes de Download exige C152,
 el mismo plan aprobado, ningún servicio updater previo ni proceso guest. Registra
 JSON atómico, fases/contadores filtrados y tiempos reales de Enter; pausa
-cooperativamente tras cada transferencia visible. **Resultado pendiente**: no se
-declara aún reducción adicional de confirmar/Resume frente a C151.
+cooperativamente tras cada transferencia visible. Los reinicios cancelaron las
+notificaciones de Shell, no el controlador original: se esperó su salida mediante
+`pidfd`, sin repetir confirmaciones ni ensayo.
+
+Resultado durable `ONE_ACTION_RESUME_AND_ACTIVE_UI_RECONNECT_OBSERVED`:
+Download 11:47:28,325518 UTC → transferencia visible +422,589 s; pausa
+11:54:59,400407; Resume 11:55:31,719697 → transferencia visible +667,502 s;
+Volver/Ver descarga conservan proceso y servicio únicos; pausa final
+12:07:34,708369. Progreso recargado: 363961 + 1648 = 365609 objetos de checkpoint.
+Artefacto `physical-trial/download-resume-summary.json`; comprobación posterior
+de solo lectura confirma En pausa/Reanudar, PackageManager C152 y cero servicios.
 
 ## Implementation / Action Items
 
@@ -128,13 +145,18 @@ declara aún reducción adicional de confirmar/Resume frente a C151.
 - [x] 3. Reutilizar patrones constantes sin cambiar la semántica de validación.
 - [x] 4. Validar pruebas focales y diff; revisión independiente del límite sensible.
 - [x] 5. Preparar candidata autenticada, cotejar fuente y auditar APK exacto.
-- [ ] 6. Medir otra reducción global y comprobar UX/consentimiento/progreso en Android.
-- [ ] 7. Auditar criterios, documentar límites y cerrar con commits propios y árbol limpio.
+- [x] 6. Medir otra reducción global y comprobar UX/consentimiento/progreso en Android.
+  Ambos recorridos mejoran frente a C151; se verifican una acción, reapertura,
+  consentimiento, checkpoint recargado y pausa final con cero servicios.
+- [x] 7. Auditar criterios, documentar límites y cerrar con commits propios y árbol limpio.
+  Evidencias por criterio y límites en el informe; entrega exclusivamente documental,
+  con revisión del diff, enlaces/frontmatter, staged diff y estado tras el commit.
 
 ## Open Issues
 
-- El porcentaje del perfil incluye perturbación del sampler; no predice el ahorro
-  global. Confirmar/Resume deben mejorar realmente respecto a C151.
+- No quedan decisiones o comprobaciones requeridas pendientes en este alcance.
+- El porcentaje del perfil incluye perturbación del sampler y no predice el ahorro
+  global. La aceptación usa las dos medidas completas sin ese profiler, no el perfil.
 - Quedan costes de tabla, conversiones hexadecimales y E/S, pero no se añaden
-  optimizaciones especulativas a este cambio. Si aparece una decisión material,
-  se documentará y resolverá antes de ampliar el alcance.
+  optimizaciones especulativas a este cambio. El inicio no es inmediato; esos
+  costes son oportunidades posteriores, no garantías ni trabajo requerido omitido.
