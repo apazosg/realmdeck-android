@@ -57,12 +57,35 @@ checkpoint y muestreo; no inferir el primer byte exacto de la primera muestra UI
 Preservar progreso; sin publicación, reset ni costes implícitos. Configuración e
 identificadores del dispositivo permanecen en `private/`.
 
+### Verificación local completada
+
+- Código: `36cb879`, reutilización de los patrones inmutables exactos en CASC y
+  catálogo. No se comparten matchers. Seis pruebas focales únicas verdes en
+  Modern/JDK17 offline: normalización/rechazo, lectura de catálogo y batching,
+  fallo/cancelación antes de reparar cola, metadatos antes de ACK y solapamiento
+  real del updater. Los cuatro archivos finales coinciden con la copia compilada.
+- XML externos en `download-startup-followup-20261026/focused-tests/`:
+  `initial-results/` (cinco verdes, 09:35:32–09:35:38 UTC) y
+  `key-validation-results/` (prueba nueva corregida, 09:36:47). El único fallo
+  inicial era una expectativa equivocada del test: el callback conserva el
+  `originalSpec`, como ya hacía la API; se corrigió esa expectativa, no producción,
+  y solo se reejecutó ese fallo. No es una corrección funcional ni una suite completa.
+- Revisión independiente del snapshot capturado: ningún hallazgo accionable;
+  mismos patrones/case/orden, estado del matcher por llamada y valores inmutables.
+  El revisor no tenía acceso al filesystem ni ejecutó pruebas. Cotejos, hashes y
+  XML fueron comprobados por el agente principal, no por el revisor.
+- Siguiente candidata: C152, `0.2.128-regex-startup-test`. Sus hashes CASC revisados
+  se autentican sin cambiar preimágenes históricas ni pins nativos/privacidad.
+  Retag `269f3b3`; cinco pruebas Python de identidad, transformación y pin
+  histórico/postimagen pasan (0,12 s). Aún no se ha construido, instalado ni
+  medido: no hay ahorro Android demostrado.
+
 ## Implementation / Action Items
 
 - [x] 1. Conservar la referencia y comprobar repositorio/contratos/artefactos C151.
 - [x] 2. Medir el coste restante y elegir una intervención mínima con alcance escrito.
-- [ ] 3. Reutilizar patrones constantes sin cambiar la semántica de validación.
-- [ ] 4. Validar pruebas focales y diff; revisión independiente del límite sensible.
+- [x] 3. Reutilizar patrones constantes sin cambiar la semántica de validación.
+- [x] 4. Validar pruebas focales y diff; revisión independiente del límite sensible.
 - [ ] 5. Preparar candidata autenticada, cotejar fuente y auditar APK exacto.
 - [ ] 6. Medir otra reducción global y comprobar UX/consentimiento/progreso en Android.
 - [ ] 7. Auditar criterios, documentar límites y cerrar con commits propios y árbol limpio.
