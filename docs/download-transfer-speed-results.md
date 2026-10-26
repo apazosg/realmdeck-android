@@ -321,10 +321,38 @@ Despertar por cada liberación podría producir más singles por presión y aume
 el coste HTTP; se comprobarán esos contadores en el ensayo. El reloj de espera
 ahora incluye la readquisición del monitor y no es exactamente el antiguo sleep.
 
+## C154: candidata autenticada para el ensayo
+
+Fuente `802f8b6`; retag canónico `41aa40e`, **154 / 0.2.130-budget-wakeup-test**.
+Las tres pruebas Python focales de versión/marker/receta pasan (0,10 s); no se
+repitieron los nueve tests Kotlin verdes. Nueva reconstrucción autenticada en
+`download-budget-wakeup-c154-20261026/`, sin modificar los árboles C152/C153:
+
+- Inventarios con las mismas 2.226 rutas, 2.222 idénticas a C152. Solo cambian
+  updater, su test, versión Gradle y marker. Fuente/test generados coinciden con
+  los hashes GREEN. Inputs autenticados, lineage controller/bridge, sanitización
+  de privacidad y payload parity permanecen idénticos.
+- Build Modern offline JDK 17: **5 min 17 s**, 68 tareas (45 ejecutadas/23 cache).
+  Se reutiliza la configuración SDK local conocida antes de compilar, no la
+  reconstrucción ni los outputs anteriores.
+- APK exacta **484.926.695 bytes**, SHA-256
+  `bff81e26ac9e7066c39c96d3665fab16a579aafcf359b887162d7215a21f1d05`.
+  Auditoría **PASS_SOURCE_BUILD_AND_PAYLOAD_AUDIT**, 2.226 fuentes coincidentes
+  con el receipt y 178 payloads. Ese contador no significa 2.226 fuentes iguales
+  a C152 ni demuestra throughput.
+
+`physical_pipeline.sh` se lanzó una sola vez: instalación `-r` tras preflight
+fresco, checkpoint exacto de los 407.694 objetos de C153, recuperación del resumen
+del mismo cliente/USB y confirmación solo dentro de los costes ya consentidos.
+Cada etapa tiene lock, informe/intent persistido y rechazo de replay; un error
+detiene la cadena, no repite Download. La ventana visible se limita a unos diez
+minutos y termina en pausa cooperativa. Los artefactos C154 de medición se separan
+en `wakeup*`, sin sobrescribir baseline, C153 ni sus análisis.
+
 ## Pendiente
 
-Construir/auditar y medir una nueva candidata con esta intervención verificada,
-conservando el progreso y la pausa final. C153 queda pausada, no se
-reinstala ni se repite su ensayo. El goal **no** cumple todavía la mejora exigida.
+Completar el ensayo C154, comprobar progreso/pausa y comparar principalmente con
+C152, no solo con C153 rechazada. C153 terminó pausada; no se repite su ensayo.
+El goal **no** cumple todavía la mejora exigida.
 La línea base mide variación actual, pero no demuestra una causa única de todos
 los descensos históricos, throughput aislado por tamaño ni una mejora candidata.

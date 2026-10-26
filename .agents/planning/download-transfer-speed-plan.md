@@ -180,8 +180,15 @@ resuelva ninguna de ellas. Se investiga primero el componente dominante actual.
   esperar y fallback de 100 ms; no se afirma que sea la causa única. Regresión
   determinista RED→GREEN, nueve pruebas focales sin fallos/skips y revisión
   independiente sin defectos accionables. Sin cambiar cuotas, ACK/retiro, forces
-  ni contrato; falta construir/auditar y medir la nueva candidata. El despertar
+  ni contrato; falta medir la nueva candidata autenticada. El despertar
   inmediato podría fragmentar batches: se contrastarán singles y coste HTTP.
+- C154 (`154`/`0.2.130-budget-wakeup-test`), fuente `41aa40e`, reconstruida y
+  auditada: solo cuatro rutas fuente/test/versión/marker difieren de C152;
+  2.222/2.226 iguales, mismos inputs, lineage, privacidad y 178 payloads. Build
+  offline JDK 17 verde en 5 min 17 s y auditoría exacta PASS. Controlador único de
+  instalación preservadora/preparación/ensayo lanzado, con guards por etapa y
+  límite de diez minutos visibles más pausa cooperativa. Resultado pendiente;
+  no se repiten acciones al perder la notificación del Shell.
 - «5mb»/«0.1» son observaciones reportadas sin unidad confirmada. Las mediciones
   usarán MB/s decimales y condiciones explícitas; no hace falta suponer la unidad.
 - Cohortes previas: pequeño ≤64 KiB; intermedio >64 KiB–1 MiB; grande >1 MiB.
