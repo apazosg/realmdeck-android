@@ -206,7 +206,17 @@ resuelva ninguna de ellas. Se investiga primero el componente dominante actual.
   conserva reservas hasta join/reset. Sin cambios CASC/pins ni cuotas. Misma
   regresión RED→GREEN, diez checks focales sin fallo/error/skip, copia probada
   igual al repositorio y revisión independiente del snapshot sin defectos
-  accionables. Falta reconstruir/auditar y medir la nueva candidata.
+  accionables. La candidata C155 ya está reconstruida/auditada; falta medirla.
+- C155 (`155`/`0.2.131-coalesced-budget-test`), fuente `101a1cd`: mismas 2.226
+  rutas, 2.222 idénticas a C152 y únicamente updater/test/versión/marker revisados;
+  hashes generados iguales a GREEN, inputs/lineage/privacidad/payloads intactos.
+  Build Modern offline JDK 17 PASS en 5 min 11 s; APK exacta 484.929.311 bytes,
+  SHA-256 `6a5d9bae6beec1da56aa233aed329ef9747f4e2d4ccca3fb6c124b00b176acb3`,
+  auditoría PASS con 2.226 fuentes coincidentes con el receipt y 178 payloads.
+  Controlador físico único; instalación terminada 16:42:02 UTC preservando el
+  checkpoint exacto de 420.170 objetos, sin Resume ni updater activo. Recupera
+  el mismo cliente/USB dentro de los costes consentidos y termina en pausa
+  cooperativa. Resultado físico pendiente, referencia primaria C152, no C153/C154.
 - «5mb»/«0.1» son observaciones reportadas sin unidad confirmada. Las mediciones
   usarán MB/s decimales y condiciones explícitas; no hace falta suponer la unidad.
 - Cohortes previas: pequeño ≤64 KiB; intermedio >64 KiB–1 MiB; grande >1 MiB.

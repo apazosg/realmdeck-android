@@ -1,7 +1,7 @@
 # Velocidad de transferencia: diagnóstico pequeño/grande
 
 Fecha: 2026-10-26. Goal `5caa6403-5b8f-47dc-ba95-ba40fbbe686e`.
-**C153 y C154 no superan la referencia; se revisa la fragmentación. Goal abierto.**
+**C153/C154 no superan la referencia; C155 auditada, ensayo pendiente. Goal abierto.**
 
 El [plan aprobado](../.agents/planning/download-transfer-speed-plan.md) se centra
 en payload. No repite ni atribuye a throughput el trabajo de
@@ -437,13 +437,41 @@ Evidencia externa en `coalesced-focused-tests/`: `red-summary.json`,
 repositorio. Revisión independiente del snapshot suministrado sin defectos
 accionables (sin acceso a filesystem ni reejecución de checks); GREEN contrastado
 localmente con los XML y hashes exactos. Ni estos checks ni la eliminación
-de fragmentación local acreditan velocidad física: aún falta candidata
-autenticada y comparación con C152, incluidos tamaños grandes.
+de fragmentación local acreditan velocidad física: la reconstrucción y el ensayo
+se registran por separado, con comparación primaria contra C152.
+
+## C155: candidata autenticada y ensayo acotado
+
+Fuente `cc36fe6`; retag canónico `101a1cd`, **155 / 0.2.131-coalesced-budget-test**.
+Las tres pruebas Python focales de versión/marker/receta pasan (0,10 s); no se
+repitieron los diez tests Kotlin verdes. Nueva reconstrucción autenticada en
+`download-coalesced-budget-c155-20261026/`, conservando los árboles anteriores:
+
+- Mismas 2.226 rutas, **2.222 idénticas a C152**; solo cambian updater, su test,
+  versión Gradle y marker. Los hashes generados coinciden con GREEN. Inputs,
+  lineage controller/bridge, sanitización de privacidad y payload parity idénticos.
+- Build Modern offline JDK 17: **5 min 11 s**, 68 tareas (45 ejecutadas/23 cache),
+  con la configuración SDK local conocida. Pipeline original completo/exit 0;
+  no se repitió al perder la notificación Shell por reinicio.
+- APK exacta **484.929.311 bytes**, SHA-256
+  `6a5d9bae6beec1da56aa233aed329ef9747f4e2d4ccca3fb6c124b00b176acb3`.
+  Auditoría **PASS_SOURCE_BUILD_AND_PAYLOAD_AUDIT**, 2.226 fuentes coincidentes
+  con el receipt y 178 payloads; no significa 2.226 iguales a C152 ni rendimiento.
+
+Controlador físico lanzado una sola vez, con locks/estado atómico/anti-replay:
+requiere C154 pausada y el checkpoint exacto de 420.170 objetos antes de instalar
+con datos conservados. Recupera el resumen del mismo cliente/USB; solo confirma
+payload si respeta los límites ya consentidos. Observa unos diez minutos visibles
+y pausa cooperativamente, comprobando ausencia de trabajo activo. Artefactos
+`coalesced*`, separados de todas las mediciones anteriores. Instalación finalizada
+**16:42:02 UTC**, Inicio inactivo: checkpoint de **420.170 objetos / 30.252.280
+bytes idéntico**, cero servicios updater y ninguna acción Resume/Download del
+instalador. La preparación posterior todavía no confirma payload.
 
 ## Pendiente
 
-Reconstruir/auditar una candidata con la corrección verificada y medirla frente a
-C152. C153/C154 terminaron pausadas; no se repiten sus ensayos.
+Medir C155 frente a C152 y contrastar la fragmentación, disponibilidad de fuentes y
+ambos tamaños. C153/C154 terminaron pausadas; no se repiten sus ensayos.
 El goal **no** cumple todavía la mejora exigida.
 La línea base mide variación actual, pero no demuestra una causa única de todos
 los descensos históricos, throughput aislado por tamaño ni una mejora candidata.
