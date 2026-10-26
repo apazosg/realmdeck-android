@@ -74,11 +74,38 @@ identificadores del dispositivo permanecen en `private/`.
   mismos patrones/case/orden, estado del matcher por llamada y valores inmutables.
   El revisor no tenía acceso al filesystem ni ejecutó pruebas. Cotejos, hashes y
   XML fueron comprobados por el agente principal, no por el revisor.
-- Siguiente candidata: C152, `0.2.128-regex-startup-test`. Sus hashes CASC revisados
+- Candidata: C152, `0.2.128-regex-startup-test`. Sus hashes CASC revisados
   se autentican sin cambiar preimágenes históricas ni pins nativos/privacidad.
   Retag `269f3b3`; cinco pruebas Python de identidad, transformación y pin
-  histórico/postimagen pasan (0,12 s). Aún no se ha construido, instalado ni
-  medido: no hay ahorro Android demostrado.
+  histórico/postimagen pasan (0,12 s).
+
+### C152 autenticada e inspección inicial
+
+- Reconstrucción fresca en `download-regex-c152-20261026/`, sin modificar los
+  árboles C151/C150. Respecto al recibo C151 cambian exactamente seis rutas:
+  Gradle, marcador funcional, CASC/catálogo y sus dos tests. Se cotejaron seis
+  fuentes críticas; los cambios de patrones coinciden con el código probado.
+- Build Modern/JDK17 offline, serializado: `BUILD SUCCESSFUL in 5m 57s`;
+  68 tareas, 45 ejecutadas y 23 de caché. Auditoría sin cambios ni excepciones:
+  `PASS_SOURCE_BUILD_AND_PAYLOAD_AUDIT`, 2226 fuentes sin cambios y 178 payloads.
+  APK de 484925891 bytes, SHA-256
+  `252c87023016f0438588e1d6bb84a2aa9168b744d671878f49fb2933e2b348b6`.
+- Precheck fresco: C151 En pausa, ningún servicio updater ni proceso guest.
+  Actualización `install -r` sin reset; PackageManager C152 y Home visibles a las
+  09:48:06 UTC. Recibo, build, auditoría e instalación se conservan fuera del repo.
+- Una acción para abrir gestión y un Continue a las 09:49:28,020624 UTC; primer
+  feedback observado a +2,824 s. Resumen a **300,074 s**, frente a 370,247 s de
+  C151. Inspector: +111,317–257,830 s, `elapsedMs=146512`, cero rehashes;
+  1144978 objetos/4473 bloques. C151 había registrado 188279 ms en su inspección
+  inicial. Son observaciones con caché/checkpoint/temperatura no controlados,
+  no una prueba causal ni la métrica completa hasta transferencia.
+- Estado final: plan 1.60.1.70532, Unidad USB, descarga 62,5 GiB y espacio adicional
+  64,7 GiB; app hasta 1,7 GiB y volumen cliente hasta 62,9 GiB. **No se pulsó
+  Descargar**. Falta el consentimiento de estos costes y medir confirmar/Resume;
+  no se declara aún reducción global adicional.
+- Evidencia externa: `download-regex-c152-20261026/physical-trial/prepare-summary.json`.
+  El controlador tiene lock, guardia contra repetir acciones, JSON atómico y
+  limpieza cooperativa; la captura conserva solo fases/contadores autorizados.
 
 ## Implementation / Action Items
 
@@ -86,7 +113,7 @@ identificadores del dispositivo permanecen en `private/`.
 - [x] 2. Medir el coste restante y elegir una intervención mínima con alcance escrito.
 - [x] 3. Reutilizar patrones constantes sin cambiar la semántica de validación.
 - [x] 4. Validar pruebas focales y diff; revisión independiente del límite sensible.
-- [ ] 5. Preparar candidata autenticada, cotejar fuente y auditar APK exacto.
+- [x] 5. Preparar candidata autenticada, cotejar fuente y auditar APK exacto.
 - [ ] 6. Medir otra reducción global y comprobar UX/consentimiento/progreso en Android.
 - [ ] 7. Auditar criterios, documentar límites y cerrar con commits propios y árbol limpio.
 
