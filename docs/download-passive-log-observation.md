@@ -3,7 +3,7 @@
 ## Autorización y procedencia
 
 Solo lectura pasiva de evidencia/logs para pasos3/4 del
-[plan](../.agents/planning/download-resume-simplification-plan.md), mantenido en
+[plan](../.agents/planning/done/download-resume-simplification-plan.md), entonces en
 `draft`. No se ha pausado/reanudado la descarga, interactuado con la app, instalado,
 reiniciado, borrado ni modificado código/contratos/garantías. No se pide permiso
 adicional para operar el móvil; si falta evidencia, se documenta y se detiene.

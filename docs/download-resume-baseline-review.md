@@ -1,9 +1,16 @@
-# Descarga/reanudación: diagnóstico acotado — 2026-10-25
+# Descarga/reanudación: diagnóstico y validación — 2026-10-25/26
+
+> **Resultado C151:** transferencia visible tras confirmar en **8:14**, frente a
+> **14:21** en C149; al reanudar, **12:52** frente a **20:26**. Reducciones observadas
+> de aproximadamente **43 % / 37 %** en estos ensayos, no un A/B universal. Una
+> pulsación para reanudar, reapertura sin duplicar servicio y estado final en pausa.
+> Siguen siendo esperas largas; las limitaciones y los tiempos por fase se detallan
+> al final. No se acredita instalación completa, estabilidad prolongada ni throughput.
 
 ## Alcance y calidad de la evidencia
 
 **Corte histórico anterior a la aprobación del trabajo local.** Solo pasos 3/4
-del [plan](../.agents/planning/download-resume-simplification-plan.md) estaban
+del [plan](../.agents/planning/done/download-resume-simplification-plan.md) estaban
 autorizados. Inspección del árbol limpio `a4c0f4e`, sin ejecutar app, tests, red de
 cliente ni comandos sobre móvil. No hay modificación de código/contratos/garantías.
 El recorrido siguiente es una **traza estática**, no reproducción dinámica ni una
@@ -752,9 +759,72 @@ Se inició una sola prueba acotada de Descargar, pausa, un Resume y reapertura,
 terminando en pausa y sin aceptar otro coste. La cancelación del shell por reinicio
 del servidor no se interpretó como fallo de la app: se comprobó un único controlador
 todavía activo y se conservó el ensayo, sin repetir pulsaciones ni reconstruir.
-La medida completa y su comparación siguen pendientes del resultado durable.
+El resultado completo y su comparación se registran a continuación.
 Artefactos filtrados en `physical-trial/prepare-summary.json` y
 `physical-trial/download-resume-summary.json`; no se versionan capturas privadas.
+
+### C151: recorrido completo y comparación observada
+
+El controlador original terminó, sin relanzar el ensayo tras los reinicios.
+Resultado retenido: **`ONE_ACTION_RESUME_AND_ACTIVE_UI_RECONNECT_OBSERVED`**.
+
+| Medida hasta transferencia visible | C149 | C151 | Diferencia observada |
+|---|---:|---:|---:|
+| Desde «Descargar» | 860,836 s | **494,323 s** | −366,513 s (~43 %) |
+| Desde «Reanudar» | 1.225,989 s | **772,468 s** | −453,521 s (~37 %) |
+
+Un solo «Descargar» a las **08:06:25.189959 UTC**, respuesta observada a +2,927 s;
+primera muestra de transferencia «19.4 MiB de 62.7 GiB». Pausa normal a las
+**08:15:08.032292 UTC**. Un solo «Reanudar» a las **08:15:40.006304 UTC**, respuesta
+a +2,843 s; primera muestra positiva «731.5 KiB de 62.6 GiB». No se confirmó otra
+vez. «Volver» y «Ver descarga» reconectaron al mismo proceso y al mismo único
+servicio; el gestor volvió a mostrar progreso activo, sin ofrecer otro Descargar.
+Pausa final a las **08:29:27.803503 UTC**. Una lectura posterior confirmó C151,
+«En pausa»/«Reanudar» y **cero servicios updater activos**.
+
+Desglose registrado, sin sumar relojes anidados:
+
+| Fase | Descargar | Reanudar |
+|---|---|---|
+| Inspector(es) sin rehashes | 134.380 ms | 167.615 / 133.416 ms |
+| Carga del checkpoint | 359.465 objetos; **60.640 ms** | 361.369 objetos; **60.669 ms** |
+| Primer pedido de fuente | +483,657 s | +770,151 s |
+| Fila actual admitida / fallback escalar | 338.970 / **0** | 341.634 / **0** |
+| Llamadas bulk / claves contrastadas | 3.043 / 772.354 | 3.072 / 779.979 |
+
+Los contadores bulk incluyen varias pasadas y verificación parcial: no son objetos
+únicos ni prueba de todo el prefijo. En C149 la carga tardó 153.329/153.507 ms;
+en C151 se observan las consultas agrupadas y el uso de la fila actual, no solo
+un cambio de texto UI. Permanecen cinco rehashes de la tabla de recuperación,
+distintos de los inspectores optimizados, y los recorridos completos del catálogo.
+El inicio aún tarda 8 minutos y la reanudación casi 13: no se declara instantáneo,
+óptimo ni libre de más oportunidades de mejora.
+
+El checkpoint recargado tras la primera pausa contiene **359.465 + 1.904 =
+361.369 objetos**. Los commits finales registran 1.904/88.080.130 y
+2.592/162.871.654 objetos/bytes **escritos**, respectivamente; no se suman los
+contadores acumulativos intermedios ni se denominan bytes nuevos de red. Las
+ventanas desde la primera muestra visible hasta Pausar fueron 28,519/55,329 s;
+no se dejó descargar el cliente entero. La verificación completa del prefijo y la
+publicación de una instalación terminada no forman parte de esta ventana breve.
+
+Comparación específica del mismo dispositivo, build `1.60.1.70532`, Unidad USB y
+1.144.978 objetos objetivo. El prefijo avanza; caché, cohorte de objetos y temperatura
+no se controlaron como en un laboratorio. El muestreo espera 15 s más el coste del
+dump: las cifras son tiempos de observación, no el instante exacto del primer byte
+nuevo. La reducción de trabajo está respaldada además por equivalencia host y
+contadores del código instalado; no se extrapola un porcentaje universal.
+
+### Correspondencia entre objetivo y evidencia
+
+| Solicitud / puerta | Evidencia concreta | Alcance |
+|---|---|---|
+| Reducir preparación inicial y restauración | Tabla del recorrido completo C149/C151; primera preparación 440,830 → 370,247 s; perfil y consultas reducidas | Ensayos específicos; no se sustituye el resultado por un microbenchmark |
+| Primera pulsación, sin repetir para avanzar | Abrir/Continuar/Descargar; un Resume; respuestas observadas antes de ~3 s; guard síncrono y pending handoff revisados | Sin medida subsegundo ni prueba deliberada de doble toque |
+| Reabrir UI sin duplicar | Mismo proceso, mismo único servicio, progreso activo tras «Ver descarga»; final pausado/0 servicios | No es una prueba de todas las recreaciones Android ni de estabilidad prolongada |
+| Consentimiento y progreso | Costes reales aprobados; Resume válido sin reconfirmar; crecimiento del checkpoint comprobado | No se persiste consentimiento entre procesos ni se acepta otro plan implícito |
+| Integridad, recuperación, recursos y exclusión | Fuente `c823708`/`fba5ac8`, focales y review documentados, callbacks autoritativos y barreras CRC/tail/ACK/`cpByteEnd`; Wi-Fi, bindings, `requireSamePlan`, espacio y exclusión conservados | Once focales del refactor, no toda la suite ni integridad de todo el cliente |
+| Artefacto que realmente se probó | Recibo C151 fresco, seis fuentes cotejadas, build ModernDebug y auditoría SHA-256 exacta; versión instalada verificada | Local, sin publicación, reset ni juego; artefactos fuera de Git |
 
 ### Retención de evidencia
 
@@ -765,11 +835,11 @@ se repiten pruebas verdes o una descarga antigua para recrearlos. Los recibos,
 builds y auditorías autenticados siguen fuera del repositorio. La nueva captura
 C148 se guarda en `work/download-resume-c148-20261025/physical-trial`, no en `/tmp`.
 
-## Auditoría del objetivo (cierre pendiente)
+## Auditoría final del objetivo
 
-| Entregable | Evidencia | Pendiente |
+| Entregable | Evidencia | Límites |
 |---|---|---|
-| Menor preparación al iniciar/reanudar | Menos trabajo host; C149 completa 860,836/1.225,989 s frente a 948,398/1.453,953 s C148 | Aún 14/20 minutos; siguiente optimización local y medida completa pendientes, sin extrapolaciones |
-| Primera pulsación efectiva, sin repetir | Flujo físico 3/1 acciones; C149 reanuda y reabre UI con el mismo proceso/servicio, sin reconfirmar ni duplicar | Verificar que la siguiente candidata conserve el resultado; sin medida subsegundo ni doble toque deliberado |
-| Garantías intactas | Reviews/focales de la fila actual y de los lectores, recuperación/tail/ACK/cpByteEnd probados; C151 compilada y APK auditada; cuatro guardas conservadas | Prueba física completa de C151; no se ejecutó toda la suite |
-| Entrega versionada y honesta | Baseline y candidatas auditadas/instaladas sin reset; artefactos externos; C151 con consentimiento real y medición en curso | Resultado completo y auditoría final del objetivo, no cerrar por ahorro aislado |
+| Menor preparación al iniciar/reanudar | C151 completa 494,323/772,468 s frente a 860,836/1.225,989 s C149; trabajo SQL reducido y equivalencia validada | Aún 8/13 minutos; comparación observacional, no universal |
+| Primera pulsación efectiva, sin repetir | C151 conserva 3/1 acciones, sin reconfirmación; misma instancia de servicio al reabrir | Sin medida subsegundo ni doble toque deliberado |
+| Garantías intactas | Reviews/focales y barreras conservadas; recuperación y progreso observados; APK exacta auditada | No toda la suite, cliente completo o sesiones prolongadas |
+| Entrega versionada y honesta | Commits atómicos, artefactos externos, consentimiento explícito, final en pausa/0 servicios | Sin publicación ni afirmación de descarga instantánea |

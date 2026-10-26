@@ -1,12 +1,23 @@
 ---
 id: download-resume-simplification-2026-10-25
-state: in-progress
+state: done
 date: 2026-10-25
 ---
 
 ## Summary
 
-**Alcance vigente (2026-10-25):** tras la ventana anterior de lectura pasiva, el
+**Resultado verificado (2026-10-26):** C151 reduce la espera observada desde
+Descargar de 860,836 a 494,323 s y desde Resume de 1.225,989 a 772,468 s frente a
+C149 (~43 % / 37 %). Se conserva el flujo de tres acciones y Resume de una acción,
+sin reconfirmar ni duplicar servicio al reabrir. Final en pausa y cero servicios.
+No se ha eliminado toda la espera: quedan 8/13 minutos, con caché/cohorte sin
+control experimental. No se promete velocidad universal ni integridad del cliente
+completo. Véase la [auditoría final](../../../docs/download-resume-baseline-review.md).
+
+El resto conserva la secuencia histórica de autorizaciones y diagnóstico; los
+pendientes descritos durante etapas anteriores no sustituyen este cierre.
+
+**Alcance autorizado durante la ejecución (2026-10-25):** tras la ventana anterior de lectura pasiva, el
 usuario autorizó pruebas locales y Android por ADB Wi-Fi, pausa/reanudación normal,
 control mediante scrcpy y «Autorizar C147 local». Se puede preparar/auditar C147 y
 actualizar conservando datos tras confirmar pausa; no publicar, desinstalar,
@@ -20,7 +31,7 @@ lanzar actividades por ADB: ya se abrió C147 directamente, sin intervención ma
 reinstalación ni juego. Se mantienen privacidad, progreso y consulta de costes nuevos.
 
 Antecedente de lectura pasiva:
-[observación del log retenido](../../docs/download-passive-log-observation.md).
+[observación del log retenido](../../../docs/download-passive-log-observation.md).
 Se mide la transferencia en curso, no el tiempo desde intención a primer byte;
 aquella observación no cubría el paso 3. La prueba activa posterior se registra abajo.
 
@@ -268,8 +279,11 @@ rediseño del stream de entrada ni se debilitan garantías.
 - [x] 2. Aprobar este plan y resolver decisiones que cambien garantías antes de código.
   Aprobados alcance local, ventana Android y candidata C147 local. No se autoriza
   modificar garantías ni aceptar costes desconocidos.
-- [ ] 3. Reproducir recorrido y obtener línea base por fases/acciones con entradas
+- [x] 3. Reproducir recorrido y obtener línea base por fases/acciones con entradas
   controladas; usar instrumentación agregada existente antes de añadir otra.
+  Fixture host fijo con equivalencia; Android sobre mismo build/dispositivo/USB,
+  preservando progreso y declarando diferencias de prefijo/caché. Baseline, perfil,
+  fases y acciones C149/C151 registrados en el informe, sin inventar el primer byte.
 - [x] 4. Elegir el cuello prioritario demostrado; documentar qué detecta cada chequeo,
   qué puede cambiar y qué guardas se mantienen. Si cambia contrato, parar y aprobarlo.
   Intervención local elegida: dimensionamiento inicial de la tabla temporal del
@@ -281,19 +295,31 @@ rediseño del stream de entrada ni se debilitan garantías.
   ninguno con conteo exacto; resultados/callbacks idénticos. Véase el informe.
 - [x] 5. Implementar mejora mínima y regresiones focales; revisar diff y evidencias.
   Optimización `c1bc7a1` y UI `633329e`; cuatro focales host y diez tests del servicio
-  aprobados. La interacción física y el recorrido completo siguen pendientes.
+  aprobados. Se añadieron `a8f086d`, `c823708` y `fba5ac8`, con regresiones focales
+  verificadas y contraste físico completo C151.
 - [x] 6. Revisar independientemente límites sensibles; reconstruir/auditar candidata
     solo si hace falta prueba física. No repetir checks exitosos sin cambio relevante.
   Review de algoritmo y concurrencia realizada. C147 reconstruida y auditada;
   instalada como actualización tras pausa confirmada, sin borrar datos. La revisión
   adicional del retag no pudo arrancar por variante de worker no disponible;
   identidad/pins y diff inspeccionados por el responsable, auditoría automática PASS.
-- [ ] 7. Con autorización y estado fresco del dispositivo, medir antes/después sin
+- [x] 7. Con autorización y estado fresco del dispositivo, medir antes/después sin
   perder progreso ni interferir con un juego/descarga activos; registrar limitaciones.
-- [ ] 8. Reconciliar notas vigentes, revisar staged diff, commits atómicos solo de la
+  C151 auditada e instalada, consentimiento real, recorrido completo conservado pese
+  a reinicios del servidor; 494,323/772,468 s, reapertura y pausa final comprobadas.
+- [x] 8. Reconciliar notas vigentes, revisar staged diff, commits atómicos solo de la
   tarea y estado final limpio; cerrar plan en `done/` solo con aceptación acreditada.
+  Código, pins/identidad y notas en commits separados; auditoría de requisitos y
+  límites en el informe. Sin APKs, datos del cliente ni valores privados en Git.
 
 ## Open Issues
+
+Las entradas siguientes se conservan como historial de decisiones e incidencias,
+no como una lista de trabajo aún pendiente. Los resultados y límites vigentes son
+los del resumen y de la auditoría final: no se midieron primer byte exacto, todos
+los dispositivos, sesiones prolongadas ni cliente completo. Los tiempos restantes
+de 8/13 minutos constituyen una oportunidad de mejora, no una afirmación de rapidez
+instantánea. No quedó un cambio sin validar o una confirmación de costes sin resolver.
 
 - Prioridad reafirmada por el usuario: medir y reducir el intervalo completo entre
   la acción y la transferencia, no aceptar solo una función más rápida. Para el
@@ -321,7 +347,7 @@ rediseño del stream de entrada ni se debilitan garantías.
   distinguiendo pausa del mismo proceso y reapertura tras cierre; no incluye
   restaurar copias de seguridad ni persistir consentimiento entre procesos.
 - Paso 3 parcialmente ejecutado; paso 4 respaldado ya por benchmark host actual:
-  [informe de diagnóstico](../../docs/download-resume-baseline-review.md).
+  [informe de diagnóstico](../../../docs/download-resume-baseline-review.md).
   Al iniciar esta fase no se habían modificado código/specs, ejecutado suites ni
   operado dispositivos. La reproducción local ya está autorizada;
   no se da por completo el recorrido del paso 3 con una inspección estática.
