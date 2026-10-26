@@ -151,7 +151,7 @@ resuelva ninguna de ellas. Se investiga primero el componente dominante actual.
   mínimo que falta, sin repetir las investigaciones de inicio C151/C152.
 - [x] 4. Obtener línea base actual de payload pequeño/grande y seleccionar el
   cuello de botella con evidencia suficiente.
-- [ ] 5. Implementar la mejora mínima y regresiones focales; revisar garantías.
+- [x] 5. Implementar la mejora mínima y regresiones focales; revisar garantías.
 - [ ] 6. Validar candidata autenticada y medir antes/después bajo condiciones
   comparables, con pausa final y progreso preservado.
 - [ ] 7. Auditar todos los criterios, documentar límites, hacer commits propios
@@ -162,12 +162,12 @@ resuelva ninguna de ellas. Se investiga primero el componente dominante actual.
 - Aprobación recibida; línea base C152 y ensayo C153 terminados con ambos tamaños
   y pausa final. **C153 no supera la aceptación:** 0,872 MB/s durante 612,446 s
   frente a 1,939 MB/s/609,206 s de C152. Es una comparación secuencial con cohortes
-  distintas, no una atribución causal del descenso del 55 %. Se reabre el paso 5;
-  no se cierra el goal ni se prueban otros caps a ciegas.
+  distintas, no una atribución causal del descenso del 55 %. Se descartó el cap 2
+  y se verificó una alternativa; no se cierra el goal ni se prueban caps a ciegas.
 - El código C153, siete regresiones focales, revisión independiente y auditoría
   canónica siguen verificados para esa versión; no acreditan rendimiento. No se
-  repiten ese build, pruebas ni ensayo. El siguiente cambio deberá restaurar la
-  agrupación original y pasar sus propias verificaciones por la nueva concurrencia.
+  repiten ese build, pruebas ni ensayo. La alternativa restaura la agrupación
+  original y ha pasado sus propias verificaciones por la nueva concurrencia.
 - C153 conservó al instalar los 394.140 objetos y requirió recuperar el resumen
   desde Inicio. Se confirmó una sola vez el mismo cliente/USB, 61,2 GiB de datos y
   63,4 GiB adicionales dentro de los límites consentidos. Fin 14:38:42 UTC:
@@ -176,9 +176,12 @@ resuelva ninguna de ellas. Se investiga primero el componente dominante actual.
 - Revisión del diagnóstico: más callbacks concurrentes no elevaron las peticiones/s
   observadas (11,23 → 11,76), y la espera de fuente aumentó. Se detectó polling
   incondicional de 100 ms en el presupuesto, sin aviso al liberar capacidad. La
-  siguiente hipótesis es despertar por liberación, con recheck atómico antes de
-  esperar y fallback de 100 ms; no se afirma que sea la causa única. Está en revisión
-  antes de implementar, sin cambiar cuotas, ACK/retiro, forces ni contrato.
+  alternativa implementada despierta por liberación, con recheck atómico antes de
+  esperar y fallback de 100 ms; no se afirma que sea la causa única. Regresión
+  determinista RED→GREEN, nueve pruebas focales sin fallos/skips y revisión
+  independiente sin defectos accionables. Sin cambiar cuotas, ACK/retiro, forces
+  ni contrato; falta construir/auditar y medir la nueva candidata. El despertar
+  inmediato podría fragmentar batches: se contrastarán singles y coste HTTP.
 - «5mb»/«0.1» son observaciones reportadas sin unidad confirmada. Las mediciones
   usarán MB/s decimales y condiciones explícitas; no hace falta suponer la unidad.
 - Cohortes previas: pequeño ≤64 KiB; intermedio >64 KiB–1 MiB; grande >1 MiB.

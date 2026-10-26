@@ -1309,15 +1309,16 @@ class ForeverClientUpdater(
      * before any file is created, never a wider figure. Release stays short
      * and never blocks: no byte wait, no progress lock, no fetch, no queue
      * wait. */
-    private class PrefetchBudget(private val maxBytes: Long = PREFETCH_MAX_BYTES) {
+    internal class PrefetchBudget(private val maxBytes: Long = PREFETCH_MAX_BYTES) {
         init { require(maxBytes in 1..PREFETCH_MAX_BYTES) }
+        private val monitor = Object()
         private val reservations = LinkedHashMap<String, Long>()
         val commitFlushRequest = AtomicReference<(() -> Boolean)?>(null)
         private var reservedBytes = 0L
         fun tryReserve(key: String, size: Long): Boolean {
             val normalized = key.lowercase(Locale.ROOT)
             require(size in 1..maxBytes) { "prefetch request exceeds the bounded private byte budget" }
-            synchronized(this) {
+            synchronized(monitor) {
                 val current = reservations[normalized]
                 if (current != null) return reservedBytes <= maxBytes
                 if (reservations.size >= MAX_RESERVED_KEYS || reservedBytes > maxBytes - size) return false
@@ -1329,7 +1330,7 @@ class ForeverClientUpdater(
         fun seed(key: String, size: Long) {
             val normalized = key.lowercase(Locale.ROOT)
             require(size in 1..PREFETCH_MAX_BYTES) { "prefetch seed exceeds the bounded private byte budget" }
-            synchronized(this) {
+            synchronized(monitor) {
                 if (reservations.containsKey(normalized)) return
                 // Same 34-key recovery quota as request(): inherited disk
                 // debt counts before any file is produced, on every call path
@@ -1368,7 +1369,7 @@ class ForeverClientUpdater(
                 // retire can free room. The eviction callback runs outside
                 // the budget lock so its file IO never blocks consumer
                 // releases, with no semaphores or new framework.
-                val waitForDrain = synchronized(this) {
+                val waitForDrain = synchronized(monitor) {
                     val current = reservations[normalized]
                     if (current != null) {
                         // Identity already hash-recorded: accept without
@@ -1387,9 +1388,24 @@ class ForeverClientUpdater(
                 }
                 if (waitForDrain) {
                     if (cancelled()) throw CancellationException("client update was paused or cancelled")
-                    val waitStarted = System.nanoTime()
-                    try { Thread.sleep(100) }
-                    finally { onWait(System.nanoTime() - waitStarted) }
+                    var waitStarted: Long? = null
+                    try {
+                        synchronized(monitor) {
+                            // A release can race the first check. Recheck and
+                            // park atomically with the releasing notifier.
+                            val current = reservations[normalized]
+                            val canAdmit = if (current != null) reservedBytes <= maxBytes
+                                else reservations.size < MAX_RESERVED_KEYS && reservedBytes <= maxBytes - size
+                            if (!canAdmit) {
+                                waitStarted = System.nanoTime()
+                                // Keep the bounded fallback for cancellation or
+                                // drain-state changes without a raw release.
+                                monitor.wait(100)
+                            }
+                        }
+                    } finally {
+                        waitStarted?.let { onWait(System.nanoTime() - it) }
+                    }
                     continue
                 }
                 // Nothing submitted, nothing queued and no bare awaiting its
@@ -1405,18 +1421,22 @@ class ForeverClientUpdater(
             }
         }
         fun release(key: String) {
-            synchronized(this) {
-                reservations.remove(key.lowercase(Locale.ROOT))?.let { reservedBytes = (reservedBytes - it).coerceAtLeast(0L) }
+            synchronized(monitor) {
+                reservations.remove(key.lowercase(Locale.ROOT))?.let {
+                    reservedBytes = (reservedBytes - it).coerceAtLeast(0L)
+                    monitor.notifyAll()
+                }
             }
         }
-        fun snapshot(): Pair<Int, Long> = synchronized(this) { reservations.size to reservedBytes }
+        fun snapshot(): Pair<Int, Long> = synchronized(monitor) { reservations.size to reservedBytes }
         fun hasReservation(key: String): Boolean {
-            synchronized(this) { return reservations.containsKey(key.lowercase(Locale.ROOT)) }
+            synchronized(monitor) { return reservations.containsKey(key.lowercase(Locale.ROOT)) }
         }
         fun reset() {
-            synchronized(this) {
+            synchronized(monitor) {
                 reservations.clear()
                 reservedBytes = 0L
+                monitor.notifyAll()
             }
         }
     }
@@ -2080,7 +2100,7 @@ class ForeverClientUpdater(
                                 }
 
                                 var ordinal = 0
-                                val candidates = ArrayList<ProducerObject>(PREFETCH_BATCH_OBJECTS)
+                                val candidates = ArrayList<ProducerObject>(ForeverClientUpdateTransfer.MAX_BATCH_OBJECTS)
                                 var candidateBytes = 0L
                                 fun flushCandidates() {
                                     if (candidates.isEmpty()) return
@@ -2142,13 +2162,13 @@ class ForeverClientUpdater(
                                                 previous.sourceHash.equals(record.sourceHash, true) &&
                                                 Math.addExact(previous.sourceOffset, previous.encodedSize) == record.sourceOffset
                                             val exceedsBytes = candidateBytes > ForeverClientUpdateTransfer.MAX_BATCH_BYTES - record.encodedSize
-                                            if (!contiguous || exceedsBytes || candidates.size == PREFETCH_BATCH_OBJECTS) {
+                                            if (!contiguous || exceedsBytes || candidates.size == ForeverClientUpdateTransfer.MAX_BATCH_OBJECTS) {
                                                 flushCandidates()
                                             }
                                         }
                                         candidates += ProducerObject(record, sourceOrdinal)
                                         candidateBytes = Math.addExact(candidateBytes, record.encodedSize)
-                                        if (candidates.size == PREFETCH_BATCH_OBJECTS ||
+                                        if (candidates.size == ForeverClientUpdateTransfer.MAX_BATCH_OBJECTS ||
                                             candidateBytes == ForeverClientUpdateTransfer.MAX_BATCH_BYTES
                                         ) flushCandidates()
                                     }
@@ -3962,11 +3982,6 @@ class ForeverClientUpdater(
          * sink), plus one private verification temporary per largest
          * admitted object. */
         private const val PREFETCH_WORKERS = 16
-        /** Sixteen two-member fetches fit within the existing 34-key bound.
-         * Larger groups concentrate that budget in fewer callbacks, starving
-         * parallel HTTP while the ordered writer waits for its head. This is
-         * a scheduling cap, not a change to the transport's validation limit. */
-        private const val PREFETCH_BATCH_OBJECTS = 2
         private const val PREFETCH_QUEUE_DEPTH = 30
         private const val PREFETCH_MAX_BYTES = (1L shl 30)
         /** Lookahead-32 crash-window bound: up to 32 live in-flight keys plus

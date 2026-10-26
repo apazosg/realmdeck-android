@@ -161,13 +161,36 @@ class ForeverClientUpdaterTest {
         }
     }
 
+    @Test
+    fun prefetchBudgetRechecksCapacityReleasedImmediatelyBeforeItParks() {
+        val budget = ForeverClientUpdater.PrefetchBudget(maxBytes = 1)
+        val first = "0".repeat(32)
+        val next = "1".repeat(32)
+        assertTrue(budget.tryReserve(first, 1))
+
+        budget.requestMeasured(next, 1,
+            cancelled = {
+                // Deliberately interleave a writer release after the initial
+                // capacity check but before the producer can park.
+                budget.release(first)
+                false
+            },
+            drainPossible = { true },
+            evictOne = { throw AssertionError("released capacity needs no eviction") },
+            onWait = { throw AssertionError("released capacity must be rechecked before parking") },
+        )
+
+        assertEquals(1 to 1L, budget.snapshot())
+        assertFalse(budget.hasReservation(first))
+        assertTrue(budget.hasReservation(next))
+    }
+
     @Test(timeout = 30_000)
-    fun sourceLessSmallBatchesFillSixteenWorkersWithinTheRawKeyBound() {
+    fun sourceLessUpdaterFetchesExactContiguousPhysicalGroupsThroughBatchPath() {
         val configAssets = configAssetsOrSkip()
-        Fixture(cascObjectCount = 33, contiguousRangeObjectCount = 32).use { fixture ->
+        Fixture(cascObjectCount = 4, contiguousRangeObjectCount = 3).use { fixture ->
             val paths = fixture.makePaths()
             val calls = java.util.Collections.synchronizedList(ArrayList<List<String>>())
-            val allStarted = CountDownLatch(16)
             val fetch: (ForeverClientUpdateCatalog.ObjectRecord, File, () -> Boolean, (Long) -> Unit) -> File =
                 { record, work, _, progress ->
                     val output = File(work, "${record.ekey}.blte")
@@ -178,9 +201,6 @@ class ForeverClientUpdaterTest {
             val updater = fixture.updater(paths, configAssets, fetch).apply {
                 batchFetchForTests = { members, work, cancelled, progress ->
                     calls += members.map { it.ekey }
-                    allStarted.countDown()
-                    assertTrue("sixteen small batches fit before any raw can be acknowledged",
-                        allStarted.await(10, TimeUnit.SECONDS))
                     members.map { record ->
                         check(!cancelled())
                         val output = File(work, "${record.ekey}.blte")
@@ -194,18 +214,14 @@ class ForeverClientUpdaterTest {
             val plan = updater.plan(destination)
             val result = updater.execute(destination, plan, consentFor(plan))
 
-            assertEquals(33L, result.reusedObjects + result.writtenObjects)
-            assertEquals(16, calls.size)
-            assertEquals(fixture.contiguousRangeEkeys.toSet(), calls.flatten().toSet())
-            calls.forEach { keys ->
-                assertEquals(2, keys.size)
-                val grouped = keys.map(fixture.catalog::objectByKey)
-                assertTrue(grouped.all { it.sourceKind == "range" && it.sourceHash == grouped.first().sourceHash })
-                grouped.zipWithNext().forEach { (left, right) ->
-                    assertEquals(left.sourceOffset + left.encodedSize, right.sourceOffset)
-                }
+            assertEquals(4L, result.reusedObjects + result.writtenObjects)
+            assertEquals("the consecutive same-archive range run is one batch", 1, calls.size)
+            assertEquals(fixture.contiguousRangeEkeys, calls.single())
+            val grouped = calls.single().map(fixture.catalog::objectByKey)
+            assertTrue(grouped.all { it.sourceKind == "range" && it.sourceHash == grouped.first().sourceHash })
+            grouped.zipWithNext().forEach { (left, right) ->
+                assertEquals(left.sourceOffset + left.encodedSize, right.sourceOffset)
             }
-            assertNoLiveFetchWorkers("bounded two-member batches")
         }
     }
 

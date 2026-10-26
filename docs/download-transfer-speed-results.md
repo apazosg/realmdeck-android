@@ -293,10 +293,38 @@ Artefactos: `candidate/{summary,analysis,steady-pipeline}.json`,
 `baseline/steady-pipeline.json`, `comparison.json`, logs/inventarios privados,
 `steady_pipeline.py` y `analyze_candidate.py`, bajo el mismo directorio externo.
 
+## Alternativa verificada: despertar al liberar presupuesto
+
+Se restauró la agrupación original de hasta 16 objetos/1 MiB, retirando el cap 2
+de C153. El presupuesto usa un monitor privado común para comprobar capacidad,
+esperar y notificar al liberar una reserva o resetear. Recomprueba la capacidad
+atómicamente antes de `wait(100)` para no perder una liberación anterior al park.
+Cancelación, evacuación y callback de tiempos siguen fuera del monitor; se conserva
+el fallback de 100 ms y no se toca el ACK, retiro raw, force ni ningún límite.
+La clase interna solo se hace accesible al módulo para la regresión directa.
+
+La prueba `prefetchBudgetRechecksCapacityReleasedImmediatelyBeforeItParks` libera
+capacidad deliberadamente desde el callback de cancelación entre el check inicial
+y el park: exige admitir sin esperar ni evacuar, sin umbral temporal. En la rama
+de sleep original falla exactamente con «released capacity must be rechecked before
+parking» (RED, un test/una failure). Con el cambio, **nueve pruebas pasan, sin
+fallos, errores ni skips**: carrera, aritmética/cuotas/evacuación, batch contiguo,
+presión/prefix/tail, cancelación, orden físico, 16 partials/reanudación y readiness.
+Gradle offline JDK 17, 1 min 17 s; fuente y test ensayados idénticos al repositorio.
+Artefactos `wakeup-focused-tests/{red,green}-summary.json`, XML, logs y hashes bajo
+el directorio externo. No se repitieron las verificaciones verdes de C153.
+
+La revisión independiente del snapshot y evidencias RED/GREEN no halló defectos
+accionables; no tuvo acceso a archivos ni repitió checks. El diff completo fue
+inspeccionado localmente. Esto verifica el cambio acotado, **no su rendimiento**.
+Despertar por cada liberación podría producir más singles por presión y aumentar
+el coste HTTP; se comprobarán esos contadores en el ensayo. El reloj de espera
+ahora incluye la readquisición del monitor y no es exactamente el antiguo sleep.
+
 ## Pendiente
 
-Implementar/verificar la intervención reconsiderada y medir una nueva candidata
-autenticada, conservando el progreso y la pausa final. C153 queda pausada, no se
+Construir/auditar y medir una nueva candidata con esta intervención verificada,
+conservando el progreso y la pausa final. C153 queda pausada, no se
 reinstala ni se repite su ensayo. El goal **no** cumple todavía la mejora exigida.
 La línea base mide variación actual, pero no demuestra una causa única de todos
 los descensos históricos, throughput aislado por tamaño ni una mejora candidata.
