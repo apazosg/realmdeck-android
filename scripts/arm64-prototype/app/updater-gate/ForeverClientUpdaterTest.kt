@@ -396,10 +396,15 @@ class ForeverClientUpdaterTest {
             val headFutureReady = CountDownLatch(1)
             val afterSampleHeadReady = AtomicBoolean(true)
             val afterSampleReadyAhead = AtomicInteger(0)
+            val headWaitWallSample = CountDownLatch(1)
             val lines = java.util.Collections.synchronizedList(ArrayList<String>())
             val logger = java.util.logging.Logger.getLogger("ForeverClientUpdate")
             val handler = object : java.util.logging.Handler() {
-                override fun publish(record: java.util.logging.LogRecord) { lines += record.message }
+                override fun publish(record: java.util.logging.LogRecord) {
+                    lines += record.message
+                    if (record.message.startsWith("CASC fetch wall event=sample ") &&
+                        record.message.contains("headWaitActive=1 headWaitClass=Small ")) headWaitWallSample.countDown()
+                }
                 override fun flush() = Unit
                 override fun close() = Unit
             }
@@ -448,9 +453,10 @@ class ForeverClientUpdaterTest {
                 assertTrue(afterSampleCaptured.await(10, TimeUnit.SECONDS))
                 assertFalse("head remains pending at the post-revalidation sample", afterSampleHeadReady.get())
                 assertTrue("other prepared futures remain ahead of the head", afterSampleReadyAhead.get() >= 3)
-                releaseHeadFetch.countDown()
-                assertTrue("head future becomes ready after the storage sample", headFutureReady.await(10, TimeUnit.SECONDS))
                 releaseAfterSample.countDown()
+                assertTrue("the wall observer sees an actual blocked head", headWaitWallSample.await(10, TimeUnit.SECONDS))
+                releaseHeadFetch.countDown()
+                assertTrue("head future becomes ready after the wall sample", headFutureReady.await(10, TimeUnit.SECONDS))
                 execution.get(20, TimeUnit.SECONDS)
             } finally {
                 releaseHeadFetch.countDown()
@@ -473,6 +479,12 @@ class ForeverClientUpdaterTest {
                 summary.substringAfter("cohortSmallCallbackNanos=").substringBefore(' ').toLong() > 0L)
             assertTrue(summary.contains("cohortMixedFailures=") && summary.contains("cohortLargeZeroUseful="))
             assertTrue(summary.contains("reservedKeys=0 reservedBytes=0"))
+            val stopped = lines.single { it.startsWith("CASC fetch wall event=stopped ") }
+            assertTrue(stopped.contains("headWaitActive=0 headWaitClass=none "))
+            assertTrue(stopped.substringAfter("headWaitSmallNanos=").substringBefore(' ').toLong() > 0L)
+            assertTrue("ready futures are not counted as blocked heads", stopped.contains("headWaitSmallCount=1 "))
+            assertTrue(stopped.contains("headWaitMediumNanos=0 headWaitLargeNanos=0 "))
+            assertTrue(lines.filter { it.startsWith("CASC fetch wall ") }.all { it.toByteArray(Charsets.UTF_8).size < 4000 })
             assertNoLiveFetchWorkers("controlled readiness run")
         }
     }
@@ -3017,7 +3029,7 @@ class ForeverClientUpdaterTest {
         val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
         while (true) {
             val live = Thread.getAllStackTraces().keys
-                .filter { it.name == "forever-fetch" && it.isAlive }
+                .filter { (it.name == "forever-fetch" || it.name == "forever-fetch-wall") && it.isAlive }
             if (live.isEmpty()) return
             if (System.nanoTime() >= deadline) {
                 throw AssertionError("late fetch workers still alive after $context: $live")

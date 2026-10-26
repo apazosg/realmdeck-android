@@ -18,6 +18,7 @@ import java.util.Locale
 import java.util.concurrent.CancellationException
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.atomic.AtomicLongArray
 import java.util.logging.Logger
 import javax.net.ssl.HttpsURLConnection
 
@@ -229,7 +230,7 @@ class ForeverClientUpdateTransfer internal constructor(
             connection.setRequestProperty("Range", "bytes=${first.sourceOffset}-$end")
             checkActive(cancelled, started)
             val headersStarted = System.nanoTime()
-            val status = try { connection.responseCode }
+            val status = try { diagnosticPhase(PHASE_HEADERS) { connection.responseCode } }
             finally { timings.headersWaitNanos += System.nanoTime() - headersStarted }
             require(status == HttpURLConnection.HTTP_PARTIAL) { "official CDN returned an unexpected archive batch status" }
             require(connection.contentEncoding == null || connection.contentEncoding.equals("identity", true)) {
@@ -237,7 +238,10 @@ class ForeverClientUpdateTransfer internal constructor(
             }
             validateContentRange(connection, first.sourceOffset, end, null)
             require(connection.contentLengthLong == bytes) { "official CDN archive batch Content-Length mismatch" }
-            BufferedInputStream(connection.inputStream, BUFFER_SIZE).use { input ->
+            val streamStarted = System.nanoTime()
+            val stream = try { diagnosticPhase(PHASE_BODY) { connection.inputStream } }
+            finally { timings.bodyReadNanos += System.nanoTime() - streamStarted }
+            BufferedInputStream(stream, BUFFER_SIZE).use { input ->
                 val buffer = ByteArray(BUFFER_SIZE)
                 records.forEach { record ->
                     checkActive(cancelled, started)
@@ -250,31 +254,40 @@ class ForeverClientUpdateTransfer internal constructor(
                                 checkActive(cancelled, started)
                                 val readStarted = System.nanoTime()
                                 val count = try {
-                                    input.read(buffer, 0, minOf(buffer.size.toLong(), record.encodedSize - received).toInt())
+                                    diagnosticPhase(PHASE_BODY) {
+                                        input.read(buffer, 0, minOf(buffer.size.toLong(), record.encodedSize - received).toInt())
+                                    }
                                 } finally { timings.bodyReadNanos += System.nanoTime() - readStarted }
                                 if (count < 0) throw IOException("official CDN archive batch was truncated")
                                 if (count == 0) continue
+                                diagnosticBodyConsumedBytes.addAndGet(count.toLong())
                                 val chunk = ByteBuffer.wrap(buffer, 0, count)
                                 while (chunk.hasRemaining()) {
                                     checkActive(cancelled, started)
                                     val writeStarted = System.nanoTime()
-                                    val written = try { channel.write(chunk) }
+                                    val written = try { diagnosticPhase(PHASE_WRITE) { channel.write(chunk) } }
                                     finally { timings.privateWriteNanos += System.nanoTime() - writeStarted }
                                     if (written <= 0) throw IOException("could not write archive batch partial")
                                 }
                                 received = Math.addExact(received, count.toLong())
-                                progress(record.ekey, received)
+                                val progressStarted = System.nanoTime()
+                                try { diagnosticPhase(PHASE_PROGRESS) { progress(record.ekey, received) } }
+                                finally { timings.progressNanos += System.nanoTime() - progressStarted }
                             }
                         } finally {
                             val forceStarted = System.nanoTime()
-                            try { channel.force(true) }
+                            try { diagnosticPhase(PHASE_FORCE) { channel.force(true) } }
                             finally { timings.privateForceNanos += System.nanoTime() - forceStarted }
                         }
                     }
                 }
                 checkActive(cancelled, started)
                 val drainStarted = System.nanoTime()
-                try { require(input.read() < 0) { "official CDN returned bytes beyond the requested archive batch" } }
+                try {
+                    val trailing = diagnosticPhase(PHASE_BODY) { input.read() }
+                    if (trailing >= 0) diagnosticBodyConsumedBytes.incrementAndGet()
+                    require(trailing < 0) { "official CDN returned bytes beyond the requested archive batch" }
+                }
                 finally { timings.bodyReadNanos += System.nanoTime() - drainStarted }
                 drained = true
             }
@@ -341,7 +354,7 @@ class ForeverClientUpdateTransfer internal constructor(
             // HTTP headers, not pure network. Timed separately so the serial
             // per-object wait can be split from payload streaming.
             val headersWaitStarted = if (timings != null) System.nanoTime() else 0L
-            val status = try { connection.responseCode }
+            val status = try { diagnosticPhase(PHASE_HEADERS) { connection.responseCode } }
             finally { if (timings != null) timings.headersWaitNanos += System.nanoTime() - headersWaitStarted }
             val expectedStatus = if (ranged) HttpURLConnection.HTTP_PARTIAL else HttpURLConnection.HTTP_OK
             require(status == expectedStatus) { "official CDN returned an unexpected HTTP status for encoded object" }
@@ -366,7 +379,10 @@ class ForeverClientUpdateTransfer internal constructor(
             val channel = FileChannel.open(part, *openOptions)
             try {
                 if (channel.size() != existing) throw IllegalStateException("encoded-object partial changed before resume")
-                BufferedInputStream(connection.inputStream, BUFFER_SIZE).use { input ->
+                val streamStarted = if (timings != null) System.nanoTime() else 0L
+                val stream = try { diagnosticPhase(PHASE_BODY) { connection.inputStream } }
+                finally { if (timings != null) timings.bodyReadNanos += System.nanoTime() - streamStarted }
+                BufferedInputStream(stream, BUFFER_SIZE).use { input ->
                     val buffer = ByteArray(BUFFER_SIZE)
                     var received = 0L
                     while (received < expectedNetworkBytes) {
@@ -375,15 +391,18 @@ class ForeverClientUpdateTransfer internal constructor(
                         // decode wait, excluding the channel write below.
                         val readStarted = if (timings != null) System.nanoTime() else 0L
                         val count = try {
-                            input.read(buffer, 0, minOf(buffer.size.toLong(), expectedNetworkBytes - received).toInt())
+                            diagnosticPhase(PHASE_BODY) {
+                                input.read(buffer, 0, minOf(buffer.size.toLong(), expectedNetworkBytes - received).toInt())
+                            }
                         } finally { if (timings != null) timings.bodyReadNanos += System.nanoTime() - readStarted }
                         if (count < 0) throw IOException("official CDN encoded-object range was truncated")
                         if (count == 0) continue
+                        diagnosticBodyConsumedBytes.addAndGet(count.toLong())
                         val bytes = ByteBuffer.wrap(buffer, 0, count)
                         while (bytes.hasRemaining()) {
                             checkActive(cancelled, deadlineStarted)
                             val writeStarted = if (timings != null) System.nanoTime() else 0L
-                            val written = try { channel.write(bytes) }
+                            val written = try { diagnosticPhase(PHASE_WRITE) { channel.write(bytes) } }
                             finally { if (timings != null) timings.channelWriteNanos += System.nanoTime() - writeStarted }
                             if (written <= 0) throw IOException("could not write encoded-object partial")
                         }
@@ -392,14 +411,15 @@ class ForeverClientUpdateTransfer internal constructor(
                         // progress covers the caller callback (Updater lock +
                         // notifications can contribute); timed apart from I/O.
                         val progressStarted = if (timings != null) System.nanoTime() else 0L
-                        progress(reported)
-                        if (timings != null) timings.progressNanos += System.nanoTime() - progressStarted
+                        try { diagnosticPhase(PHASE_PROGRESS) { progress(reported) } }
+                        finally { if (timings != null) timings.progressNanos += System.nanoTime() - progressStarted }
                     }
                     checkActive(cancelled, deadlineStarted)
                     // The trailing read is part of the drain check, so it joins bodyRead.
                     val drainStarted = if (timings != null) System.nanoTime() else 0L
-                    val trailing = input.read()
-                    if (timings != null) timings.bodyReadNanos += System.nanoTime() - drainStarted
+                    val trailing = try { diagnosticPhase(PHASE_BODY) { input.read() } }
+                    finally { if (timings != null) timings.bodyReadNanos += System.nanoTime() - drainStarted }
+                    if (trailing >= 0) diagnosticBodyConsumedBytes.incrementAndGet()
                     require(trailing < 0) { "official CDN returned bytes beyond the requested encoded-object range" }
                     // The response body was fully drained: the pooled connection
                     // is reusable for the next object (c98 keep-alive).
@@ -411,7 +431,7 @@ class ForeverClientUpdateTransfer internal constructor(
                 // in the same inner finally as before.
                 val forceStarted = if (timings != null) System.nanoTime() else 0L
                 try {
-                    channel.force(true)
+                    diagnosticPhase(PHASE_FORCE) { channel.force(true) }
                 } finally {
                     if (timings != null) timings.channelForceNanos += System.nanoTime() - forceStarted
                     channel.close()
@@ -457,13 +477,15 @@ class ForeverClientUpdateTransfer internal constructor(
             // verify covers EKey + BLTE + CKey authentication of the object.
             val verifyStarted = if (timings != null) System.nanoTime() else 0L
             try {
-                verifyEKey(file, record.ekey, cancelled, deadlineStarted)
-                checkActive(cancelled, deadlineStarted)
-                // Reconstruction consumes the encoded bytes; TACT-encrypted frames
-                // are authenticated without decryption (see ForeverBlte).
-                ForeverBlte.verifyEncodedObject(file, record.decodedSize, record.contentKey, cancelled)
-                checkActive(cancelled, deadlineStarted)
-                true
+                diagnosticPhase(PHASE_AUTH) {
+                    verifyEKey(file, record.ekey, cancelled, deadlineStarted)
+                    checkActive(cancelled, deadlineStarted)
+                    // Reconstruction consumes the encoded bytes; TACT-encrypted frames
+                    // are authenticated without decryption (see ForeverBlte).
+                    ForeverBlte.verifyEncodedObject(file, record.decodedSize, record.contentKey, cancelled)
+                    checkActive(cancelled, deadlineStarted)
+                    true
+                }
             } finally {
                 if (timings != null) timings.verifyNanos += System.nanoTime() - verifyStarted
             }
@@ -534,6 +556,7 @@ class ForeverClientUpdateTransfer internal constructor(
         timings: FetchTimings?,
     ): File {
         val publishStarted = if (timings != null) System.nanoTime() else 0L
+        diagnosticActivePhases.incrementAndGet(PHASE_PUBLISH)
         try {
             checkActive(cancelled, deadlineStarted)
             checkOwnedFileState(output, "encoded object output")
@@ -557,6 +580,7 @@ class ForeverClientUpdateTransfer internal constructor(
             return output.toFile()
         } finally {
             if (timings != null) timings.publishNanos += System.nanoTime() - publishStarted
+            diagnosticActivePhases.decrementAndGet(PHASE_PUBLISH)
         }
     }
 
@@ -685,6 +709,24 @@ class ForeverClientUpdateTransfer internal constructor(
         private val diagnosticForceNanos = AtomicLong()
         private val diagnosticAuthNanos = AtomicLong()
         private val diagnosticPublishNanos = AtomicLong()
+        private val diagnosticProgressNanos = AtomicLong()
+        // Bytes returned to the transfer by HTTP body reads, including retries and
+        // a consumed unexpected trailing byte. Not buffered prefetch or TLS/IP wire bytes.
+        private val diagnosticBodyConsumedBytes = AtomicLong()
+        private const val PHASE_HEADERS = 0
+        private const val PHASE_BODY = 1
+        private const val PHASE_WRITE = 2
+        private const val PHASE_FORCE = 3
+        private const val PHASE_AUTH = 4
+        private const val PHASE_PUBLISH = 5
+        private const val PHASE_PROGRESS = 6
+        private val diagnosticActivePhases = AtomicLongArray(7)
+
+        private inline fun <T> diagnosticPhase(phase: Int, action: () -> T): T {
+            diagnosticActivePhases.incrementAndGet(phase)
+            try { return action() }
+            finally { diagnosticActivePhases.decrementAndGet(phase) }
+        }
 
         private fun diagnosticAccumulate(timings: FetchTimings) {
             diagnosticRequests.incrementAndGet()
@@ -695,6 +737,7 @@ class ForeverClientUpdateTransfer internal constructor(
             diagnosticForceNanos.addAndGet(timings.channelForceNanos + timings.privateForceNanos)
             diagnosticAuthNanos.addAndGet(timings.verifyNanos + timings.authNanos)
             diagnosticPublishNanos.addAndGet(timings.publishNanos)
+            diagnosticProgressNanos.addAndGet(timings.progressNanos)
         }
 
         private fun diagnosticHttpStarted(grouped: Boolean) {
@@ -711,6 +754,11 @@ class ForeverClientUpdateTransfer internal constructor(
                 "headersNanos=${diagnosticHeadersNanos.get()} bodyReadNanos=${diagnosticBodyNanos.get()} " +
                 "privateWriteNanos=${diagnosticWriteNanos.get()} privateForceNanos=${diagnosticForceNanos.get()} " +
                 "authNanos=${diagnosticAuthNanos.get()} publishNanos=${diagnosticPublishNanos.get()} " +
+                "progressNanos=${diagnosticProgressNanos.get()} bodyConsumedBytes=${diagnosticBodyConsumedBytes.get()} " +
+                "activeHeaders=${diagnosticActivePhases.get(PHASE_HEADERS)} activeBody=${diagnosticActivePhases.get(PHASE_BODY)} " +
+                "activePrivateWrite=${diagnosticActivePhases.get(PHASE_WRITE)} activePrivateForce=${diagnosticActivePhases.get(PHASE_FORCE)} " +
+                "activeAuth=${diagnosticActivePhases.get(PHASE_AUTH)} activePublish=${diagnosticActivePhases.get(PHASE_PUBLISH)} " +
+                "activeProgress=${diagnosticActivePhases.get(PHASE_PROGRESS)} " +
                 "headersMs=${diagnosticHeadersNanos.get() / 1_000_000} bodyReadMs=${diagnosticBodyNanos.get() / 1_000_000} " +
                 "privateWriteMs=${diagnosticWriteNanos.get() / 1_000_000} privateForceMs=${diagnosticForceNanos.get() / 1_000_000} " +
                 "authMs=${diagnosticAuthNanos.get() / 1_000_000} publishMs=${diagnosticPublishNanos.get() / 1_000_000}"

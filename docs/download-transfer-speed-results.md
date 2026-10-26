@@ -754,7 +754,51 @@ ni permite ejecutar otra ventana sin comprobar que el estado sigue igual.
 Artefactos externos: `download-controlled-method-20261026/active-catalog/` y
 `catalog-characterization.json`. Las consultas usan main read-only y tablas TEMP
 en memoria, sin modificar el catálogo. Estos datos sustentan el diseño mixto
-prolongado pendiente de aprobación en el plan, no una nueva mejora medida.
+prolongado en el plan, no una nueva mejora medida. El usuario aprobó expresamente
+esa revisión con «adelante» antes de implementar la instrumentación.
+
+## C158: observación de camino crítico calibrada, sin tuning
+
+Se mantiene la estrategia C157. El observador por ejecución emite una línea de
+pared por segundo con progreso lógico exacto, cola, reservas, callbacks/HTTP,
+ready-ahead y la cabeza realmente esperando un futuro. Cuenta esas esperas por
+tamaño del objeto bloqueado, **no** como coste exclusivo del objeto cuando comparte
+un batch. Lee atómicos sin tomar el lock de progreso; se interrumpe y une antes
+de retornar, también tras cancelación/error. No modifica cuotas ni el recorrido
+de validación, escritura, fuerza, checkpoint o retiro.
+
+Transfer añade gauges actuales de cabeceras/cuerpo/escritura/force/auth/publicación/
+progreso y bytes que sus lecturas consumen del cuerpo, incluidos reintentos y un
+byte extra inesperado; no cuenta lectura de disco ni prefetch aún no consumido,
+y no son bytes TLS/IP wire. El reloj de cuerpo incluye ahora obtener el stream;
+progreso se mide también en grupos y si el callback lanza. Estos relojes siguen
+siendo concurrentes y algunos anidados, acumulados al terminar invocaciones; los
+samples atómicos no forman una partición causal ni ocupación exacta.
+
+**Cinco calibraciones focales PASS**, cero fallos/errores/skips, JUnit
+2026-10-26 20:57:20 UTC, Gradle offline JDK 17 en 4 min 15 s:
+
+- Head retenida mediante latch: sample de espera pequeña, ready-ahead existente;
+  futuros ya listos no contados como espera. Sampler parado al terminar.
+- Cancelación del batch: trabajadores y nuevo sampler unidos antes de retornar.
+- Lectura retenida: gauge body activo; callback de progreso activo y body inactivo;
+  cancelación deja los ocho gauges HTTP/fase en cero.
+- Cuerpos de single/grupo contabilizados exactamente y reuso sin nuevos bytes.
+- Cuerpo corrupto reintentado: dos cuerpos consumidos, no un único progreso útil.
+
+La copia aislada probada coincide byte a byte con las cuatro fuentes del repo.
+Máxima línea wall observada: 892 bytes UTF-8 (<4.000). Evidencia externa
+`download-controlled-method-20261026/critical-path-focused-tests/`:
+`summary.json`, inputs con cuatro SHA-256, logs y dos XML frescos; comando exacto
+guardado en `verify-critical-path.sh`. Tres checks Python del retag C158 PASS
+(0,10 s), sin repetir suites históricas. Revisión independiente del **código
+aportado como snapshot**, sin acceso al filesystem ni reruns, sin defectos
+accionables; recibió después el GREEN y los hashes exactos. No se presenta como
+inspección independiente de archivos.
+
+Faltan reconstrucción canónica, auditoría de la APK exacta y medición física mixta.
+Estas calibraciones comprueban el instrumento, no una mejora de velocidad ni
+su overhead real en el dispositivo. No se ha iniciado otro ensayo físico.
 
 ## Matriz de aceptación del objetivo
 

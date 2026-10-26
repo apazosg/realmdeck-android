@@ -93,6 +93,9 @@ internal class FetchPipelineDiagnostics {
     val reserveRetireNanos = AtomicLong()
     val sourceConsumedRawNanos = AtomicLong()
     private val outstandingKeys = AtomicInteger()
+    private val headWaitEncodedBytes = AtomicLong()
+    private val headWaitNanos = AtomicLongArray(3)
+    private val headWaitCounts = AtomicLongArray(3)
 
     fun submittedBatch(memberCount: Int) {
         require(memberCount in 2..ForeverClientUpdateTransfer.MAX_BATCH_OBJECTS)
@@ -191,6 +194,48 @@ internal class FetchPipelineDiagnostics {
         sourceWaitNanos.addAndGet(waitNanos)
         sourceWaitCount.incrementAndGet()
         sourceWaitMaxNanos.accumulateAndGet(waitNanos) { current, next -> maxOf(current, next) }
+    }
+
+    fun headWaitStarted(encodedBytes: Long): Long {
+        headWaitEncodedBytes.set(encodedBytes)
+        return System.nanoTime()
+    }
+
+    fun headWaitFinished(encodedBytes: Long, startedAtNanos: Long) {
+        val index = when {
+            encodedBytes <= 65_536L -> 0
+            encodedBytes <= 1_048_576L -> 1
+            else -> 2
+        }
+        headWaitNanos.addAndGet(index, (System.nanoTime() - startedAtNanos).coerceAtLeast(0L))
+        headWaitCounts.incrementAndGet(index)
+        headWaitEncodedBytes.set(0L)
+    }
+
+    /** Individually atomic 1 Hz observations, not an additive causal partition. */
+    fun logWall(event: String, startedAtNanos: Long, logicalBytes: Long, committed: Long,
+                queueDepth: Int, reservation: Pair<Int, Long>) {
+        try {
+            val headBytes = headWaitEncodedBytes.get()
+            val headClass = when {
+                headBytes == 0L -> "none"
+                headBytes <= 65_536L -> "Small"
+                headBytes <= 1_048_576L -> "Medium"
+                else -> "Large"
+            }
+            logger.info(
+                "CASC fetch wall event=$event scope=updater-run elapsedNanos=${System.nanoTime() - startedAtNanos} " +
+                    "logicalUsefulBytes=$logicalBytes committed=$committed queueDepth=$queueDepth " +
+                    "callbacksActive=${callbacksActive.get()} readyAhead=${readyAhead.get()} " +
+                    "sourceOutstanding=${outstandingKeys.get()} reservedKeys=${reservation.first} reservedBytes=${reservation.second} " +
+                    "headWaitActive=${if (headBytes > 0L) 1 else 0} headWaitClass=$headClass headWaitEncodedBytes=$headBytes " +
+                    "headWaitSmallNanos=${headWaitNanos.get(0)} headWaitMediumNanos=${headWaitNanos.get(1)} headWaitLargeNanos=${headWaitNanos.get(2)} " +
+                    "headWaitSmallCount=${headWaitCounts.get(0)} headWaitMediumCount=${headWaitCounts.get(1)} headWaitLargeCount=${headWaitCounts.get(2)} " +
+                    ForeverClientUpdateTransfer.diagnosticSnapshot(),
+            )
+        } catch (_: Exception) {
+            // Diagnostic failures must not fail or alter the download.
+        }
     }
 
     fun log(event: String, committedObjects: Long, reservationSnapshot: Pair<Int, Long>) {
@@ -2315,7 +2360,24 @@ class ForeverClientUpdater(
             val stagedMembershipFallbacks = AtomicLong()
             val checkpointBatchCalls = AtomicLong()
             val checkpointBatchKeys = AtomicLong()
+            val wallStartedAtNanos = System.nanoTime()
+            val samplerStopped = AtomicBoolean(false)
+            fun logWall(event: String) = fetchPipelineDiagnostics.logWall(
+                event, wallStartedAtNanos, lastReported.get(), committedObjects.get(), queue.size, budget.snapshot(),
+            )
+            val sampler = Thread({
+                try {
+                    while (!samplerStopped.get()) {
+                        Thread.sleep(1_000)
+                        if (!samplerStopped.get()) logWall("sample")
+                    }
+                } catch (_: InterruptedException) {
+                    // The invocation owns and joins this observer on every exit.
+                }
+            }, "forever-fetch-wall").apply { isDaemon = true }
             try {
+                logWall("started")
+                sampler.start()
                 val specs = sequence {
                     while (true) {
                         when (val next = nextEntry()) {
@@ -2398,6 +2460,11 @@ class ForeverClientUpdater(
                         val afterStorage = fetchPipelineDiagnostics.sourceRequested(entry.diagnosticState, afterRevalidate = true)
                         sourceReadinessForTests?.invoke(true, afterStorage.first, afterStorage.second)
                         val waitStarted = System.nanoTime()
+                        // Do not count an already-ready get as a blocked head. Completion
+                        // may race this check; the tiny boundary is observational only.
+                        val headWaitStarted = if (!entry.future.isDone) {
+                            fetchPipelineDiagnostics.headWaitStarted(spec.encodedSize)
+                        } else null
                         val verified = try {
                             if (overlap != null) {
                                 // Overlap: bound the fetch wait so a dead
@@ -2421,6 +2488,7 @@ class ForeverClientUpdater(
                         } catch (failure: ExecutionException) {
                             throw (failure.cause ?: failure)
                         } finally {
+                            if (headWaitStarted != null) fetchPipelineDiagnostics.headWaitFinished(spec.encodedSize, headWaitStarted)
                             fetchPipelineDiagnostics.sourceResolved(entry.diagnosticState, System.nanoTime() - waitStarted)
                         }
                         verifiedSourceWaitNanos += System.nanoTime() - waitStarted
@@ -2561,7 +2629,16 @@ class ForeverClientUpdater(
                     }
                     budget.reset()
                 } finally {
+                    samplerStopped.set(true)
+                    sampler.interrupt()
+                    var interrupted = Thread.interrupted()
+                    while (sampler.isAlive) {
+                        try { sampler.join() }
+                        catch (_: InterruptedException) { interrupted = true }
+                    }
+                    if (interrupted) Thread.currentThread().interrupt()
                     stagedMembership.set(null)
+                    logWall("stopped")
                     fetchPipelineDiagnostics.log(pipelineOutcome, committedObjects.get(), budget.snapshot())
                     sourceDiagnostics.info(
                         "CASC target membership stagedHits=${stagedMembershipHits.get()} " +

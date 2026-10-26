@@ -137,7 +137,7 @@ resuelva ninguna de ellas. Se investiga primero el componente dominante actual.
 - Terminar cada ensayo mediante pausa cooperativa y comprobar progreso retenido
   y ausencia de trabajo de red/updater activo. No sustituir pausa por un kill.
 
-### Revisión metodológica: descarga mixta y camino crítico (pendiente de aprobación)
+### Revisión metodológica: descarga mixta y camino crítico (aprobada)
 
 El usuario pide medir más tiempo y recuerda que pequeños y grandes convivirán.
 La prueba principal será **mixta, sobre el recorrido real**, no la suma de pruebas
@@ -190,8 +190,9 @@ solo se usarán para distinguir hipótesis concretas.
    evaluar el conjunto y cada tamaño/origen, no declarar éxito con el +17 % previo.
 
 Esta revisión no modifica los cinco criterios ni autoriza nuevas cuotas, otro
-orden o contratos. El trabajo ya verificado permanece verificado. **Solo está
-completado el punto 1; no se ejecutarán los nuevos puntos hasta aprobar el diseño.**
+orden o contratos. El trabajo ya verificado permanece verificado. El usuario
+aprobó expresamente la revisión el 2026-10-26: **«adelante»**. El punto 1 está
+completado; se ejecutan instrumentación y calibración antes del ensayo prolongado.
 
 ### Aceptación y validación
 
@@ -232,10 +233,10 @@ completado el punto 1; no se ejecutarán los nuevos puntos hasta aprobar el dise
 
 ## Open Issues
 
-- Pendiente aprobar la revisión de método anterior: observación acotada del camino
-  crítico y diagnóstico mixto de veinte minutos antes de otro tuning; replay solo
-  si una hipótesis lo necesita y con diseño específico previo. No hay descarga ni
-  build nuevos activos. La caracterización de catálogo fue solo lectura.
+- Revisión de método aprobada expresamente: observación acotada del camino crítico
+  y diagnóstico mixto de veinte minutos antes de otro tuning; replay solo si una
+  hipótesis lo necesita y con diseño específico previo. La caracterización de
+  catálogo fue solo lectura; no se repiten los ensayos previos.
 - **Diagnóstico reabierto; no más ajustes heurísticos antes de aislar el cuello.**
   El usuario cuestiona representatividad y si los cambios atacan el coste dominante.
   C157 terminó 19:41:11 UTC, pausada, checkpoint 454.511 válido y cero trabajo:

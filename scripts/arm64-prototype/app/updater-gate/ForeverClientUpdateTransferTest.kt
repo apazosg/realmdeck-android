@@ -8,6 +8,11 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.nio.file.Files
 import java.security.MessageDigest
+import java.util.concurrent.CancellationException
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.ExecutionException
+import java.util.concurrent.FutureTask
+import java.util.concurrent.TimeUnit
 import java.util.logging.Handler
 import java.util.logging.LogRecord
 import java.util.logging.Logger
@@ -240,6 +245,7 @@ class ForeverClientUpdateTransferTest {
     fun mismatchedPayloadIsRetriedWithinTheSameCall() {
         Fixture().use { fixture ->
             val item = objectData()
+            val beforeBytes = diagnosticField("bodyConsumedBytes")
             var calls = 0
             val transfer = ForeverClientUpdateTransfer {
                 calls++
@@ -251,9 +257,12 @@ class ForeverClientUpdateTransferTest {
             assertFalse("a cryptographically invalid complete part must be removed before publish", part.exists())
             assertEquals(item.bytes.toList(), result.readBytes().toList())
             assertEquals(2, calls)
+            assertEquals(item.bytes.size * 2L, diagnosticField("bodyConsumedBytes") - beforeBytes)
             // The verified output is reused without touching the network again.
             assertEquals(result.canonicalFile, transfer.fetch(item.record, fixture.workDir, { false }) { }.canonicalFile)
             assertEquals(2, calls)
+            assertEquals("verified reuse consumes no HTTP body", item.bytes.size * 2L,
+                diagnosticField("bodyConsumedBytes") - beforeBytes)
         }
     }
 
@@ -397,8 +406,59 @@ class ForeverClientUpdateTransferTest {
             assertTrue(field(after, "bodyReadMs") >= field(before, "bodyReadMs"))
             assertTrue(field(after, "authNanos") > field(before, "authNanos"))
             assertEquals(0L, field(after, "httpActive"))
+            assertEquals(body.size.toLong() + single.bytes.size, field(after, "bodyConsumedBytes") - field(before, "bodyConsumedBytes"))
+            assertTrue(field(after, "progressNanos") > field(before, "progressNanos"))
+            transfer.fetchBatch(batch.map { it.record }, fixture.workDir, { false }) { _, _ -> }
+            transfer.fetch(single.record, fixture.workDir, { false }) { }
+            assertEquals(field(after, "bodyConsumedBytes"), diagnosticField("bodyConsumedBytes"))
         }
     }
+
+    @Test(timeout = 30_000)
+    fun liveReadAndProgressGaugesUnwindWhenTheCallbackCancels() {
+        Fixture().use { fixture ->
+            val item = objectData()
+            val enteredRead = CountDownLatch(1)
+            val releaseRead = CountDownLatch(1)
+            val beforeBytes = diagnosticField("bodyConsumedBytes")
+            val beforeProgress = diagnosticField("progressNanos")
+            val transfer = ForeverClientUpdateTransfer {
+                FakeConnection(200, item.bytes, beforeRead = {
+                    enteredRead.countDown()
+                    check(releaseRead.await(10, TimeUnit.SECONDS))
+                })
+            }
+            val execution = FutureTask<Unit> {
+                transfer.fetch(item.record, fixture.workDir, { false }) {
+                    assertEquals(1L, diagnosticField("activeProgress"))
+                    assertEquals(0L, diagnosticField("activeBody"))
+                    throw CancellationException("calibrated progress cancellation")
+                }
+                Unit
+            }
+            Thread(execution, "transfer-phase-calibration").apply { isDaemon = true; start() }
+            try {
+                assertTrue(enteredRead.await(10, TimeUnit.SECONDS))
+                assertEquals(1L, diagnosticField("httpActive"))
+                assertEquals(1L, diagnosticField("activeBody"))
+                assertEquals(0L, diagnosticField("activeHeaders"))
+            } finally {
+                releaseRead.countDown()
+            }
+            val failure = assertThrows(ExecutionException::class.java) { execution.get(10, TimeUnit.SECONDS) }
+            assertTrue(failure.cause is CancellationException)
+            for (field in listOf("httpActive", "activeHeaders", "activeBody", "activePrivateWrite",
+                "activePrivateForce", "activeAuth", "activePublish", "activeProgress")) {
+                assertEquals(field, 0L, diagnosticField(field))
+            }
+            assertEquals(item.bytes.size.toLong(), diagnosticField("bodyConsumedBytes") - beforeBytes)
+            assertTrue(diagnosticField("progressNanos") > beforeProgress)
+        }
+    }
+
+    private fun diagnosticField(name: String): Long =
+        Regex("(?:^| )$name=([0-9]+)(?: |$)").find(ForeverClientUpdateTransfer.diagnosticSnapshot())
+            ?.groupValues?.get(1)?.toLong() ?: error("missing $name in diagnostic snapshot")
 
     @Test
     fun batchRejectsInvalidGroupingWrongRangeAndTrailingBytesBeforePublishing() {
@@ -525,6 +585,7 @@ class ForeverClientUpdateTransferTest {
         private val contentRange: String? = null,
         private val declaredLength: Long = body.size.toLong(),
         private val failAfterBody: Boolean = false,
+        private val beforeRead: (() -> Unit)? = null,
     ) : HttpURLConnection(URL("https://us.cdn.blizzard.com/")) {
         var requestedRange: String? = null
             private set
@@ -537,13 +598,14 @@ class ForeverClientUpdateTransferTest {
         override fun getResponseCode(): Int = status
         override fun getContentLengthLong(): Long = declaredLength
         override fun getInputStream(): InputStream {
-            if (!failAfterBody) return ByteArrayInputStream(body)
+            if (!failAfterBody && beforeRead == null) return ByteArrayInputStream(body)
             val delegate = ByteArrayInputStream(body)
             var failed = false
             return object : InputStream() {
                 override fun read(): Int {
+                    beforeRead?.invoke()
                     val value = delegate.read()
-                    if (value < 0 && !failed) {
+                    if (failAfterBody && value < 0 && !failed) {
                         failed = true
                         throw IOException("synthetic post-body failure")
                     }
@@ -551,8 +613,9 @@ class ForeverClientUpdateTransferTest {
                 }
 
                 override fun read(bytes: ByteArray, offset: Int, length: Int): Int {
+                    beforeRead?.invoke()
                     val count = delegate.read(bytes, offset, length)
-                    if (count < 0 && !failed) {
+                    if (failAfterBody && count < 0 && !failed) {
                         failed = true
                         throw IOException("synthetic post-body failure")
                     }
