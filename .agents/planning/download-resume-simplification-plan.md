@@ -165,7 +165,7 @@ aceptación. Antes de otra candidata:
   la reapertura al gestor con el botón real «Ver descarga». No repetir toda una
   descarga únicamente para corregir una expectativa errónea del guion.
 
-Propuesta diferida, **no implementada**: los lectores de
+Diseño aprobado el 2026-10-26, **aún no implementado**: los lectores de
 checkpoint posteriores conservan la resolución escalar de metadatos/ordinales
 por frame. La prueba física C149 usa su APK congelada; el trabajo local siguiente
 es independiente y no debe sustituir esa medición:
@@ -187,9 +187,9 @@ es independiente y no debe sustituir esa medición:
   guarda. No generar otra candidata hasta acabar las pruebas/revisión; C149 continúa
   su ensayo independiente sin aceptar automáticamente costes nuevos.
 
-La inspección de implementación concluyó que agrupar carga/verificador exigiría
-separar sus fases de validación y mutación/ACK. No se amplía a ese rediseño ni se
-modifica el lector solo para obtener velocidad. Se prioriza una alternativa local:
+La inspección inicial concluyó que agrupar carga/verificador exigiría separar sus
+fases de validación y mutación/ACK. En la fase anterior no se amplió a ese rediseño;
+se implementó y verificó primero una alternativa local:
 reutilizar el registro autoritativo que ya acompaña al objeto exacto entregado por
 el cursor del catálogo al writer, dentro de la misma operación. La comparación
 existente sigue ejecutándose; si no hay una coincidencia inequívoca, usar el lookup
@@ -199,7 +199,10 @@ o conservar su consulta actual; no debilitar detección de duplicados. No antici
 objetos, tocar CRC/colas/ACK ni ampliar cotas. Exigir pruebas y revisión independiente
 antes de otra candidata; si necesita un refactor amplio, detener también esta opción.
 
-**Ampliación propuesta, pendiente de aprobación:** separar explícitamente
+**Ampliación aprobada el 2026-10-26:** el usuario indicó «aplica el refactor si
+crees que es la mejor solución». Se elige este refactor focal porque los lectores
+siguen resolviendo metadatos uno a uno; no basta la mejora del objeto actual.
+Separar explícitamente
 validación y aplicación por lote en los tres lectores de checkpoint, en vez de
 intentar insertar un buffer en sus bucles actuales. Alcance limitado a esos
 lectores y su callback de metadatos; no rediseñar el input del writer ni cambiar
@@ -208,8 +211,24 @@ y contrastar cada lote antes de mutar/ACK/truncar, respetar `cpByteEnd`, y conse
 el comportamiento escalar por defecto. Reutilizar fixtures para equivalencia,
 metadata inválida con cola torn, cancelación y prefijo solapado; revisión
 independiente obligatoria. Solo después reconstruir/auditar y probar conservando
-progreso. Sin aprobación no se ejecuta esta ampliación; continúa únicamente la
-alternativa pequeña de procedencia del registro ya admitido.
+progreso. La alternativa pequeña ya verificada se conserva; no se implementa ningún
+rediseño del stream de entrada ni se debilitan garantías.
+
+- Callback bulk opcional solo para lectores: claves únicas por lote, cardinalidad
+  y correspondencia de resultados comprobadas, seguido del mismo contraste completo
+  y detección global de ordinales repetidos. Ausencia del callback conserva el camino
+  escalar, incluida la ruta con fuente/legacy.
+- Separar admisión CRC/tipo y metadatos del lote de la aplicación de sus registros.
+  Aplicar en el orden original; vaciar y validar pendientes antes de finalización,
+  reparación/truncado o cambio de grupo. No ACK tras una excepción ni antes de las
+  verificaciones criptográficas y bindings frescos originales. Respetar el límite
+  congelado `cpByteEnd` incluso si el writer sigue añadiendo frames.
+- Pruebas representativas de más de 256 frames, equivalencia escalar/bulk,
+  metadatos inválidos con cola incompleta, cancelación y barreras de ACK del prefijo.
+  Revisión independiente antes de reconstruir/auditar y volver a medir el recorrido.
+- Se difiere compilar la instantánea pequeña C150 ya reconstruida (no instalada).
+  La candidata del refactor tendrá una reconstrucción autenticada fresca y recibo
+  propio; no se modifica ni reutiliza como si fuera actual el árbol congelado anterior.
 
 - Registrar versión/hash, dispositivo/destino, build/catálogo, tamaño del prefijo,
   cachés frías/calientes, red compartida, objetos/tamaños, bytes útiles y reintentos.
@@ -386,16 +405,17 @@ alternativa pequeña de procedencia del registro ya admitido.
   una acción cada uno; reapertura con mismo proceso/servicio y sin reconfirmar.
   Pausa final 23:06:25 UTC, después cero servicios activos. No repetir esa prueba.
   Se observan 88/228 s menos que C148, con caché/cohorte sin controlar; 14/20 minutos
-  siguen excesivos y no son aceptación global. Se valida la alternativa pequeña
-  de procedencia del registro actual; los lotes de lectores están diferidos,
-  sin ampliar ese refactor ni reabrir las correcciones ya verificadas.
+  siguen excesivos y no son aceptación global. La alternativa pequeña ya se validó;
+  el 2026-10-26 se aprobó además el refactor focal de lectores descrito arriba,
+  conservando las correcciones y pruebas anteriores.
 - Alternativa pequeña `c823708`: reutilización de la fila autoritativa y su ordinal
   previo a filtros, con fallback intacto. Se reprodujo y corrigió una clasificación
   desplazada; tres focales legacy/cancelación/solapamiento pasan con fuentes finales
   cotejadas. Revisión independiente de la captura final sin hallazgos, sin atribuirle
   acceso al repositorio ni ejecución de tests. C150 local diferenciada medirá el
-  efecto completo tras reconstrucción/auditoría; no incluye el refactor amplio
-  pendiente de aprobación ni acredita todavía mejora física.
+  efecto completo tras reconstrucción/auditoría. Su primera instantánea pequeña se
+  conserva sin compilar; tras la nueva aprobación se integrará el refactor de
+  lectores con un recibo fresco. Todavía no hay una mejora física de esos cambios.
 - La extensión de lotes a otros lectores requiere preservar CRC/layout/ordinales,
   tail recuperable y límite congelado `cpByteEnd`. No adelantar el stream de entrada
   del escritor sin analizar backpressure de las cotas raw: no es un cambio aprobado

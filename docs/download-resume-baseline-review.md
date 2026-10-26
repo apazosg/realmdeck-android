@@ -634,8 +634,8 @@ La mejora de una fase no resuelve aún la preparación larga. Las cargas C149 de
 fuente llegaron a +848,519/+1.213,053 s (un pedido puede reutilizar un raw). Persisten
 consultas escalares por frame en inspección/carga/verificador posteriores.
 Agrupar esos lectores exige separar validación y mutación/ACK, por lo que esa
-propuesta quedó diferida y su ampliación no está aprobada. La alternativa local
-en validación reutiliza únicamente los metadatos autoritativos del objeto actual
+propuesta se difirió inicialmente. La alternativa local
+verificada reutiliza únicamente los metadatos autoritativos del objeto actual
 del cursor, con ordinal de origen y fallback al lookup existente. No rediseña los
 lectores, anticipa objetos ni cambia CRC, cola recuperable, `cpByteEnd` o límites.
 **14/20 minutos no se dan por aceptación final del objetivo.**
@@ -660,6 +660,19 @@ independiente de código capturado, no verificación independiente de filesystem
 de pruebas. El cambio conserva fallback y comprobaciones existentes; la mejora
 de tiempo Android queda pendiente de una candidata diferenciada.
 
+El 2026-10-26 el usuario autorizó el refactor focal: «aplica el refactor si crees
+que es la mejor solución». Se elige ampliar los lotes únicamente a inspección,
+carga y verificación de prefijo del checkpoint, con validación de CRC/tipo y
+metadatos antes de aplicación, recuperación o ACK. `cpByteEnd`, comprobaciones
+frescas por grupo, crypto, ordinales globales, cancelación y límites permanecen.
+No se anticipará el stream de entrada del escritor. Se requieren regresiones de
+más de 256 frames y fallos con cola incompleta, además de revisión independiente.
+
+La instantánea pequeña C150 se reconstruyó/autenticó una vez, sin compilar ni
+instalar. Su recibo y árbol se conservan congelados; se pospone esa APK intermedia
+para medir ambos cambios juntos después de una reconstrucción autenticada fresca.
+La ampliación está aprobada, **no implementada ni acreditada todavía en Android**.
+
 ### Retención de evidencia
 
 Los artefactos transitorios anteriores bajo `/tmp/opencode` ya no están
@@ -675,5 +688,5 @@ C148 se guarda en `work/download-resume-c148-20261025/physical-trial`, no en `/t
 |---|---|---|
 | Menor preparación al iniciar/reanudar | Menos trabajo host; C149 completa 860,836/1.225,989 s frente a 948,398/1.453,953 s C148 | Aún 14/20 minutos; siguiente optimización local y medida completa pendientes, sin extrapolaciones |
 | Primera pulsación efectiva, sin repetir | Flujo físico 3/1 acciones; C149 reanuda y reabre UI con el mismo proceso/servicio, sin reconfirmar ni duplicar | Verificar que la siguiente candidata conserve el resultado; sin medida subsegundo ni doble toque deliberado |
-| Garantías intactas | Reviews/focales, checkpoint recuperado y pausa normal; cuatro guardas conservadas | Corregir/verificar procedencia y clasificación del objeto actual, cancelación y prefetch antes de candidata; no se ejecutó toda la suite |
+| Garantías intactas | Reviews/focales y procedencia/clasificación del objeto actual verificadas; checkpoint recuperado y pausa normal; cuatro guardas conservadas | Probar y revisar las nuevas barreras de los lectores antes de candidata; no se ejecutó toda la suite |
 | Entrega versionada y honesta | Baseline y C147–C149 auditadas/instaladas/probadas sin reset; artefactos externos; pausa final y cero servicios | Completar nuevo ajuste y auditoría final del objetivo, no cerrar por ahorro aislado |
