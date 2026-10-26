@@ -101,11 +101,25 @@ identificadores del dispositivo permanecen en `private/`.
   no una prueba causal ni la métrica completa hasta transferencia.
 - Estado final: plan 1.60.1.70532, Unidad USB, descarga 62,5 GiB y espacio adicional
   64,7 GiB; app hasta 1,7 GiB y volumen cliente hasta 62,9 GiB. **No se pulsó
-  Descargar**. Falta el consentimiento de estos costes y medir confirmar/Resume;
-  no se declara aún reducción global adicional.
+  Descargar durante esta observación inicial**; no prueba la reducción global.
 - Evidencia externa: `download-regex-c152-20261026/physical-trial/prepare-summary.json`.
   El controlador tiene lock, guardia contra repetir acciones, JSON atómico y
   limpieza cooperativa; la captura conserva solo fases/contadores autorizados.
+
+### Ensayo completo autorizado
+
+El primer intento de preguntar fue interrumpido y no otorgó permiso. El usuario
+pidió volver a preguntar y respondió explícitamente **«Confirmar y medir»** a los
+costes C152 indicados arriba: prueba breve de Download, pausa, un Resume,
+reapertura y pausa final, preservando progreso; no cliente completo ni otros
+costes. Esa respuesta ya está registrada en el goal y no se repite tras reinicios.
+
+Se inició una sola vez `physical-trial/download_resume.py`, con lock y guardia
+contra sobreescribir/repetir un ensayo existente. Antes de Download exige C152,
+el mismo plan aprobado, ningún servicio updater previo ni proceso guest. Registra
+JSON atómico, fases/contadores filtrados y tiempos reales de Enter; pausa
+cooperativamente tras cada transferencia visible. **Resultado pendiente**: no se
+declara aún reducción adicional de confirmar/Resume frente a C151.
 
 ## Implementation / Action Items
 
