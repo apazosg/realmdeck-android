@@ -1,6 +1,6 @@
 ---
 id: download-transfer-speed-2026-10-26
-state: draft
+state: in-progress
 date: 2026-10-26
 ---
 
@@ -16,8 +16,9 @@ ni en un mínimo de velocidad prometido.
 
 Goal: `5caa6403-5b8f-47dc-ba95-ba40fbbe686e`. Este trabajo parte de C152 y se centra
 en transferencia efectiva, no en volver a optimizar el inicio de la descarga.
-Este documento es un borrador: no autoriza todavía cambios de implementación ni
-un ensayo nuevo. Se requiere aprobación del plan antes de ejecutarlo.
+El usuario aprobó este plan el 2026-10-26: «adelante. vamos a ello». Se ejecutan
+diagnóstico, cambios mínimos y ensayos acotados dentro de las garantías y límites
+descritos; no se repite esa aprobación tras un reinicio del servidor.
 
 ## Content
 
@@ -145,8 +146,8 @@ resuelva ninguna de ellas. Se investiga primero el componente dominante actual.
 ## Implementation / Action Items
 
 - [x] 1. Recuperar objetivo, rama, especificaciones y resultados ya completados.
-- [ ] 2. Aprobar este plan; no ejecutar optimizaciones ni ensayo nuevo antes.
-- [ ] 3. Caracterizar tamaños y revisar datos disponibles; precisar el desglose
+- [x] 2. Aprobar este plan; aprobación explícita «adelante. vamos a ello».
+- [x] 3. Caracterizar tamaños y revisar datos disponibles; precisar el desglose
   mínimo que falta, sin repetir las investigaciones de inicio C151/C152.
 - [ ] 4. Obtener línea base actual de payload pequeño/grande y seleccionar el
   cuello de botella con evidencia suficiente.
@@ -158,14 +159,21 @@ resuelva ninguna de ellas. Se investiga primero el componente dominante actual.
 
 ## Open Issues
 
-- Pendiente de aprobación de este plan. No hay implementación ni ensayo nuevo.
+- Aprobación recibida; diagnóstico y línea base en curso. Todavía no hay una
+  optimización seleccionada ni una mejora de throughput demostrada.
 - «5mb»/«0.1» son observaciones reportadas sin unidad confirmada. Las mediciones
   usarán MB/s decimales y condiciones explícitas; no hace falta suponer la unidad.
-- Falta línea base sostenida actual C152 y desglose por tamaño; la evidencia
+- Cohortes previas: pequeño ≤64 KiB; intermedio >64 KiB–1 MiB; grande >1 MiB.
+  Catálogo base y frames se distinguen; se reutilizan contadores e inventarios
+  antes de decidir si hace falta instrumentación adicional. Véase el
+  [registro de diagnóstico](../../docs/download-transfer-speed-results.md).
+- Falta terminar la línea base sostenida actual C152 y desglose por tamaño; la evidencia
   histórica no la sustituye. Puede ser necesaria instrumentación mínima, no una
   sucesión de APKs diagnósticas sin decisión basada en resultados.
-- No se ha comprobado en este trabajo el acceso/estado fresco del dispositivo ni
-  la ubicación de todas las capturas antiguas. Si falta evidencia o acceso, se
-  registra el bloqueo: no se declara mejora ni se cierra el goal como completado.
+- Preflight fresco completado: C152 En pausa/Reanudar, sin updater ni guest,
+  Wi-Fi y espacio disponibles, checkpoint de 369.794 objetos conservado. Ensayo
+  C152 lanzado una sola vez con controlador durable en el directorio externo
+  `download-transfer-speed-20261026/`; tras reinicios no se repite Resume.
+  Si falta evidencia o acceso se registra el bloqueo, no se declara mejora.
 - La intervención concreta se decide después del diagnóstico. Cualquier cambio
   de seguridad, cuotas, orden de escritura o contrato requiere decisión separada.
