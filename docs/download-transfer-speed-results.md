@@ -576,6 +576,50 @@ Complementa, no reemplaza, las ventanas sostenidas de diez minutos C152/C155.
 Se informarán cantidades, tamaños medios, miembros por callback, reuso/fallos y
 relojes concurrentes; una muestra insuficiente no permite cerrar la aceptación.
 
+## Pareja instrumental C156/C157: fuente y APK verificadas
+
+Fuente optimizada `d5e7b93`; referencia basada en el C152 autenticado. Ambas llevan
+exactamente el mismo delta instrumental (11 bloques updater, dos test), comprobado
+contra sus preimágenes, sin introducir una clase DEX ni modificar el auditor.
+Los hashes de las fuentes optimizadas coinciden con las dos pruebas focales nuevas.
+
+| Variante | Build Modern offline JDK 17 | Bytes APK | Auditoría exacta |
+|---|---|---:|---|
+| C156 `0.2.132-cohort-reference-test` | PASS, 5 min 2 s | 484.930.867 | PASS_SOURCE_BUILD_AND_PAYLOAD_AUDIT |
+| C157 `0.2.133-cohort-optimized-test` | PASS, 5 min 23 s | 484.934.223 | PASS_SOURCE_BUILD_AND_PAYLOAD_AUDIT |
+
+SHA-256 C156:
+`1eed56ca0f6b4a5968b80f1c9627a84d6e2a7aa3720de5ac8416c112d0d79e8b`.
+SHA-256 C157:
+`3bcd5444f811c4f10adcf5c3dfcccde1e7f28ea781a49936630b188977f1244d`.
+Pipeline de host terminado 18:02:55 UTC. Cada auditoría coteja 2.226 fuentes con su
+receipt y 178 payloads; **2.222**, no 2.226, son idénticas a C152. Las únicas cuatro
+rutas distintas son updater/test/versión/marker. Inputs, lineage, privacidad y
+payloads se cotejan íntegros; solo se declara el alias de ubicación del recipe
+congelado, sin ignorar diferencias de hash.
+
+C156 se instaló una vez, final 17:57:59 UTC: checkpoint de 435.310 objetos
+byte-idéntico, cero servicios y cold Home confirmado, sin Resume/Download en el
+instalador. Al corte de 18:03:44 UTC la preparación tenía dos acciones UI y ninguna
+confirmación de payload. La cadena física es secuencial y exige la auditoría propia
+antes de cada instalación; únicamente el segundo build del host se solapó con la
+preparación del primer ensayo. Compilar/auditar **no** acredita throughput.
+
+Evidencia externa `download-cohort-arrays-pair-20261026/`: identidad instrumental,
+revalidación del auditor intacto, receipts/source-comparison, build/audit por
+variante y `completed-build-evidence.json`. La pareja anterior rechazada permanece
+separada; ninguna de sus APK se acepta como sustituto.
+
+## Matriz de aceptación del objetivo
+
+| Criterio | Evidencia y estado |
+|---|---|
+| Línea base con unidades, ambos tamaños y preparación separada | C152: 609,206 s; UI, frames y raw balance distinguidos. Comprobado. |
+| Diagnóstico sin sumar relojes concurrentes | Contadores HTTP/source/budget/writer y reproducciones de polling/retiro. Comprobado; no causa única de red demostrada. |
+| Mejora medida y evaluación por tamaño | +16,90 % agregado observado C155; **[PENDING]** evaluación homogénea C156/C157 y sus límites. |
+| Garantías, pruebas, revisión sensible y APK autenticada | Diez regresiones y revisión del cambio sensible; cuatro checks iniciales, dos tras simplificar métricas y tres de versión. Ambas APK nuevas auditadas. **[PENDING]** continuidad física de la pareja. |
+| Informe, pausa final, progreso y commits propios | Commits atómicos y resultados anteriores en pausa. **[PENDING]** resultado de pareja, ausencia final de trabajo activo y archivo del plan. Sin publicación/push. |
+
 ## Pendiente
 
 Completar el desglose por tamaño con idéntica instrumentación y auditar el resultado.
