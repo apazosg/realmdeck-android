@@ -151,7 +151,7 @@ resuelva ninguna de ellas. Se investiga primero el componente dominante actual.
   mínimo que falta, sin repetir las investigaciones de inicio C151/C152.
 - [x] 4. Obtener línea base actual de payload pequeño/grande y seleccionar el
   cuello de botella con evidencia suficiente.
-- [x] 5. Implementar la mejora mínima y regresiones focales; revisar garantías.
+- [ ] 5. Implementar la mejora mínima y regresiones focales; revisar garantías.
 - [ ] 6. Validar candidata autenticada y medir antes/después bajo condiciones
   comparables, con pausa final y progreso preservado.
 - [ ] 7. Auditar todos los criterios, documentar límites, hacer commits propios
@@ -180,15 +180,26 @@ resuelva ninguna de ellas. Se investiga primero el componente dominante actual.
   esperar y fallback de 100 ms; no se afirma que sea la causa única. Regresión
   determinista RED→GREEN, nueve pruebas focales sin fallos/skips y revisión
   independiente sin defectos accionables. Sin cambiar cuotas, ACK/retiro, forces
-  ni contrato; falta medir la nueva candidata autenticada. El despertar
-  inmediato podría fragmentar batches: se contrastarán singles y coste HTTP.
+  ni contrato. Su ensayo C154 no demuestra mejora; el riesgo de fragmentar batches
+  que se había advertido requiere corregir la granularidad del despertar.
 - C154 (`154`/`0.2.130-budget-wakeup-test`), fuente `41aa40e`, reconstruida y
   auditada: solo cuatro rutas fuente/test/versión/marker difieren de C152;
   2.222/2.226 iguales, mismos inputs, lineage, privacidad y 178 payloads. Build
   offline JDK 17 verde en 5 min 17 s y auditoría exacta PASS. Controlador único de
-  instalación preservadora/preparación/ensayo lanzado, con guards por etapa y
-  límite de diez minutos visibles más pausa cooperativa. Resultado pendiente;
-  no se repiten acciones al perder la notificación del Shell.
+  instalación preservadora/preparación/ensayo terminado una vez. **C154 tampoco
+  supera aceptación:** 1,447 MB/s/613,252 s frente a 1,939 MB/s de C152, diferencia
+  observada −25,38 %, no causal A/B. Fin 15:59:12 UTC En pausa/Reanudar,
+  checkpoint 420.170 con prefix/CRC válidos, cero HTTP/servicios y 10.246 callbacks
+  finalizados. No se repite instalación, preparación, Download ni ensayo.
+- Segunda revisión del plan, no prueba de otro cap: C154 registra 7.900 singles
+  por fragmentación bajo presión frente a 379 de C152. Liberar/notificar tras cada
+  raw permite que el productor consuma un único hueco mientras el writer retira
+  el resto del grupo durable. Se investigará liberar esas reservas conjuntamente
+  antes de avanzar el writer o esperar otra entrada, manteniendo los retiros y
+  forces individuales. No inferir el fin del grupo de `commitEntries.isEmpty()`:
+  durante rollover puede contener la siguiente fuente ya resuelta. No hace falta
+  cambiar el writer CASC, sus pins o contrato para acumular retiros hasta ese
+  punto del consumidor. La mejora de throughput sigue pendiente.
 - «5mb»/«0.1» son observaciones reportadas sin unidad confirmada. Las mediciones
   usarán MB/s decimales y condiciones explícitas; no hace falta suponer la unidad.
 - Cohortes previas: pequeño ≤64 KiB; intermedio >64 KiB–1 MiB; grande >1 MiB.

@@ -1,7 +1,7 @@
 # Velocidad de transferencia: diagnóstico pequeño/grande
 
 Fecha: 2026-10-26. Goal `5caa6403-5b8f-47dc-ba95-ba40fbbe686e`.
-**C153 no supera la medición; siguiente hipótesis en revisión. Goal abierto.**
+**C153 y C154 no superan la referencia; se revisa la fragmentación. Goal abierto.**
 
 El [plan aprobado](../.agents/planning/download-transfer-speed-plan.md) se centra
 en payload. No repite ni atribuye a throughput el trabajo de
@@ -349,10 +349,66 @@ detiene la cadena, no repite Download. La ventana visible se limita a unos diez
 minutos y termina en pausa cooperativa. Los artefactos C154 de medición se separan
 en `wakeup*`, sin sobrescribir baseline, C153 ni sus análisis.
 
+## Ensayo C154: no aceptado; interacción de retiro y agrupación
+
+El controlador original terminó sin error, sin replay tras los reinicios:
+
+- Instalación preservadora finalizada 15:34:01 UTC: checkpoint de 407.694 objetos
+  idéntico byte a byte, sin updater activo. Recuperación del resumen sin payload
+  hasta 15:39:59 UTC: mismo cliente/USB, 60,7 GiB de descarga, 62,9 adicionales,
+  app hasta 1,7 y cliente hasta 61,1, todos dentro de lo consentido.
+- Download único **15:40:26,556469 UTC**. Payload visible
+  **15:48:21,640617–15:58:34,892944**, **613,252 s**, delta UI 887.200.153,6 bytes:
+  **1,446713 MB/s** decimales, límites solo por redondeo 1,446542–1,446884.
+- Frente a C152: **−25,38 % observado** (solo aritmética de redondeo
+  −28,63–−21,82 %). Frente a C153 rechazada: +65,94 %, insuficiente para aceptar.
+  Siguen siendo cohortes secuenciales distintas, no un A/B causal ni tasas aisladas
+  por tamaño. Subventanas de aproximadamente dos minutos:
+  **0,235 / 1,038 / 1,449 / 2,927 / 1,572 MB/s**.
+- Pause único **15:59:03,465754 UTC**; fin **15:59:12,321363**:
+  **En pausa/Reanudar, cero servicios updater/HTTP, 10.246/10.246 callbacks
+  terminados**, progreso conservado. Batería 100 % AC, 25,9→32,6 °C.
+
+Checkpoint **407.694→420.170**, prefijo inalterado y CRC de todos los frames
+válido. Delta de toda la ejecución, no de la ventana UI:
+
+| Categoría | Objetos nuevos durables | Bytes encoded |
+|---|---:|---:|
+| Pequeño | 10.688 | 209.773.212 |
+| Intermedio | 1.582 | 415.499.398 |
+| Grande | 206 | 294.601.694 |
+| Total | 12.476 | 919.874.304 |
+
+Raw no comprometido: 19 claves/166.766 bytes antes, 22/543.273 después; ninguna
+clave inicial desaparecida sin commit o retención. Balance de entrada de toda
+la ejecución **920.250.811 bytes**, no bytes wire/reintentos ni numerador UI.
+
+El intervalo entre snapshots periódicos es 653,710 s: 12.352 commits,
+916.938.506 bytes CASC encoded (**1,402669 MB/s, no tasa de red**), 18,895 objetos/s.
+Hay 15,536 inicios HTTP/s frente a 11,226 de C152, pero 353,675 ms de headers por
+inicio aproximado frente a 188,777; no es TTFB aislado. Source wait 449,363 s,
+budget wait 566,503 s, headers 3.591,921 s y body 683,073 s concurrentes. Los
+6,834 callback-segundos por segundo de intervalo son atribución al completar,
+no ocupación HTTP continua. El reloj del budget cambió; no se interpreta su
+diferencia como tiempo puro de polling ni se suman esos relojes.
+
+La señal más concreta es la fragmentación: final **911 grupos / 9.335 singles**,
+de ellos **7.900 pressure-tail singles** frente a **379** en C152. Este contador
+identifica candidatos contiguos partidos por falta de capacidad; no se explica
+simplemente por menos adyacencia en el catálogo. Notificar cada retiro permite
+reservar un hueco antes de liberar los restantes del mismo grupo. No se atribuye
+todo el descenso a ello ni se afirma un límite CDN. Se revisa el plan antes del
+siguiente cambio: acumular exclusivamente reservas de raws ya retirados/forzados
+y liberarlas juntas antes de avanzar o esperar el consumidor. Se mantienen cuotas,
+ACK, retiros/forces individuales y writer/formato CASC; no se prueba otro cap.
+
+Evidencia externa: `wakeup/{summary,analysis,steady-pipeline}.json`, checkpoints,
+`updater-filtered.log`, `wakeup-comparison.json` y pipeline C154 completo/exit 0.
+
 ## Pendiente
 
-Completar el ensayo C154, comprobar progreso/pausa y comparar principalmente con
-C152, no solo con C153 rechazada. C153 terminó pausada; no se repite su ensayo.
+Corregir y verificar la granularidad del presupuesto, y medir una nueva candidata
+autenticada frente a C152. C153/C154 terminaron pausadas; no se repiten sus ensayos.
 El goal **no** cumple todavía la mejora exigida.
 La línea base mide variación actual, pero no demuestra una causa única de todos
 los descensos históricos, throughput aislado por tamaño ni una mejora candidata.
