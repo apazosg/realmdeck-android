@@ -14,8 +14,9 @@ de «5mb» que en ocasiones caen hasta «0.1». Las unidades y condiciones de es
 observaciones aún no están confirmadas; no se convierten en una línea base medida
 ni en un mínimo de velocidad prometido.
 
-Goal original: `5caa6403-5b8f-47dc-ba95-ba40fbbe686e`; sucesor autorizado:
-`fd7baae8-8a14-47b0-8452-6d8f7434217e`. Este trabajo parte de C152 y se centra
+Goal original: `5caa6403-5b8f-47dc-ba95-ba40fbbe686e`; continuación de una hora
+`fd7baae8-8a14-47b0-8452-6d8f7434217e`; sucesor actual de seis horas autorizado:
+`0d3ea00f-a91e-4702-88ad-febb37adb87f`. Este trabajo parte de C152 y se centra
 en transferencia efectiva, no en volver a optimizar el inicio de la descarga.
 El usuario aprobó este plan el 2026-10-26: «adelante. vamos a ello». Se ejecutan
 diagnóstico, cambios mínimos y ensayos acotados dentro de las garantías y límites
@@ -23,6 +24,8 @@ descritos; no se repite esa aprobación tras un reinicio del servidor.
 Tras agotar el límite temporal, el usuario autorizó «perfecto sigue . crea un
 nuevo objetivo». El sucesor conserva el objetivo, los cinco criterios originales
 y las fases verificadas; no reinicia mediciones ni debilita la aceptación.
+El usuario aprobó después ampliar ese margen a seis horas. Es un límite de
+seguridad, no una razón para consumirlo ni para cerrar con evidencia insuficiente.
 
 ## Content
 
@@ -158,7 +161,7 @@ resuelva ninguna de ellas. Se investiga primero el componente dominante actual.
 - [x] 2. Aprobar este plan; aprobación explícita «adelante. vamos a ello».
 - [x] 3. Caracterizar tamaños y revisar datos disponibles; precisar el desglose
   mínimo que falta, sin repetir las investigaciones de inicio C151/C152.
-- [x] 4. Obtener línea base actual de payload pequeño/grande y seleccionar el
+- [ ] 4. Obtener línea base actual de payload pequeño/grande y seleccionar el
   cuello de botella con evidencia suficiente.
 - [x] 5. Implementar la mejora mínima y regresiones focales; revisar garantías.
 - [ ] 6. Validar candidata autenticada y medir antes/después bajo condiciones
@@ -173,12 +176,25 @@ resuelva ninguna de ellas. Se investiga primero el componente dominante actual.
 
 ## Open Issues
 
+- **Diagnóstico reabierto; no más ajustes heurísticos antes de aislar el cuello.**
+  El usuario cuestiona representatividad y si los cambios atacan el coste dominante.
+  C157 terminó 19:41:11 UTC, pausada, checkpoint 454.511 válido y cero trabajo:
+  0,986562 MB/s frente a 1,881607 de C156, pero tamaños medios 38.891/77.227 bytes
+  y solo 5/151 grandes. Small MB/servicio-s aumenta 12,53 %, con objetos y grupos
+  distintos; tampoco prueba ganancia causal. La línea base y los checks locales
+  siguen verificados, pero la selección del cuello dominante no lo está.
+- Corrección metodológica antes de otro cambio de estrategia: definir cargas
+  reproducibles pequeñas/grandes/mixtas con distribución justificada por el catálogo;
+  controlar y declarar frío/caliente, red y almacenamiento; separar relojes de
+  servicio concurrente de tiempo de pared/ocupación/esperas del camino crítico.
+  Formular una predicción observable y un experimento de confirmación/descarte por
+  hipótesis. Evaluar primero cómo hacerlo sin resetear progreso ni debilitar guardas;
+  no crear otro benchmark o APK hasta tener ese diseño justificado.
 - C157 instalada una vez, final 18:29:14 UTC, conservando el checkpoint exacto de
   444.654 objetos. Preparación terminada 18:35:11 sin confirmar payload, mismo
   cliente/USB y costes 57,8/60,0/1,7/58,3 GiB dentro de los límites anteriores.
-  El sucesor ejecuta solo el controlador pendiente de ensayo de 360 s y su análisis,
-  con preflight fresco, guardas de no replay y pausa cooperativa. No se repite C156
-  ni se da el resultado por positivo antes de observarlo.
+  El controlador de ensayo de 360 s y su análisis terminaron una sola vez. No se
+  repite C156/C157 ni se acepta el resultado como una mejora general.
 - C156 terminó una vez 18:19:27 UTC en pausa y sin trabajo activo: 367,636 s
   visibles, 1,881607 MB/s; checkpoint 435.310 → 444.654, prefix/CRC válidos,
   9.344 objetos (7.611/1.582/151). Desglose homogéneo obtenido, sin comparativa

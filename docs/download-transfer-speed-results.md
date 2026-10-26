@@ -1,8 +1,9 @@
 # Velocidad de transferencia: diagnóstico pequeño/grande
 
 Fecha: 2026-10-26. Goal original `5caa6403-5b8f-47dc-ba95-ba40fbbe686e`;
-continuación autorizada `fd7baae8-8a14-47b0-8452-6d8f7434217e`.
-**C155 supera la tasa agregada, pero falta validar por tamaño. Goal abierto.**
+continuaciones autorizadas `fd7baae8-8a14-47b0-8452-6d8f7434217e` y
+`0d3ea00f-a91e-4702-88ad-febb37adb87f` (actual, seis horas de margen).
+**Resultados exploratorios; mejora general no validada. Diagnóstico reabierto.**
 
 El [plan aprobado](../.agents/planning/download-transfer-speed-plan.md) se centra
 en payload. No repite ni atribuye a throughput el trabajo de
@@ -657,21 +658,86 @@ reanudarlo no renovó su presupuesto. El usuario autorizó expresamente un suces
 de una hora, con el mismo alcance, plan y cinco criterios. Se ejecuta únicamente
 el controlador C157 pendiente, con guardas frescas y pausa automática; no se
 reinstala, repite la preparación ni reduce la ventana fijada por el tiempo disponible.
+El usuario autorizó después sustituir el margen de una hora por seis, sin cambiar
+objetivo ni criterios; el mismo controlador continuó, sin otro Download.
+
+## C157: ensayo terminado, comparación no representativa
+
+Download 19:26:11 UTC; payload visible 19:34:25,305–19:40:32,523:
+**367,218 s, 0,986562 MB/s**, límites solo de redondeo 0,986276–0,986847.
+Subventanas de unos 122 s: 1,333 / 0,899 / 0,728 MB/s. Pause 19:41:02;
+final 19:41:11: En pausa/Reanudar, cero servicios/HTTP/callbacks activos y los
+1.672 callbacks finalizados. Cadena de continuación y análisis terminó exit 0.
+
+Checkpoint 444.654 → **454.511**, prefix/CRC válidos: 9.857 objetos nuevos
+(8.046 pequeños, 1.806 intermedios, **5 grandes**), 383.352.987 bytes encoded.
+Raw inicial 4 claves/98.311 bytes → final 17/266.841; ninguna clave inicial perdida
+sin commit o retención. Balance útil de entrada de toda la ejecución 383.521.517
+bytes, distinto de los 362.283.008 bytes mostrados en la ventana y no contador wire.
+
+La caída UI observada frente a C156 es **47,57 %**, no una regresión causal probada:
+el tamaño encoded medio durable pasa de **77.227 a 38.891 bytes** y los grandes de
+151 a 5. No se acepta el anterior +16,90 % agregado de C155 como prueba general
+ignorando este resultado ni se concluye que el cambio de código causó la caída.
+
+Intervalos periódicos distintos de las ventanas UI: C156 405,941 s; C157 398,070 s.
+Los ratios siguientes son **MB útiles por segundo de servicio de callbacks
+completados**, no throughput global o velocidad aislada de red por clase:
+
+| Cohorte homogénea/mixta | Callbacks C156 → C157 | MB/servicio-s C156 → C157 | Encoded medio/objeto, bytes | Objetos/callback |
+|---|---:|---:|---:|---:|
+| Pequeña | 1.427 → 1.041 | 0,167164 → 0,188114 | 15.647 → 17.365 | 4,488 → 5,485 |
+| Intermedia | 437 → 130 | 0,666883 → 0,508438 | 269.941 → 129.720 | 2,238 → 2,977 |
+| Grande | 151 → 5 | 1,196391 → 0,586619 | 1.458.163 → 1.370.838 | 1 → 1 |
+| Mixta | 298 → 481 | 0,619571 → 0,570282 | 77.548 → 60.353 | 5,862 → 7,686 |
+
+En esos intervalos: un fallo pequeño en C156, cero en C157; ningún éxito sin bytes
+útiles. Los fallos finales completos son tres/dos respectivamente y no se confunden
+con esos deltas periódicos. Éxitos excluyen bytes/servicio fallidos; fronteras
+censuradas, tamaños, membresía, red y cachés siguen siendo factores de confusión.
+Small aumenta 12,53 % en este ratio, pero el servicio medio por objeto es
+93,604 → 92,314 ms con tamaños distintos: no demuestra por sí solo una mejora causal.
+
+Los tails por presión bajan 149 → 44 y los miembros medios de batch suben
+5,636 → 7,273. Eso respalda la corrección local de fragmentación, **no** que fuera
+el cuello dominante. La espera de fuente del writer sigue siendo 268,051/283,176 s
+en sus respectivos 411,917/407,132 s posteriores a la primera fuente; no se divide
+por el intervalo UI ni se suman esos relojes a los de HTTP concurrente.
+
+Evidencia: `optimized/trial/{summary,analysis,cohort-service}.json`, checkpoint,
+inventarios raw y `updater-filtered.log`, `comparison.json` y marcadores de la
+continuación en `download-cohort-arrays-pair-20261026/`. Ambos informes particionan
+duraciones/bytes UI en subventanas positivas sin repetir ensayos.
+
+### Revisión de método antes de otra optimización
+
+La objeción del usuario es válida: estas ventanas secuenciales son exploratorias,
+no un experimento representativo que aísle el coste dominante. Las regresiones
+focales prueban integridad/liveness y las correcciones locales; no prueban velocidad.
+Se reabre el diagnóstico y se congelan nuevos cambios de estrategia basados solo
+en MB/s agregados. Próximo diseño: carga reproducible por tamaños y mezcla,
+condiciones frío/caliente declaradas, métricas de pared/ocupación/esperas del camino
+crítico y controles que separen disponibilidad/red, autenticación/IO privado y
+writer/commit sin debilitar el recorrido real. Cada hipótesis debe tener una
+predicción y un experimento que pueda descartarla antes de cambiar código.
+Se justificará primero cómo lograrlo conservando progreso y límites, sin montar
+un framework ni ejecutar automáticamente otro ensayo por tener más presupuesto.
 
 ## Matriz de aceptación del objetivo
 
 | Criterio | Evidencia y estado |
 |---|---|
 | Línea base con unidades, ambos tamaños y preparación separada | C152: 609,206 s; UI, frames y raw balance distinguidos. Comprobado. |
-| Diagnóstico sin sumar relojes concurrentes | Contadores HTTP/source/budget/writer y reproducciones de polling/retiro. Comprobado; no causa única de red demostrada. |
-| Mejora medida y evaluación por tamaño | +16,90 % agregado observado C155; **[PENDING]** evaluación homogénea C156/C157 y sus límites. |
-| Garantías, pruebas, revisión sensible y APK autenticada | Diez regresiones y revisión del cambio sensible; cuatro checks iniciales, dos tras simplificar métricas y tres de versión. Ambas APK nuevas auditadas. **[PENDING]** continuidad física de la pareja. |
-| Informe, pausa final, progreso y commits propios | Commits atómicos y resultados anteriores en pausa. **[PENDING]** resultado de pareja, ausencia final de trabajo activo y archivo del plan. Sin publicación/push. |
+| Diagnóstico sin sumar relojes concurrentes | Contadores y reproducciones locales válidos; **[PENDING]** aislar predominancia con un experimento discriminante. Diagnóstico reabierto. |
+| Mejora medida y evaluación por tamaño | C156/C157 medidas, pero solo 151/5 grandes y tamaños distintos. +16,90 % C155 y −47,57 % C157 observacionales no validan mejora general. **[PENDING]** comparación representativa. |
+| Garantías, pruebas, revisión sensible y APK autenticada | Diez regresiones y revisión del cambio sensible; cuatro checks iniciales, dos tras simplificar métricas y tres de versión. Ambas APK auditadas; ensayos con prefix/CRC/retención válidos. Comprobado para estos escenarios. |
+| Informe, pausa final, progreso y commits propios | C157 terminó pausada 19:41:11, checkpoint 454.511, cero trabajo activo; commits propios. **[PENDING]** completar el objetivo y archivar plan solo entonces. Sin publicación/push. |
 
 ## Pendiente
 
-Completar el desglose por tamaño con idéntica instrumentación y auditar el resultado.
-C153/C154/C155/C156 terminaron pausadas; no se repiten sus ensayos ni sus checks verdes.
+Diseñar un diagnóstico discriminante y una validación representativa antes de otro
+cambio de estrategia. C153/C154/C155/C156/C157 terminaron pausadas; no se repiten
+sus ensayos ni sus checks verdes.
 El goal **no** cumple todavía la mejora exigida.
 La línea base mide variación actual, pero no demuestra una causa única de todos
 los descensos históricos ni mejora aislada por tamaño; el uplift agregado de C155
