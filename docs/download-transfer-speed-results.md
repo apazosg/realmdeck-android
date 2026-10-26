@@ -1,7 +1,7 @@
 # Velocidad de transferencia: diagnóstico pequeño/grande
 
 Fecha: 2026-10-26. Goal `5caa6403-5b8f-47dc-ba95-ba40fbbe686e`.
-**C153/C154 no superan la referencia; C155 auditada, ensayo pendiente. Goal abierto.**
+**C155 supera la tasa agregada, pero falta validar por tamaño. Goal abierto.**
 
 El [plan aprobado](../.agents/planning/download-transfer-speed-plan.md) se centra
 en payload. No repite ni atribuye a throughput el trabajo de
@@ -466,12 +466,71 @@ y pausa cooperativamente, comprobando ausencia de trabajo activo. Artefactos
 `coalesced*`, separados de todas las mediciones anteriores. Instalación finalizada
 **16:42:02 UTC**, Inicio inactivo: checkpoint de **420.170 objetos / 30.252.280
 bytes idéntico**, cero servicios updater y ninguna acción Resume/Download del
-instalador. La preparación posterior todavía no confirma payload.
+instalador. La preparación posterior terminó 16:48:19 UTC sin confirmar payload:
+mismo cliente/USB, 59,8 GiB de descarga, 62,0 adicionales, app hasta 1,7 y cliente
+hasta 60,3, dentro de los límites consentidos.
+
+## Ensayo C155: mejora agregada, aceptación por tamaño pendiente
+
+La cadena original terminó una vez, sin error, replay ni fallo de cleanup:
+
+- Download **16:48:47,518082 UTC**; payload visible
+  **16:56:41,956351–17:06:57,430443**, **615,474 s**. Delta UI 1.394.940.108,8 bytes,
+  **2,266448 MB/s**; límites solo por redondeo 2,179219–2,353677, no de confianza
+  ni de latencia de publicación/captura.
+- Frente a C152, **+16,90 % observado**; aritmética de redondeo +7,51–+27,18 %.
+  No es una atribución causal al código. Subventanas de unos dos minutos:
+  **2,240 / 2,677 / 0,947 / 2,793 / 2,670 MB/s**; persiste variación.
+- Pause **17:07:28,711184 UTC**; fin **17:07:37,197412** en **En pausa/Reanudar**,
+  cero servicios updater/HTTP y **3.830/3.830 callbacks terminados**. Checkpoint
+  **420.170→435.310**, prefijo inalterado y todos los CRC válidos. Batería 100 % AC,
+  26,2→32,9 °C.
+
+Delta durable de toda la ejecución, no de la ventana UI:
+
+| Categoría | Objetos | Bytes encoded |
+|---|---:|---:|
+| Pequeño | 11.578 | 210.778.639 |
+| Intermedio | 3.294 | 826.191.785 |
+| Grande | 268 | 377.245.629 |
+| Total | 15.140 | 1.414.216.053 |
+
+Raw pendiente: 22 claves/543.273 bytes antes, 2/59.766 después; ninguna clave
+inicial desaparecida sin commit o retención. Balance de entrada de toda la
+ejecución **1.413.732.546 bytes**, no bytes wire/reintentos ni numerador UI.
+
+La fragmentación registrada baja: **118 pressure-tail singles**, 2.300 grupos
+(media 5,925 miembros) y 1.530 singles del productor, frente a 7.900/911/9.335 en
+C154. En el intervalo periódico de 646,144 s: 15.040 commits, 23,277 objetos/s y
+1.409.928.231 bytes CASC encoded (**2,182065 MB/s, no tasa de red**). HTTP 5,907
+inicios/s, headers 320,796 ms/inicio aproximado; source wait 369,931 s, budget
+434,807 s, headers 1.224,480 s y body 987,868 s concurrentes. No se suman esos
+relojes; los 3,736 callback-segundos por segundo no son ocupación HTTP continua.
+
+La revisión de aceptación identifica una carencia real: el objeto medio del
+intervalo pasa de **48.760 a 93.745 bytes** y cambia la mezcla de tamaños. Menos
+objetos/s no prueba una regresión, pero más MB/s tampoco prueba mejora de pequeños
+y grandes por separado. Los samples existentes de singles son insuficientes:
+C152 seis pequeños/un intermedio/un grande; C155 uno de cada categoría. No se
+extrapolan ni se seleccionan ejemplos favorables.
+
+Se conserva el resultado agregado como prometedor, **sin cerrar el criterio de
+rendimiento**. Siguiente comprobación mínima, ya prevista por el plan: agregados
+fijos de callbacks homogéneos pequeños/intermedios/grandes y grupos mixtos aparte,
+bytes útiles frente a encoded/reuso y tiempo de servicio concurrente. La referencia
+y el optimizado usarán la misma instrumentación, con nuevas APK autenticadas,
+ensayos acotados y progreso retenido; no se cambia otra heurística. Ese tiempo de
+servicio no se presentará como throughput global ni resolverá por sí solo la
+variación temporal de red.
+
+Artefactos externos: `coalesced/{summary,analysis,steady-pipeline}.json`, checkpoints,
+`updater-filtered.log`, `coalesced-comparison.json`; pipeline completo/exit 0.
 
 ## Pendiente
 
-Medir C155 frente a C152 y contrastar la fragmentación, disponibilidad de fuentes y
-ambos tamaños. C153/C154 terminaron pausadas; no se repiten sus ensayos.
+Completar el desglose por tamaño con idéntica instrumentación y auditar el resultado.
+C153/C154/C155 terminaron pausadas; no se repiten sus ensayos ni sus checks verdes.
 El goal **no** cumple todavía la mejora exigida.
 La línea base mide variación actual, pero no demuestra una causa única de todos
-los descensos históricos, throughput aislado por tamaño ni una mejora candidata.
+los descensos históricos ni mejora aislada por tamaño; el uplift agregado de C155
+no elimina esa carencia.

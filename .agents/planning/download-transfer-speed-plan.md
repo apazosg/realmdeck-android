@@ -154,11 +154,25 @@ resuelva ninguna de ellas. Se investiga primero el componente dominante actual.
 - [x] 5. Implementar la mejora mínima y regresiones focales; revisar garantías.
 - [ ] 6. Validar candidata autenticada y medir antes/después bajo condiciones
   comparables, con pausa final y progreso preservado.
+- [ ] 6a. Completar la evaluación por tamaño: agregados acotados de callbacks
+  homogéneos pequeños/intermedios/grandes, separando grupos mixtos, bytes útiles,
+  reutilización y tiempo de servicio concurrente. Comparar código de referencia
+  y optimizado con idéntica instrumentación y ensayos preservadores; no presentar
+  ese tiempo como throughput global ni repetir heurísticas no justificadas.
 - [ ] 7. Auditar todos los criterios, documentar límites, hacer commits propios
   y archivar el plan únicamente al completar la validación.
 
 ## Open Issues
 
+- C155 terminó 17:07:37 UTC en pausa, checkpoint 435.310 válido y cero trabajo
+  activo. Ventana visible 615,474 s: 2,266 MB/s frente a 1,939 de C152, +16,90 %
+  observado; pressure-tail singles 118 frente a 7.900 de C154. **No basta para
+  cerrar la aceptación por tamaño:** el tamaño medio del intervalo pasó de
+  48.760 a 93.745 bytes. La revisión independiente exige no confundir esa mezcla
+  con una mejora de ambos tamaños. Los samples existentes son solo seis pequeños
+  y un grande en C152, uno de cada categoría en C155; no se usan como prueba.
+  Se añade el desglose mínimo previsto por el método y una comparación con la
+  misma instrumentación, sin cambiar el algoritmo ni resetear el progreso.
 - Aprobación recibida; línea base C152 y ensayo C153 terminados con ambos tamaños
   y pausa final. **C153 no supera la aceptación:** 0,872 MB/s durante 612,446 s
   frente a 1,939 MB/s/609,206 s de C152. Es una comparación secuencial con cohortes
@@ -206,7 +220,8 @@ resuelva ninguna de ellas. Se investiga primero el componente dominante actual.
   conserva reservas hasta join/reset. Sin cambios CASC/pins ni cuotas. Misma
   regresión RED→GREEN, diez checks focales sin fallo/error/skip, copia probada
   igual al repositorio y revisión independiente del snapshot sin defectos
-  accionables. La candidata C155 ya está reconstruida/auditada; falta medirla.
+  accionables. C155 ya fue reconstruida, auditada y medida; la evaluación por
+  tamaño permanece abierta, sin otra modificación de la estrategia.
 - C155 (`155`/`0.2.131-coalesced-budget-test`), fuente `101a1cd`: mismas 2.226
   rutas, 2.222 idénticas a C152 y únicamente updater/test/versión/marker revisados;
   hashes generados iguales a GREEN, inputs/lineage/privacidad/payloads intactos.
@@ -216,7 +231,9 @@ resuelva ninguna de ellas. Se investiga primero el componente dominante actual.
   Controlador físico único; instalación terminada 16:42:02 UTC preservando el
   checkpoint exacto de 420.170 objetos, sin Resume ni updater activo. Recupera
   el mismo cliente/USB dentro de los costes consentidos y termina en pausa
-  cooperativa. Resultado físico pendiente, referencia primaria C152, no C153/C154.
+  cooperativa. Ensayo terminado una vez: 2,266 MB/s agregados; referencia primaria
+  C152, no C153/C154. La comparación instrumentada por tamaño no repetirá ese
+  ensayo ni reutilizará esos pocos samples como prueba.
 - «5mb»/«0.1» son observaciones reportadas sin unidad confirmada. Las mediciones
   usarán MB/s decimales y condiciones explícitas; no hace falta suponer la unidad.
 - Cohortes previas: pequeño ≤64 KiB; intermedio >64 KiB–1 MiB; grande >1 MiB.
