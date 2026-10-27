@@ -334,6 +334,17 @@ descarga». Se vuelve al recorrido productivo ya aprobado, no a un corpus aislad
   mismos objetos. Costes locales y tasas secuenciales se distinguen. Si el mix
   cambia o falta direct/cola grande, declararlo sin convertir esa carencia en
   razón para detener el avance real ni afirmar causalidad que no se ha medido.
+- Tras el cierre C160 del 27-10 16:00:21 (checkpoint 709.577), continuar esa misma
+  APK sin reinstalar ni confirmar costes nuevos. Próxima ventana prefijada:
+  **2.700 s visibles o la misma señal de 6 GiB lógicos nuevos**, máximo general
+  4.500 s más pausa/cleanup acotados. No aumentar la cota de datos ni declarar
+  45 minutos si la señal de datos llega antes. Conservar subventanas de 120 s y
+  registrar si termina el verificador de prefijo; no asumirlo ni forzarlo.
+  Rechazar Resume si no quedan esos 4.500 s antes de 17:56:59 UTC, reservando
+  quince minutos para pausa/cleanup antes del límite técnico del goal 18:11:59.
+  Preflight y checkpoint byte-idéntico frescos, una intención Resume persistida,
+  controlador nuevo y final en pausa/cero trabajo. Sin profiling/GET auxiliar,
+  corpus aislado, reset, otro ajuste ni atribuir cambios de mezcla al código.
 
 ### Aceptación y validación
 

@@ -1550,10 +1550,75 @@ y tope de grandes no cambian. **No se presupone menor GC ni más throughput** po
 compilar, pasar once tests o auditar la APK. La siguiente observación conserva
 mezcla/origen/scopes y progreso real para evaluar beneficios y regresiones.
 
-Cadena física lanzada una sola vez tras esos gates; resultado aún no incorporado
-a este corte. El analizador C160 quedó preparado y calibrado, con las cinco
-referencias anteriores preservadas; no se consulta repetidamente ni se reinicia
-el controlador para obtener su resultado.
+Cadena física lanzada una sola vez tras esos gates y ya terminada. El analizador
+C160 se ejecutó una vez sobre el cierre, con las cinco referencias anteriores
+preservadas; no se repitió el controlador ni ningún build/check verde.
+
+### C160: progreso real y verificación física del cambio de buffers
+
+Reemplazo preservador terminado 27-10 **15:20:05 UTC**, checkpoint 670.605
+byte-idéntico. Preparación hasta 15:27:15 sin payload: mismo USB/cliente70532,
+46,6 GiB descarga/48,8 adicionales/app ≤1,7/cliente ≤47,0, dentro del consentimiento.
+Un Download 15:28:08 y una Pause 15:59:50; final **16:00:21, En pausa/Reanudar,
+cero servicios**. Finalizaron 8.289 callbacks; HTTP y los siete gauges de fase a cero.
+
+UI **1.205,590 s, 2,403673 MB/s**, límites solo de redondeo
+2,359098–2,448249, no intervalos de confianza ni de latencia UI. Sampler exacto en
+su scope distinto de **1.204,146 s: 2,390025 MB/s**. Subventanas UI:
+0,434 / 0,941 / 3,186 / 2,132 / 1,058 / 4,672 / 3,476 / 4,330 / 2,985 / 0,872 MB/s;
+los decimales GiB no bastan para identificar una pausa de progreso real.
+
+Checkpoint **670.605 → 709.577**, **38.972 nuevos**, prefix/CRC válidos y sin
+append sin checkpoint. 2.887.294.826 encoded bytes, 5.666.135.761 decoded; raw
+8 claves/490.770 bytes → 13/80.530, ninguna clave inicial perdida sin commit o
+retención. Balance de entrada completo 2.886.884.586 bytes, no wire ni numerador UI.
+
+| Clase durable | Objetos | Encoded bytes | Mediana encoded | Máximo encoded |
+|---|---:|---:|---:|---:|
+| Pequeña | 33.254 | 463.539.149 | 8.890 | 65.499 |
+| Intermedia | 5.107 | 1.533.631.116 | 159.270 | 1.048.497 |
+| Grande | 611 | 890.124.561 | 1.333.402 | 2.096.644 |
+
+Todo sigue siendo **range**, no direct ni cola >2 MiB. La C159 anterior contenía
+228 grandes frente a estos 611; cambió la carga. No se convierte 1,414 → 2,404 MB/s
+en ganancia causal del cambio de buffers. Los tests verifican la capacidad encoded
+proporcionada y la captura conserva integridad; **no se ha medido una reducción de
+heap/GC**. Los diez snapshots cortos siguen mostrando trabajo del prefijo y
+HeapTaskDaemon (11,1–44,4 % de un núcleo en esos snapshots), no perfiles de CPU
+por intervalo ni una comparación equivalente de asignaciones. No aparece marcador
+de finalización del prefijo en el scope capturado; no se declara por ello un fallo.
+
+El retiro privado sigue agrupado: **2.437 intentos, 15,992 objetos/intento**, hijo
+18,230 s incluido en raw 37,097 s, **0,951889 ms/objeto**. La variación frente a
+0,857568 de la C159 anterior no se atribuye a BLTE. Writer: sourceResolve 620,687 s,
+privateVerify 145,411, appendAndForce 289,904 con groupForce hijo 235,077 y
+checkpoint 36,974. Scopes anidados/concurrentes, no partición sumable de pared.
+
+Observaciones 1 Hz solapadas: head 49,05 %, con readyAhead 37,99 %, cap sin head
+49,04 %, headers 52,04 %, cuerpo 57,77 %. Las esperas de fuentes y consumidor
+coexisten; no se elige otro ajuste sin aislar su coste. Recursos visibles
+34,7 → 37,1 °C, IO `/proc` denegado, no IO cero. Sin profiling ni GET auxiliar.
+Evidencia externa `download-bounded-blte-c160-20261027/trial/flow-analysis.json`,
+checkpoint/raw, logs y recursos; analizador calibrado `79be473d…b280a31`.
+
+### Siguiente continuidad C160, sin reemplazo ni experimento aislado
+
+Desde 709.577, misma APK auditada y consentimiento, con preflight fresco y
+checkpoint byte-idéntico. Nueva ventana prefijada de **2.700 s visibles o la misma
+señal de 6 GiB lógicos nuevos**, máximo general 4.500 s. Datos antes de tiempo =
+ventana censurada, no 45 minutos de estabilidad. Pausa y cleanup conservan sus
+guardas; se rechaza Resume si no caben los 4.500 s antes de **17:56:59 UTC**,
+dejando quince minutos antes del límite técnico del goal 18:11:59. Se mantienen
+subventanas de 120 s y se observa si termina el prefijo, sin asumirlo ni forzarlo.
+Controlador nuevo, sin reinstalar, reset, profiling, GET auxiliar o scratch; no se
+reproduce ningún controlador ya terminado ni se cambia la estrategia en este paso.
+Calibración host 16:12:00 UTC: sintaxis Python/bash y bloque Python del wrapper,
+nueve funciones auxiliares AST-idénticas a la continuación C159 verificada, solo
+acciones Reanudar/Pausar, consentimiento real y referencia cerrada 709.577 válidos.
+No se repiten sus casos de guardas ni se importa el controlador para comprobarlo.
+Evidencia `download-real-pipeline-c160-20261027/controller-calibration.json`;
+fuente `e2942263…1056a937`, wrapper `6bda6648…7be00740`. A este corte todavía no
+se ha ejecutado la nueva continuación.
 
 ## Matriz de aceptación del objetivo
 
@@ -1576,13 +1641,13 @@ al corte de esa lectura todavía no había profiling ni otra APK/corrección de 
 |---|---|
 | Línea base con unidades, ambos tamaños y preparación separada | C152: 609,206 s; UI, frames y raw balance distinguidos. Comprobado. |
 | Diagnóstico sin sumar relojes concurrentes | C158 distingue espera de fuentes y consumidor; perfil real correlacionado cuantifica retiro raw como coste secuencial relevante. Seleccionada barrera privada agrupada, sin causa única general de red demostrada. |
-| Mejora medida y evaluación por tamaño | C159 conserva ~16 retiros/barrera y coste raw 0,862/0,858 ms/objeto; sus ventanas reales de 3,153/1,414 MB/s muestran variación con la misma APK. **[PENDING]** medir C160 y evaluar tamaños/riesgos/direct/cola grande al avanzar realmente; no se atribuye una tasa agregada al código. |
-| Garantías, pruebas, revisión sensible y APK autenticada | C159 y sus verificaciones preservadas; BLTE nuevo RED/11GREEN, staging/pin y tres checks de retag, revisión snapshot y APK C160 auditada. **[PENDING]** continuidad física de C160; no estabilidad universal. |
-| Informe, pausa final, progreso y commits propios | C159 terminó 15:10:28 en pausa, checkpoint 670.605 válido, cero servicios y callbacks activos; raws retenidos. **[PENDING]** objetivo completo antes de archivar. Sin publicación/push. |
+| Mejora medida y evaluación por tamaño | Ahorro local del retiro privado conservado. C159 3,153/1,414 y C160 2,404 MB/s, con cargas distintas; C160 incluye 33.254 pequeños y 611 grandes range. **[PENDING]** mejora global sustentada, efecto heap/GC y direct/cola grande al avanzar realmente; no se atribuye una tasa agregada al código. |
+| Garantías, pruebas, revisión sensible y APK autenticada | BLTE RED/11GREEN, staging/pin y tres checks de retag, revisión snapshot y APK C160 auditada; captura real con prefix/CRC/retención/ACKs válidos y cero fases activas. Verificado en estos escenarios, no estabilidad universal. |
+| Informe, pausa final, progreso y commits propios | C160 terminó 16:00:21 en pausa, checkpoint 709.577 válido, cero servicios y callbacks activos; raws retenidos. **[PENDING]** objetivo completo antes de archivar. Sin publicación/push. |
 
 ## Pendiente
 
-Continuar la descarga real desde los 670.605 objetos durables, observar bloqueos y
+Continuar la descarga real desde los 709.577 objetos durables, observar bloqueos y
 seleccionar el siguiente cambio mínimo sustentado. Sin harness aislado ni repeticiones
 de controles terminados; las métricas deben declarar tamaño/origen y scopes para
 evaluar mejora y regresiones sin confundir la mezcla con una ganancia causal.
