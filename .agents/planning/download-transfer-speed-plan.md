@@ -17,9 +17,10 @@ ni en un mínimo de velocidad prometido.
 Goal original: `5caa6403-5b8f-47dc-ba95-ba40fbbe686e`; continuación de una hora
 `fd7baae8-8a14-47b0-8452-6d8f7434217e`; continuación de seis horas
 `0d3ea00f-a91e-4702-88ad-febb37adb87f`; relanzamiento autorizado
-`5a98db34-7924-4936-86dd-0e9fce64eacd`, después cancelado. Continuación actual:
-`7722a995-d31c-4ec3-b8b9-0795f62a7e81`. Este trabajo parte de C152 y se centra
-en transferencia efectiva, no en volver a optimizar el inicio de la descarga.
+`5a98db34-7924-4936-86dd-0e9fce64eacd`, después cancelado; continuación
+`7722a995-d31c-4ec3-b8b9-0795f62a7e81`, reemplazada por autorización expresa.
+Continuación actual: `697f3195-06ff-491c-b223-8e51e0c64fa7`. Este trabajo parte de
+C152 y se centra en transferencia efectiva, no en volver a optimizar el inicio.
 El usuario aprobó este plan el 2026-10-26: «adelante. vamos a ello». Se ejecutan
 diagnóstico, cambios mínimos y ensayos acotados dentro de las garantías y límites
 descritos; no se repite esa aprobación tras un reinicio del servidor.
@@ -39,6 +40,11 @@ avances, sin ampliar el tiempo autorizado. Se crea un goal nuevo de 1.800 s desd
 17:39:20 UTC, hasta 18:09:20, antes del límite anterior 18:11:59. La cancelación
 anterior se conserva; no se marca como finalización ni se reinicia el controlador
 que ya estaba activo. No se autorizan nuevas rondas por este cambio de lifecycle.
+El usuario elige después **«Continuar una hora»** al ofrecer reemplazar ese goal y
+avanzar realmente desde 803.964, sin repetir trabajos ni ampliar el margen adicional
+ya autorizado. Nuevo máximo de 3.600 s desde 18:37:05 UTC; se conserva **19:25 UTC**
+como límite anterior si llega antes. Las restricciones de la continuación de
+1.800 s anterior son históricas, no un permiso para relanzar su controlador.
 
 ## Content
 
@@ -360,6 +366,15 @@ descarga». Se vuelve al recorrido productivo ya aprobado, no a un corpus aislad
   general. Se conserva el rechazo previo a Resume si esos 1.500 s no caben antes
   de 17:56:59 UTC, con quince minutos para cleanup antes de 18:11:59. Preflight y
   checkpoint frescos/idénticos; controlador nuevo, nunca relanzar los terminados.
+- Nueva continuación expresamente autorizada desde **803.964**, misma C160/USB/
+  cliente y consentimiento: máximo **1.200 s visibles o 1.800 s generales**, misma
+  señal de 6 GiB nuevos. Deadline de observación **19:15 UTC**, diez minutos antes
+  del límite autorizado anterior 19:25; rechazar antes de Resume si no caben los
+  1.800 s. Activación consume parte del máximo: límite general primero = ventana
+  censurada, no prueba garantizada de veinte minutos. Preflight/checkpoint
+  byte-idéntico, intención Resume única y pausa cooperativa/0 servicios. Sin nueva
+  instalación, perfil, GET auxiliar, corpus aislado ni tuning. Artefactos nuevos en
+  `download-real-pipeline-c160-authorized-hour-20261027/`, nunca replay del tail.
 
 ### Aceptación y validación
 
@@ -400,7 +415,13 @@ descarga». Se vuelve al recorrido productivo ya aprobado, no a un corpus aislad
 
 ## Open Issues
 
-- Continuación autorizada tras cancelación: nuevo goal `7722a995…7e81`, mismos cinco
+- Continuación `697f3195…64fa7` autorizada por «Continuar una hora», objetivos y cinco
+  criterios intactos. Controlador nuevo desde 803.964: 1.200/1.800 s, 6 GiB,
+  deadline 19:15 UTC/cleanup diez minutos. Calibración host 18:39:36: sintaxis,
+  nueve helpers AST-idénticos, mismo trigger de datos, contexto/consentimiento y
+  SHA del informe anterior cotejados; sin acción de dispositivo ni rerun de guardas.
+  Resultado aún no observado; no aceptar una mejora global por el simple avance.
+- Histórico de la continuación tras cancelación: goal `7722a995…7e81`, mismos cinco
   criterios y tareas verificadas. El único controlador pendiente terminó una vez
   17:55:15 UTC; no se reanuda ni se lanza otra ronda en este margen. Checkpoint
   792.758 → **803.964**, 11.206 nuevos, prefix/CRC/retención/ACKs válidos, cero

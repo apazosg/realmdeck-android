@@ -1795,6 +1795,32 @@ SHA `3f54db3b…eacb0a0`. Siete referencias anteriores conservadas. **Avance rea
 integridad verificados; ahorro privado mantenido, mejora global por tamaño aún
 pendiente.** No se inicia otra descarga dentro del margen de esta continuación.
 
+### Nueva continuación real autorizada desde 803.964
+
+Después del cierre anterior, el usuario elige **«Continuar una hora»** al ofrecer
+reemplazar el goal y avanzar el cliente real. Nuevo `697f3195…64fa7`, máximo
+3.600 s desde 18:37:05 UTC; se conserva **19:25 UTC** del margen adicional ya
+autorizado si llega antes. El anterior se archiva por reemplazo, no como complete
+ni unmet; objetivo, cinco criterios y tareas verificadas permanecen intactos.
+
+Protocolo fijado antes de Resume: misma C160 auditada, mismo USB/cliente70532 y
+consentimiento; checkpoint fresco byte-idéntico a los **803.964** del cierre anterior.
+Una nueva intención Reanudar persistida, **1.200 s visibles o 1.800 s generales**,
+misma señal de 6 GiB lógicos y pausa cooperativa. Rechazar antes de la acción si no
+caben 1.800 s antes de **19:15 UTC**, reservando diez minutos para pausa/lecturas/
+análisis antes de 19:25. Si activación consume el máximo general, ventana censurada:
+no se promete un benchmark de veinte minutos. Sin instalación, profiling, GET
+auxiliar, scratch/harness ni otro cambio del código.
+
+Workspace nuevo `download-real-pipeline-c160-authorized-hour-20261027/`. Calibración
+host **18:39:36 PASS**, sin importar el controlador ni operar dispositivo: nueve
+helpers AST-idénticos al tail, mismo trigger de datos, sintaxis Python/bash y Python
+embebido, contexto803964/informeSHA/consentimiento exacto con el original. Los
+checks de guardas anteriores no se repiten. `controller-calibration.json` conserva
+hashes del main `1447e6e3…75ecc7ff` y wrapper `6cd59ffa…f68dbf7df`.
+Controladores previos terminados intactos; todavía no se atribuye resultado al
+nuevo tramo ni se declara mejora causal/GC/direct-tail.
+
 ## Matriz de aceptación del objetivo
 
 El usuario autorizó «relancemos el goal otras 6 horas». La nueva planificación
