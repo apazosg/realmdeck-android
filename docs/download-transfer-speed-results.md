@@ -1195,6 +1195,56 @@ guards de ownership; reutiliza las cinco pruebas anteriores sin repetirlas. Solo
 cambia duración respecto a la calibración de CPU, no fuentes ni permisos. Aún no
 hay una causa demostrada ni un cambio de estrategia seleccionado.
 
+### Perfil a tiempo fijo: coste del consumidor y corrección seleccionada
+
+El control terminó 27-Oct 09:26:11 en pausa, sin servicios/HTTP/workers activos.
+Checkpoint **564.690 → 573.476**, prefix/CRC y retención válidos: **8.786 objetos**,
+489.393.133 bytes encoded; pequeños/intermedios/grandes 7.275/1.498/13, todos range.
+Raw 18 claves/487.571 bytes → 14/3.417.331, ninguna inicial perdida. Ventana visible
+**211,231 s, 2,053163 MB/s** (solo redondeo 2,052667–2,053660); final prefijado tras
+el intento de perfilado, **no** un nuevo benchmark de veinte minutos ni ganancia de código.
+
+Perfetto escribió normalmente su traza de **4.463.916 bytes**. El controlador falló
+después al asumir que `adb exec-out cat /proc/PID/stat` rc=0 significaba un stat válido.
+Se reprodujo solo esa lectura: exec-out devolvía rc=0 con error de fichero ausente;
+`adb shell` y la ausencia de `/proc/PID` confirmaron que el consumidor ya había salido.
+Se conserva el fallo y se recupera la **misma traza**, sin nuevo perfil, señales,
+Resume ni descarga; limpieza de sus propios archivos completada.
+
+Traza SHA-256 `7dc785ac3b7a20bc99241e5de63edd7c91f1d0c3b824990464555097a191bcd8`:
+19,986527 s, 686 muestras del proceso objetivo; 13 unwinds parciales declarados,
+sin error/pérdida no-cero en stats. CPU de un core: prefijo 52,60 %, GC 35,98 %,
+writer 22,64 %. Son hilos concurrentes, no una partición de pared. El writer pasa
+6,748 s en D y 0,675 s en runnable R/R+; los nombres de pool no identifican qué
+callback está activo. No se deduce una causa única de red ni se justifica cambiar
+prioridades o workers. Los frames de prefijo muestran inflate/MD5 legítimos, no
+una razón para quitar comprobaciones.
+
+Clock snapshots de la propia traza sitúan el intervalo real en los logs del
+dispositivo; dos offsets REALTIME coinciden a 77 ns, sin prueba de pasos posteriores.
+Dentro: 19,019 s muestreados, head 15,78 %, reservas a 34 el 94,74 % y a 34
+**sin** head el 78,96 %, no aditivos. Los contadores que encierran la traza abarcan
+21,593 s/896 objetos: **7,052 s en retiro de raws**, con bordes censurados.
+En la ejecución completa, ese retiro cuesta **53,575 s** frente a 242,938 s después
+de la primera fuente. `appendAndForceMs` incluye su propio `groupForceNanos`:
+no se suman padre e hijo. El código de raw retirement añade por objeto unlink,
+force del directorio privado y comprobación de hermano `.part`.
+
+**Cambio mínimo a verificar:** mantener cada validación/unlink posterior a ACK,
+pero sincronizar juntos los unlinks del grupo retirado en el handoff ya existente,
+**antes de liberar reservas**. No cambia force de Data/checkpoint, máximo durable
+16, orden físico, EKey/BLTE/CKey, identidad/formato, cuotas ni guardas. El último
+grupo parcial en pausa/error se fuerza tras unir workers, sin abrir capacidad a
+nuevos envíos; un fallo no se convierte en éxito. El tiempo movido al handoff
+seguirá incluido en el reloj raw y se añadirán llamadas/tiempo de esa barrera.
+Se requiere RED→GREEN focal, fallo/reanudación y revisión sensible antes de una
+APK; después evidencia física mixta, sin atribuir diferencias de cohortes al código.
+
+Evidencia externa `download-transport-diagnosis-20261027/`: `fixed-profile-trial/flow-analysis.json`,
+`fixed-cpu-recovery/summary.json`, `recovered-fixed-cpu-analysis/{analysis,wall-correlation}.json`
+y SQL/CSV/logs. No se repiten capturas o consultas ya verdes; direct y cola grande
+siguen pendientes de validación.
+
 ## Matriz de aceptación del objetivo
 
 El usuario autorizó «relancemos el goal otras 6 horas». La nueva planificación
@@ -1215,10 +1265,10 @@ al corte de esa lectura todavía no había profiling ni otra APK/corrección de 
 | Criterio | Evidencia y estado |
 |---|---|
 | Línea base con unidades, ambos tamaños y preparación separada | C152: 609,206 s; UI, frames y raw balance distinguidos. Comprobado. |
-| Diagnóstico sin sumar relojes concurrentes | C158 localiza espera de fuentes; veinte minutos mixtos y control del mismo objeto derivado acotan transporte/contexto y contrapresión. **[PENDING]** causa dominante específica y direct/cola restante; no afirmar causalidad del código. |
+| Diagnóstico sin sumar relojes concurrentes | C158 distingue espera de fuentes y consumidor; perfil real correlacionado cuantifica retiro raw como coste secuencial relevante. Seleccionada barrera privada agrupada, sin causa única general de red demostrada. |
 | Mejora medida y evaluación por tamaño | C156/C157 medidas, pero solo 151/5 grandes y tamaños distintos. +16,90 % C155 y −47,57 % C157 observacionales no validan mejora general. **[PENDING]** comparación representativa. |
 | Garantías, pruebas, revisión sensible y APK autenticada | Diez regresiones y revisión del cambio sensible; cuatro checks iniciales, dos tras simplificar métricas y tres de versión. Ambas APK auditadas; ensayos con prefix/CRC/retención válidos. Comprobado para estos escenarios. |
-| Informe, pausa final, progreso y commits propios | Captura del 27-10 terminó 08:31:42 en pausa, checkpoint 564.690 válido, cero trabajo activo y raws retenidos. **[PENDING]** mejora demostrada y objetivo completo antes de archivar. Sin publicación/push. |
+| Informe, pausa final, progreso y commits propios | Control del 27-10 terminó 09:26:11 en pausa, checkpoint 573.476 válido, cero trabajo activo y raws retenidos. **[PENDING]** mejora demostrada y objetivo completo antes de archivar. Sin publicación/push. |
 
 ## Pendiente
 

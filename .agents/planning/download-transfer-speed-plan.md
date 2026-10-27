@@ -221,9 +221,9 @@ completado; se ejecutan instrumentación y calibración antes del ensayo prolong
 - [x] 2. Aprobar este plan; aprobación explícita «adelante. vamos a ello».
 - [x] 3. Caracterizar tamaños y revisar datos disponibles; precisar el desglose
   mínimo que falta, sin repetir las investigaciones de inicio C151/C152.
-- [ ] 4. Obtener línea base actual de payload pequeño/grande y seleccionar el
+- [x] 4. Obtener línea base actual de payload pequeño/grande y seleccionar el
   cuello de botella con evidencia suficiente.
-- [x] 5. Implementar la mejora mínima y regresiones focales; revisar garantías.
+- [ ] 5. Implementar la mejora mínima y regresiones focales; revisar garantías.
 - [ ] 6. Validar candidata autenticada y medir antes/después bajo condiciones
   comparables, con pausa final y progreso preservado.
 - [ ] 6a. Completar la evaluación por tamaño: agregados acotados de callbacks
@@ -236,6 +236,27 @@ completado; se ejecutan instrumentación y calibración antes del ensayo prolong
 
 ## Open Issues
 
+- Perfil de tiempo fijo terminado y traza original recuperada, sin repetir captura:
+  main final 09:26:11 en pausa, checkpoint 564.690 → 573.476, prefix/CRC/retención
+  válidos, 8.786 nuevos (7.275 pequeños/1.498 intermedios/13 grandes, todos range).
+  Control visible 211,231 s a 2,053163 MB/s; no es un benchmark de veinte minutos.
+  El error del controlador fue parsear `/proc` ausente con `exec-out` rc=0; se
+  comprobó ausencia con shell y recuperó la traza ya escrita, sin señales ni retrace.
+- Intervención mínima seleccionada por coste medido, no por subir workers:
+  retiro de raws 53,575 s sobre 242,938 s después de primera fuente; en los
+  contadores que encierran la traza, 7,052 s/21,593 s para 896 objetos. El código
+  fuerza el mismo directorio privado tras cada unlink. Se agrupará SOLO ese force
+  privado en el handoff ya existente de retiros ACK (hasta 16), antes de liberar
+  sus reservas. Data/checkpoint forces, ACK, autenticación, orden físico, cotas y
+  política full/light no cambian. No se toca ForeverCasc ni sus pins.
+  Pausa/error deben sincronizar retiros pendientes después de unir workers y sin
+  admitir trabajo nuevo; fallo de force no libera capacidad ni se oculta. Se
+  conservará el coste dentro de sourceConsumedRaw y se medirán llamadas/tiempo de
+  esa barrera para no simular una mejora moviendo el reloj.
+  Antes de APK: reproducción RED de fuerzas por objeto, GREEN focal de presión,
+  cancelación/grupo parcial, fallo de barrera y reanudación, revisión independiente
+  del cambio sensible y auditoría canónica. Después, comparación mixta preservadora
+  con composición y límites explícitos; esto no valida aún mejora general ni direct/cola.
 - Captura mixta de la misma C158 terminada 27-10 08:31:42, en pausa/cero trabajo:
   1.211,056 s visibles, 2,190826 MB/s; checkpoint 503.039 → 564.690 válido, 61.651
   objetos (53.329/8.011/311), todos range. No es una ganancia de código. El trigger
