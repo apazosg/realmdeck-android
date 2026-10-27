@@ -1,6 +1,6 @@
 ---
 id: usb-cross-phone-2026-10-27
-state: approved
+state: in-progress
 date: 2026-10-27
 ---
 
@@ -39,20 +39,40 @@ una descarga incompleta. No cambia el objetivo de optimización de descarga.
   `ls` pese a returncode0: evidencia rechazada en `source-usb-inventory-v2/verification.json`,
   no prueba de datos desaparecidos ni inventario válido. No existe hash de todo
   el volumen; no prometer igualdad binaria o integridad completa de sus bytes.
+- El nuevo endpoint facilitado por el usuario conecta: Android SDK36, app C146
+  `0.2.122-performance-preview`, más antigua que C160 del original. Sin reemplazarla.
+  El volumen esperado está montado. El contexto `run-as` recibe Permission denied
+  incluso en la raíz del volumen; shell UID2000 puede leer las rutas exactas.
+  Esto no demuestra qué acceso tiene la app ejecutada normalmente.
+- Inspección de metadatos 19:39:44 UTC: staging esperado, marcador `.owner` cuyo
+  digest coincide con el recibo privado original y 81 archivos `data.000`–`data.080`,
+  51.625.635.891 bytes (48,08 GiB). Sin `.build.info` publicada en la raíz.
+  Cero servicios updater antes/después, cero acciones UI/escrituras/permisos.
+  No se han leído ni autenticado todos los cuerpos CASC; no es una prueba de
+  integridad completa o de reanudación en el segundo móvil.
+- Resultado y límites en [el informe USB](../../docs/usb-cross-phone-results.md).
 
 ## Implementation / Action Items
 
 - [x] 1. Cerrar el controlador original y verificar pausa/checkpoint/ausencia de trabajo.
 - [x] 2. Usuario comunica traslado al segundo teléfono; no se presupone reutilización.
-- [ ] 3. Conectar ADB al endpoint autorizado; comprobar versión Android y app instalada.
+- [x] 3. Conectar ADB al endpoint autorizado; comprobar versión Android y app instalada.
 - [ ] 4. Inspeccionar reconocimiento y veredicto sin mutaciones, registrando límites.
+  Metadatos del staging comprobados; pendiente el veredicto de la interfaz de la app.
 - [ ] 5. Usuario expulsa/devuelve el USB; verificar checkpoint privado original sin
   cambios y disponibilidad del destino. Una Resume posterior se acuerda aparte.
 - [ ] 6. Documentar conservación, reutilización observada o bloqueo seguro y pendientes.
 
 ## Open Issues
 
-- Pendientes conexión/emparejamiento, versión de app y reconocimiento real.
+- El usuario pregunta si conviene actualizar C146. Se propone reemplazar solo la
+  app por la C160 exacta ya auditada, conservando datos (`adb install -r`, sin
+  desinstalar/borrar ni forzar una firma incompatible). Requiere autorización
+  expresa porque la instalación estaba excluida del alcance de solo lectura.
+  No autoriza descargar/reparar/adoptar el parcial ni migrar el checkpoint; no se
+  ha implementado ni ejecutado esa actualización.
+- Pendientes reconocimiento/veredicto en la interfaz de la app y devolución al
+  original. La conexión y versión ya se comprobaron con el nuevo endpoint.
 - Primer intento de conexión 19:24 UTC no conectó; no se ejecutaron consultas
   sobre la app, acciones UI, instalaciones o escrituras de cliente en el personal.
 - El traslado fue confirmado; no hay confirmación expresa de expulsión del sistema.
