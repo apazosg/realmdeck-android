@@ -1,12 +1,12 @@
 # USB entre dos móviles: datos parciales visibles, reanudación no demostrada
 
 Evidencia del 27-10-2026: inspección USB cerrada 19:39:44 UTC, actualización
-expresamente aprobada de la app cerrada 19:52:23 y observación de su interfaz
-cerrada 20:13:03. Alcance en
-[el plan](../.agents/planning/usb-cross-phone-plan.md): lectura del cliente y
-reemplazo de la app, sin descargar, reparar, preparar carpeta, migrar metadatos
-privados ni conceder permisos. No se enviaron comandos de ajustes; los efectos
-propios de abrir la app se acotan más abajo.
+expresamente aprobada de la app cerrada 19:52:23, observación de su interfaz
+cerrada 20:13:03 y corrección de selección cerrada 20:46:03. Alcance en
+[el plan](../.agents/planning/usb-cross-phone-plan.md): inspección, reemplazo y
+selección normal del USB, sin descargar, reparar, preparar carpeta, adoptar el
+parcial, migrar metadatos privados ni conceder permisos. El preflight de selección
+sí escribe una prueba temporal y preferencias propias; los efectos se acotan abajo.
 
 ## Resultado observado
 
@@ -145,9 +145,57 @@ un requisito que falte por conceder** en el diseño aprobado. US-007-NFR-002,
 US-009-NFR-002 y US-008-AC-05 exigen operar sin él. Su estado `default` no demuestra
 la causa del fallo observado; no se solicita ni se concede como solución rápida.
 
-El plan distingue dos cuestiones: resolver aquí el destino y reutilizar un cliente
-terminado; y, si el usuario lo incluye, continuar aquí una descarga a medias. El
-segundo caso necesita comportamiento y recuperación especificados, porque los
+El usuario eligió **«Ambos»**: resolver aquí el destino, reutilizar un cliente
+terminado y continuar aquí una descarga a medias. El segundo caso necesita
+comportamiento y recuperación especificados, porque los
 822.658 objetos pertenecen a un staging cuyo checkpoint/recibo están en el original.
-No se ha implementado migración, copiado estado privado, reanudado ni modificado
-el cliente. La decisión sobre el parcial está pendiente antes de ampliar UC/AC.
+No se ha implementado migración ni se han copiado estados privados, reanudado la
+descarga o modificado los cuerpos CASC. El alcance está confirmado; los UC/AC y
+el protocolo del parcial siguen pendientes antes de su implementación.
+
+## Primer bloqueo resuelto en el segundo móvil: selección del USB
+
+Se abrió únicamente Ajustes → Almacenamiento: la selección antigua aparecía
+desconectada y la unidad actualmente montada estaba habilitada. El primer intento
+se detuvo antes de cualquier entrada porque la app no estaba en primer plano.
+Se conservó el fallo; después se trajo la app propia al frente y se completó la
+observación, sin cambiar todavía sus preferencias ni repetir operaciones de cliente.
+
+Con el alcance «Ambos» confirmado, se seleccionó la única unidad removible montada
+y se pulsó una vez **Usar esta ubicación, 20:45:46 UTC**. El flujo normal pasó sus
+validaciones: guarda identidad/registro y comprueba escritura mediante un fichero
+temporal de 16 bytes, su renombrado, lectura y eliminación. No se describe esta
+operación como totalmente de solo lectura ni se manipularon preferencias a mano.
+
+Verificación cerrada **20:46:03 UTC**:
+
+- Identidad elegida igual a la del USB; ruta de la app igual a la raíz original.
+- `.owner`, marcador raíz, nombres/tamaños de los **81 CASC / 51.625.635.891 bytes**
+  y las dos entradas de la raíz sin cambios; sin restos de la prueba temporal.
+- Cero servicios updater antes/después. Sin Descargar/Reparar/Preparar, juego,
+  adopción del parcial, migración de checkpoint ni cambio de seguridad.
+- Consulta posterior de solo lectura: acceso a todos los archivos **no permitido**.
+  El destino se seleccionó correctamente sin ese permiso, conforme al diseño.
+
+El diálogo ya muestra la unidad real y su ruta. «Cliente no instalado / Data no
+instalada» se refiere a la instalación publicada; los archivos comprobados están
+en staging. No prueba pérdida de esos archivos ni que ya puedan reutilizarse.
+
+La inspección de las APIs `writeTargetIncrementalResumable`,
+`inspectResumableCheckpoint` y `prepareWorkspace` confirma que la reanudación actual
+necesita el estado privado ligado a la operación original. No existe todavía una
+entrada de adopción de segmentos parciales sin ese estado. Esto no demuestra que
+los segmentos sean irrecuperables: requiere especificar y probar la recuperación
+acotada con catálogo oficial y autenticación por objeto, no falsear un checkpoint.
+
+El borrador [US-009-UC-05 / AC-06–09](../.agents/specs/US-009.md) propone ese
+comportamiento, incluida recuperación ante fallos y rechazo del estado privado
+obsoleto. Está marcado **[PROPOSED]** y pendiente de aprobación antes de derivar
+FR/NFR y pruebas o modificar el updater. Cliente completo y parcial son el alcance
+confirmado; la portabilidad completa aún no está implementada ni aceptada.
+
+Evidencia externa: `personal-storage-options/summary.json`,
+`personal-storage-options-after-foreground/summary.json`,
+`personal-current-usb-selection/summary.json`, sus dos inventarios y
+`permission-verification.json`. Informes iniciales fallidos conservados, ninguna
+confirmación de selección repetida. No se hashearon todos los cuerpos CASC.
