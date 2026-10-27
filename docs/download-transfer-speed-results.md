@@ -1416,7 +1416,43 @@ Calibración estática 27-10 14:32:19 UTC PASS: sintaxis Python/bash, únicos cl
 Reanudar/Pausar, guardas de pausa/recursos AST-idénticas y consentimiento de la C159
 anterior. Checkpoint idle con timeout de 90 s. Fuente `9fb636fa…beeb180d` y wrapper
 `d66546fd…3518e505`; evidencia externa en `download-real-pipeline-c159-20261027/`.
-Al escribir esto el controlador está preparado, **todavía no ejecutado**.
+Se lanzó una sola vez tras registrar el protocolo; al añadir el siguiente cambio
+no se ha incorporado todavía su resultado. No relanzarlo por perder la notificación.
+
+### Verificador BLTE: buffers proporcionales a la entrada encoded
+
+Mientras avanza el cliente C159, el siguiente cambio acotado se apoya en el perfil
+ya capturado: verifier 10,512 s CPU y GC 7,192 s en unos veinte segundos. No atribuye
+todo ese GC a buffers, pero la fuente muestra capacidad fija de 64 KiB incluso para
+ventanas/chunks pequeños. Solo cuatro capacidades pasan a
+`min(64 KiB, encodedLength)`: BufferedInputStream sobre el bound, copia N, descarte E
+y entrada Z. El buffer **decoded** de Z sigue en 64 KiB; no hay pool, caché global,
+reutilización de Inflater, nueva API ni cambio de estrategia/cuotas/durabilidad.
+
+La cota exacta sigue debajo del buffering; EKey, checksums, CKey, tamaños, consumo
+exacto, cancelación y cierre de Inflater se mantienen. Encoded grandes conservan el
+mismo tope. El nuevo test observa capacidad del buffer ofrecido al stream, no cada
+asignación privada ni el heap/GC del teléfono.
+
+Reproducción real RED: un test/fallo esperado «small encoded windows must not
+allocate full-size read buffers», Gradle 2 min 3 s. GREEN con el mismo archivo de
+tests: **once checks, cero fallos/errores/skips**, Gradle **54 s**: nueve Range más
+replay de prefix byte-idéntico y corrupción tardía con cancelación/tail durable.
+Incluye N con remainder vacío y Z válido de decoded vacío. Fuente
+`6afe01aa…3456f794`, test `ab9aebdb…e99a9c8`, paridad con el repositorio verificada.
+Revisión independiente **solo de snapshot suministrado**, sin FS ni comandos:
+sin hallazgos; no equivale a auditoría de APK o rendimiento físico.
+
+El primer wrapper de tests falló por indentación de Python **antes de Gradle**;
+no fue un fallo de producto. Se preservó y corrigió en wrapper nuevo con ambos
+bloques compilados antes del RED real; no se repite ningún check verde. El pin
+postimage BLTE se actualiza exclusivamente a esa fuente revisada; preimages y
+auditor sin cambios. Un check Python de staging/pins PASS (0,05 s).
+
+Evidencia externa en `download-real-pipeline-c159-20261027/encoded-buffer-focused-tests/`:
+`red-summary.json`, `green-summary.json`, XML/logs/hashes y `source-pin-python.log`.
+**Todavía no hay nueva APK instalada ni prueba de mejora de descarga/GC por este
+cambio**; antes de reemplazar C159 se requiere reconstrucción y auditoría exactas.
 
 ## Matriz de aceptación del objetivo
 

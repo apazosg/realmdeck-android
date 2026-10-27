@@ -50,21 +50,44 @@ class ForeverBlteRangeTest {
 
     @Test
     fun fileVsRangeZeroHeaderRawAndZlib() {
-        val raw = "zero-header".toByteArray()
-        for (encoded in listOf(zeroHeader(raw, 'N'), zeroHeader(raw, 'Z'))) {
-            val file = fixture(encoded)
-            try {
-                ForeverBlte.verify(file, raw.size.toLong(), md5Hex(raw))
-                assertEquals(
-                    "decoded",
-                    ForeverBlte.verifyEncodedRange(
-                        encoded.inputStream(), encoded.size.toLong(), independentEkey(encoded),
-                        raw.size.toLong(), md5Hex(raw),
-                    ),
-                )
-            } finally {
-                file.delete()
+        for (raw in listOf(byteArrayOf(), "zero-header".toByteArray())) {
+            for (encoded in listOf(zeroHeader(raw, 'N'), zeroHeader(raw, 'Z'))) {
+                val file = fixture(encoded)
+                try {
+                    ForeverBlte.verify(file, raw.size.toLong(), md5Hex(raw))
+                    assertEquals(
+                        "decoded",
+                        ForeverBlte.verifyEncodedRange(
+                            encoded.inputStream(), encoded.size.toLong(), independentEkey(encoded),
+                            raw.size.toLong(), md5Hex(raw),
+                        ),
+                    )
+                } finally {
+                    file.delete()
+                }
             }
+        }
+    }
+
+    @Test
+    fun smallEncodedWindowsUseProportionateReadBuffers() {
+        val raw = ByteArray(8193) { (it * 13 + 7).toByte() }
+        for (mode in listOf('N', 'Z')) {
+            val encoded = chunked(raw, mode)
+            val probe = ProbeStream(encoded + byteArrayOf(9, 8, 7), encoded.size)
+            assertEquals(
+                "decoded",
+                ForeverBlte.verifyEncodedRange(
+                    probe, encoded.size.toLong(), independentEkey(encoded),
+                    raw.size.toLong(), md5Hex(raw),
+                ),
+            )
+            assertTrue(
+                "small encoded windows must not allocate full-size read buffers",
+                probe.largestReadBuffer <= encoded.size,
+            )
+            assertEquals(encoded.size, probe.maxRead)
+            assertEquals(0, probe.pastWindowReads)
         }
     }
 
@@ -342,6 +365,7 @@ class ForeverBlteRangeTest {
     private class ProbeStream(val full: ByteArray, private val window: Int) : InputStream() {
         var maxRead = 0
         var pastWindowReads = 0
+        var largestReadBuffer = 0
         private var pos = 0
         override fun read(): Int {
             if (pos >= window) {
@@ -354,6 +378,7 @@ class ForeverBlteRangeTest {
 
         override fun read(buffer: ByteArray, offset: Int, length: Int): Int {
             if (length == 0) return 0
+            largestReadBuffer = maxOf(largestReadBuffer, buffer.size)
             if (pos >= window) {
                 pastWindowReads++
                 return -1

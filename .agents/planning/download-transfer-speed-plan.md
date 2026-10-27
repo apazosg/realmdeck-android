@@ -374,6 +374,21 @@ descarga». Se vuelve al recorrido productivo ya aprobado, no a un corpus aislad
 
 ## Open Issues
 
+- Siguiente corrección acotada mientras avanza C159 real: reducir asignación de
+  buffers encoded del verificador BLTE para objetos/chunks menores de 64 KiB.
+  El perfil C158 de 20 s mostró 10,512 s CPU del verifier y 7,192 s del GC;
+  no atribuye todo el GC a estos buffers, pero la fuente confirma asignaciones
+  fijas de 64 KiB incluso para ventanas diminutas. Cambiar solo a
+  `min(64 KiB, encodedLength)` en entrada buffered y buffers de lectura encoded;
+  no cache global, pools, nueva API, menos autenticación ni buffer decoded menor.
+  Grandes mantienen el mismo tope/recorrido. RED real: un fallo esperado del buffer
+  de entrada; GREEN: once checks, cero fallos/errores/skips (nueve Range y dos CASC),
+  54 s, con el mismo archivo de tests y hashes exactos. Incluye N vacío/Z válido
+  vacío, límites/cancelación y recuperación de prefix. Revisión snapshot sin
+  hallazgos, sin acceso a FS ni rerun. Postimage BLTE revisado actualizado a
+  `6afe01aa…3456f794`; una prueba Python de staging/pins PASS. Candidata pendiente
+  de retag/reconstrucción/auditoría antes de instalar. Ahorro de capacidad asignada
+  no se presenta por sí solo como mejora global de descarga ni como GC medido.
 - Propuesta de comparación aislada no adoptada: cero implementación/descargas.
   Usuario confirma continuar el pipeline real e identificar sus bloqueos. Nuevo
   Resume C159 desde 635.669, con preflight y límites ya aprobados; no corpus/harness.

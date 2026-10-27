@@ -123,7 +123,8 @@ PINNED_UPDATER_BLTE_PREIMAGES = {
     "ForeverBlte.kt": "0dba2c497bea3be99bdf6533cf04084b59926f7027380b5019da551c2f4b78af",
 }
 PINNED_UPDATER_BLTE_POSTIMAGES = {
-    "ForeverBlte.kt": "4a19ccb993fe4e9545abd57d08bd9a32e524d8c556c4483e1972111a7209c8c6",
+    # Same verifier acceptance; encoded input buffers capped by their exact window.
+    "ForeverBlte.kt": "6afe01aa6e0f1ef0dd9c0e152009d8b8cb6e1c8ee9f556a826ad6a313456f794",
 }
 HISTORICAL_CONTROLLER_PATH = Path("app/src/main/java/app/gamenative/ForeverLaunchController.kt")
 NEW_CONTROLLER_TARGET = HISTORICAL_CONTROLLER_PATH

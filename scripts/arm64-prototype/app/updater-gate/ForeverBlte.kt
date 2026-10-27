@@ -162,7 +162,9 @@ object ForeverBlte {
         val digesting = expectedEkey?.let { EKeyDigestingStream(bounded, encodedSize) }
         // Buffering always sits above the exact N-byte bound, never below it,
         // so no read-ahead can pull bytes past the window.
-        val windowed = BufferedInputStream(digesting ?: bounded, BUFFER_SIZE)
+        // Short encoded windows need no unused 64KiB capacity. The exact
+        // bound still sits below buffering; large windows keep the same cap.
+        val windowed = BufferedInputStream(digesting ?: bounded, minOf(BUFFER_SIZE.toLong(), encodedSize).toInt())
         val decodedMd5 = MessageDigest.getInstance("MD5")
         var decodedBytes = 0L
         var encryptedFrames = 0
@@ -438,7 +440,7 @@ object ForeverBlte {
         compressedMd5: MessageDigest?,
         cancelled: () -> Boolean,
     ) {
-        val buffer = ByteArray(BUFFER_SIZE)
+        val buffer = ByteArray(minOf(BUFFER_SIZE.toLong(), length).toInt())
         var left = length
         while (left > 0) {
             checkCancelled(cancelled)
@@ -460,7 +462,7 @@ object ForeverBlte {
         cancelled: () -> Boolean,
         expectedDecodedSize: Long,
     ): Long {
-        val buffer = ByteArray(BUFFER_SIZE)
+        val buffer = ByteArray(minOf(BUFFER_SIZE.toLong(), length).toInt())
         var left = length
         var total = 0L
         while (left > 0) {
@@ -490,7 +492,7 @@ object ForeverBlte {
         expectedDecodedSize: Long,
     ): Long {
         val inflater = Inflater(false)
-        val input = ByteArray(BUFFER_SIZE)
+        val input = ByteArray(minOf(BUFFER_SIZE.toLong(), length).toInt())
         val output = ByteArray(BUFFER_SIZE)
         var left = length
         var total = 0L
