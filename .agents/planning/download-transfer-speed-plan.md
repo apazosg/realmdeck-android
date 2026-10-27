@@ -233,6 +233,32 @@ completado; se ejecutan instrumentación y calibración antes del ensayo prolong
 
 ## Open Issues
 
+- Control de cabeza V2 terminó una vez 27-10 01:38:48 UTC, exit 0, en pausa y sin
+  trabajo activo. Checkpoint 482.513 → 503.039 válido, 20.526 frames coincidentes con
+  el orden congelado, retención raw conservada. Ventana parcial de control 842,927 s,
+  0,876999 MB/s UI, no veinte minutos ni comparación de rendimiento causal.
+  La misma cabeza derivada de 1.376.883 bytes se observa al menos 14,014 s; un GET
+  independiente del cuerpo exacto tarda 0,572 s y autentica. Pairing postvalidado
+  con tres samples alrededor del GET, no EKey/socket directamente trazado.
+  Acota transporte/contexto/pool/UID, pero no decide una causa única o un ajuste.
+  Ya existen retención de Network y drenaje sin disconnect; no repetir esos fixes.
+  Falta contraste de proceso/UID/conexión y mejora comprobada con carga equivalente.
+- Misma C158 completó 1.210,974 s visibles el 27-10, final 00:27:07 en pausa:
+  1,504145 MB/s UI, 1,505921 del sampler; checkpoint 455.407 → 482.513 válido,
+  27.106 objetos (22.001/4.842/263), todos range. El prefijo termina durante la
+  ventana, pero persiste head wait ≈65 % después. Sin atribución causal del cambio
+  de tasa respecto al timeout previo. Los grandes direct y la cola siguen pendientes.
+- El control simultáneo de seis GET se autenticó durante la ventana, pero usó otros
+  objetos calientes. Contraste siguiente: un único GET de la cabeza LargeRange
+  derivada inequívocamente del orden activo/ACK/grupo pendiente ≤15; nunca una
+  identidad directamente trazada. Rechazar tamaños duplicados, raws heredados y
+  cabeza ya terminada; alinear epochs y comprobar después el orden durable.
+  Lookahead congelado de 65.536 tras verificar los 27.106 frames previos completos.
+  Primer setup falló cerrado sin Resume/GET por clave de consentimiento del informe;
+  V2 corrige solo esa interfaz y compara exactamente con el consentimiento original.
+  Mantiene máximos 20 min/6 GiB, con señal de pausa tras al menos 120 s del intento auxiliar
+  sea cual sea el resultado: control diagnóstico, no sustituto del benchmark de veinte
+  minutos ya completado. Esperar su resultado original; no APK/tuning/instalación.
 - Controles Android cerrados: V3 seis respuestas autenticadas, 23:03:43, y contraste
   serial/paralelo/paralelo/serial de tres streams, 23:24:26, doce autenticadas.
   Fases 0,952/2,544/0,730/0,326 s, sin reproducir minutos de bloqueo. Checkpoint

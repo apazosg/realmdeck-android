@@ -978,15 +978,148 @@ rápida mientras la app sigue esperando, acota contexto/conexiones/pipeline; si 
 se degradan, apoya un recurso/ruta compartido. Ningún resultado autoriza por sí solo
 un ajuste: se contrastará además el periodo de verificación del prefijo.
 
+### Misma C158: veinte minutos mixtos y control simultáneo
+
+Resume 23:53:53 UTC, sin cambiar APK ni algoritmo. Payload visible
+27-10 00:06:08,996–00:26:19,970: **1.210,974 s, 1,504145 MB/s UI**
+(solo redondeo 1,459768–1,548523). El sampler exacto cubre 1.209,902 s y mide
+**1,505921 MB/s** de progreso lógico; los relojes/bordes no son idénticos.
+Diez subventanas UI de unos dos minutos: 2,509 / 1,047 / 1,380 / 2,628 / 1,997 /
+1,020 / 0,875 / 0,878 / 1,747 / 0,878 MB/s. Duraciones y bytes particionan la ventana.
+Esto mejora la representación temporal, **no demuestra un efecto de código**:
+la misma APK había observado 0,024 MB/s y timeout en el ensayo anterior.
+
+Pause 00:26:47; final 00:27:07, En pausa/Reanudar y cero servicios/HTTP/active gauges;
+los 6.019 callbacks finalizaron. Checkpoint 455.407 → **482.513**, 27.106 nuevos
+objetos y 1.857.291.826 bytes encoded, prefix/CRC válidos. Raw 30 claves/413.626
+bytes → 6/192.264, ninguna inicial perdida. Balance completo de entrada 1.857.070.464
+bytes, no wire ni el numerador de la ventana UI.
+
+Mezcla durable: **22.001 pequeños**, 449.574.475 bytes; **4.842 intermedios**,
+1.040.150.213; **263 grandes**, 367.567.138. Todos range. Grandes entre 1.049.203 y
+2.094.110 bytes: no representan aún direct grandes ni la cola hasta 141 MB.
+
+En el intervalo visible muestreado:
+
+| Observación no exclusiva | Valor |
+|---|---:|
+| Cabeza esperando future | 65,18 % |
+| Cabeza esperando con ready-ahead | 51,94 % |
+| Reserva en el límite de 34 claves | 92,97 % |
+| HTTP activos, media ponderada | 2,985 |
+| Callbacks activos, media ponderada | 3,166 |
+| Ready-ahead, media ponderada | 11,489 |
+| Cuerpo/cabeceras activos | 67,83 % / 52,19 % |
+| Autenticación/force privado/progreso activos | 8,11 % / 3,97 % / 2,23 % |
+
+Hay bloqueo de cabeza y contrapresión observados; estos estados se solapan, no
+atribuyen todas las esperas a una causa ni explican por sí solos la baja ocupación.
+El prefijo terminó 00:19:34,679: la cabeza esperó aproximadamente 65 % tanto antes
+como después. El progreso muestreado pasó de 1,749 a 1,019 MB/s con objetos distintos;
+no se atribuye al verificador. CPU de proceso cayó de intervalos 140–150 % de un
+core a 104/53/51 %; las tablas cortas de hilos mostraron prefix 45–80 % y HeapTaskDaemon
+11–59 % mientras verificaba. Son snapshots, no un perfil temporal aditivo.
+UID TOP, RSSI −41 dBm, PHY 1.201 Mbps; IO por `/proc` no disponible, no cero.
+
+El control shell fijo de seis GET se lanzó una sola vez durante la espera:
+00:16:38–00:16:46, **6/6 autenticadas**. La VM estuvo 5,317 s dentro de la ventana
+visible; los cinco samples interiores mantuvieron cabeza+ready y reserva al límite.
+No se aseguró que fuera la misma cabeza todo ese intervalo, y los objetivos
+auxiliares eran otros ya consultados. Sus tiempos 1,061 / 0,994 / 0,768 / 0,752 /
+0,822 / 0,425 s no exoneran peer, UID, pool o caché de la petición real.
+
+Evidencia: `c158/paired-trial/paired-diagnostic-analysis.json`, suplemento de
+subventanas/tablas `captured-supplement.json`, `paired-source-control/` y observer.
+Análisis offline, sin repetir el ensayo ni las consultas ya completadas.
+
+### Contraste de la cabeza derivada, sin cambiar el cliente
+
+Para no comparar otro objeto caliente, el siguiente control usa una sola petición
+≤3 MiB/15 s del objeto LargeRange pendiente, excluyendo raws heredados. Su identidad
+es **derivada, no un EKey/socket directamente trazado**: un único writer, ACKs físicos
+y grupo pendiente 0–15 sitúan la cabeza entre `committed` y `committed+15`; se exige
+un único tamaño coincidente y tres segundos con el mismo contador/tamaño.
+El orden del catálogo activo coincidió con los 27.106 frames anteriores completos;
+se congela un lookahead de 65.536. Si es ambiguo, heredado, fuera del lookahead o
+ya terminó antes del GET, no se consulta. Revisión del snapshot condicionada a esa
+prueba de pertenencia; el proceso principal inspeccionó los sitios de ACK/source/flush.
+
+Un primer setup terminó antes de Resume/GET por un campo del informe del propio
+controlador (`inspectedConsentLabels` frente a `resumedConsentLabels`). Cero acciones;
+se conserva intacto. V2 reproduce el error con el JSON capturado y exige que el
+consentimiento retomado sea exactamente el original; sin relajar coste/cliente/USB.
+No se reconstruye la APK ni el jar compilado para corregir esos metadatos.
+
+V2 es un **control diagnóstico auxiliar, no otro benchmark de estabilidad**: máximo
+1.200 s visibles/6 GiB, pero solicita pausa tras al menos dos minutos del intento auxiliar completo,
+independientemente de su éxito. Un cierre temprano no se presenta como veinte minutos
+y no reemplaza la captura mixta ya completada. Source GET y samples se alinearán
+por epoch/monotonic y orden durable posterior; UID/pool/peer y el posible calentamiento
+del CDN siguen siendo límites. Esperar el controlador original, no repetirlo.
+
+### Resultado del control de cabeza derivada
+
+El controlador V2 terminó una vez, exit 0, **27-10 01:38:48 UTC**. Resume 01:11:01;
+payload visible 01:23:52,316–01:37:55,243: **842,927 s**, 0,876999 MB/s UI
+(solo redondeo 0,876875–0,877124). Es la ventana parcial del control prefijado,
+**no** otra prueba de veinte minutos. Sampler interior 841,625 s: 0,879828 MB/s.
+No se compara causalmente esa tasa con la de la captura mixta anterior.
+
+Pausa enviada 01:38:22; final En pausa/Reanudar, cero servicios/HTTP/gauges y los
+3.895 callbacks finalizados. Checkpoint **482.513 → 503.039**, 20.526 nuevos objetos,
+910.735.469 bytes encoded, prefix/CRC válidos. Los 20.526 EKeys nuevos coinciden
+con el prefijo completo del orden congelado. Raw 6 claves/192.264 bytes → 20/46.650;
+ninguna inicial perdida. No quedan append sin checkpoint. Mezcla durable range:
+18.733 pequeños, 1.688 intermedios y 105 grandes (1.056.926–2.068.863 bytes).
+No se extiende esa cobertura a direct ni a la cola grande.
+
+El control consultó **una sola vez** el objeto de 1.376.883 bytes, candidato único
+a offset 3 tras el último ACK. Respuesta 206 autenticada por EKey/BLTE/CKey:
+**0,572301 s total**, 0,276366 s cabeceras y 0,294754 s lectura del cuerpo. Ningún
+acceso `run-as`/checkpoint durante la actualización; ningún blob se instaló.
+
+La identidad derivada se postvalida con el orden durable y la misma cabeza en los
+samples que rodean la petición: el anterior está 0,946 s antes y el posterior
+0,482 s después; los tres tienen todos los callbacks activos dentro del scope BODY.
+La diferencia entre duración epoch y monotónica del control es 0,000699 s.
+La misma cabeza permanece observada en **15 samples durante 14,014 s**; trece
+coinciden con todos los callbacks activos en BODY. Es un límite conservador del
+scope de espera observado, **no** catorce segundos de lectura de un socket trazado.
+El objeto original terminó durable y no era un raw heredado.
+
+Esto descarta tratar ese cuerpo como intrínsecamente lento o atribuir la espera
+directamente a escribirlo en CASC: otra conexión en el teléfono lo sirvió rápidamente
+mientras el writer seguía esperando. **No identifica una causa única**: se mantienen
+distintos UID, proceso/pool, conexión/peer y contexto de ejecución; la petición
+auxiliar también puede calentar CDN o competir. No prueba que el CDN o el cliente
+estén globalmente libres de problemas, ni valida un nuevo tuning.
+
+En la ventana visible, cabeza pendiente 62,07 %, con ready-ahead 47,21 %; reserva
+de 34 claves 95,60 %, media HTTP 2,515 y ready-ahead 10,423. Cabeceras/cuerpo activos
+57,67/51,25 %, estados solapados. El prefijo termina 01:37:43,192: solo quedan diez
+segundos visibles después, insuficientes para declarar causal su tasa de 4 MB/s.
+No se aumenta la cuota ni se cambia el timeout a partir de estos datos.
+
+La inspección de fuentes confirma que ya se conserva la instancia `Network` y no
+se desconecta una respuesta correctamente drenada. No se encontró un override
+global de keepalive/proxy/user-agent en las fuentes de la app; **eso no verifica
+la reutilización real de sockets**. Falta discriminar proceso/UID/conexiones y
+validar una corrección sobre cargas equivalentes antes de aceptar mejora general.
+
+Evidencia externa: `exact-head-trial-v2/exact-head-analysis.json`,
+`derived-head-interval.json`, `exact-head-source-control-v2/`, contexto/manifiesto
+congelados, calibraciones y marcadores `exact-head-v2-run-*`. Análisis solo offline;
+ninguna acción ni petición se repitió para cerrar el informe.
+
 ## Matriz de aceptación del objetivo
 
 | Criterio | Evidencia y estado |
 |---|---|
 | Línea base con unidades, ambos tamaños y preparación separada | C152: 609,206 s; UI, frames y raw balance distinguidos. Comprobado. |
-| Diagnóstico sin sumar relojes concurrentes | C158 localiza espera de fuentes: head 98,49 %, cuerpo activo 94,18 % y timeout de cuerpo confirmado. **[PENDING]** discriminar fuente/ruta/cliente y validar la mezcla restante. |
+| Diagnóstico sin sumar relojes concurrentes | C158 localiza espera de fuentes; veinte minutos mixtos y control del mismo objeto derivado acotan transporte/contexto y contrapresión. **[PENDING]** causa dominante específica y direct/cola restante; no afirmar causalidad del código. |
 | Mejora medida y evaluación por tamaño | C156/C157 medidas, pero solo 151/5 grandes y tamaños distintos. +16,90 % C155 y −47,57 % C157 observacionales no validan mejora general. **[PENDING]** comparación representativa. |
 | Garantías, pruebas, revisión sensible y APK autenticada | Diez regresiones y revisión del cambio sensible; cuatro checks iniciales, dos tras simplificar métricas y tres de versión. Ambas APK auditadas; ensayos con prefix/CRC/retención válidos. Comprobado para estos escenarios. |
-| Informe, pausa final, progreso y commits propios | C158 falló sin retry; final 21:45:30, checkpoint 455.407 válido, cero trabajo activo y raws retenidos; commits propios. **[PENDING]** completar el objetivo y archivar plan solo entonces. Sin publicación/push. |
+| Informe, pausa final, progreso y commits propios | Control final terminó 01:38:48 en pausa, checkpoint 503.039 válido, cero trabajo activo y raws retenidos. **[PENDING]** mejora demostrada y objetivo completo antes de archivar. Sin publicación/push. |
 
 ## Pendiente
 
