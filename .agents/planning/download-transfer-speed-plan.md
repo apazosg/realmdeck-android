@@ -16,8 +16,9 @@ ni en un mínimo de velocidad prometido.
 
 Goal original: `5caa6403-5b8f-47dc-ba95-ba40fbbe686e`; continuación de una hora
 `fd7baae8-8a14-47b0-8452-6d8f7434217e`; continuación de seis horas
-`0d3ea00f-a91e-4702-88ad-febb37adb87f`; relanzamiento actual autorizado:
-`5a98db34-7924-4936-86dd-0e9fce64eacd`. Este trabajo parte de C152 y se centra
+`0d3ea00f-a91e-4702-88ad-febb37adb87f`; relanzamiento autorizado
+`5a98db34-7924-4936-86dd-0e9fce64eacd`, después cancelado. Continuación actual:
+`7722a995-d31c-4ec3-b8b9-0795f62a7e81`. Este trabajo parte de C152 y se centra
 en transferencia efectiva, no en volver a optimizar el inicio de la descarga.
 El usuario aprobó este plan el 2026-10-26: «adelante. vamos a ello». Se ejecutan
 diagnóstico, cambios mínimos y ensayos acotados dentro de las garantías y límites
@@ -33,6 +34,11 @@ El 27-10 a las 13:25 UTC autoriza «Continuar otras 6 h» y «venga pues continu
 Se conserva el mismo goal y su historial; esta autorización de tiempo no aprueba
 por sí sola un nuevo punto de entrada diagnóstico, costes o cambios de garantías.
 Un límite técnico anterior tampoco se eludirá ni se modificará silenciosamente.
+El usuario elige después «Crear continuación» para conservar objetivo, criterios y
+avances, sin ampliar el tiempo autorizado. Se crea un goal nuevo de 1.800 s desde
+17:39:20 UTC, hasta 18:09:20, antes del límite anterior 18:11:59. La cancelación
+anterior se conserva; no se marca como finalización ni se reinicia el controlador
+que ya estaba activo. No se autorizan nuevas rondas por este cambio de lifecycle.
 
 ## Content
 
@@ -393,6 +399,17 @@ descarga». Se vuelve al recorrido productivo ya aprobado, no a un corpus aislad
 
 ## Open Issues
 
+- Continuación autorizada tras cancelación: nuevo goal `7722a995…7e81`, mismos cinco
+  criterios y tareas verificadas. Se espera únicamente el controlador ya lanzado
+  de `download-real-pipeline-c160-budget-tail-20261027/`, sin otro Resume. El último
+  cierre íntegramente validado sigue siendo 792.758; el resultado nuevo no se anticipa.
+- Analizador offline del tramo final preparado, todavía sin ejecutar: checksum del
+  checkpoint anterior, prefix/CRC/retención/ACKs/joins y fases finales, catálogo real,
+  tamaños y scopes; siete referencias previas conservadas. Un límite general deja
+  ventana censurada; sin dos muestras visibles no se inventa una tasa cero.
+  Calibración host 17:42:37 PASS (sintaxis, 25 asserts preservados, tres cambios
+  explícitos y dos casos sin ventana). Fuente `0e261a45…08874c1`; sin acción de
+  dispositivo, consulta de la captura activa ni replay de análisis/pruebas.
 - C160 larga terminó 17:17:52 UTC, en pausa/cero servicios, tras 2.714,067 s
   visibles: UI 1,938490 MB/s; sampler distinto 2.713,251 s a 1,950471 MB/s.
   Checkpoint 709.577 → 792.758, 83.181 nuevos (67.507/15.119/555), todos range;

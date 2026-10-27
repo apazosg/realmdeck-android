@@ -3,7 +3,8 @@
 Fecha: 2026-10-26. Goal original `5caa6403-5b8f-47dc-ba95-ba40fbbe686e`;
 continuaciones autorizadas `fd7baae8-8a14-47b0-8452-6d8f7434217e` y
 `0d3ea00f-a91e-4702-88ad-febb37adb87f`; relanzamiento autorizado 2026-10-27:
-`5a98db34-7924-4936-86dd-0e9fce64eacd` (actual, otras seis horas de margen).
+`5a98db34-7924-4936-86dd-0e9fce64eacd` (después cancelado). Continuación actual
+`7722a995-d31c-4ec3-b8b9-0795f62a7e81`, expresamente autorizada sin ampliar plazo.
 **Resultados exploratorios; mejora general no validada. Diagnóstico reabierto.**
 
 El [plan aprobado](../.agents/planning/download-transfer-speed-plan.md) se centra
@@ -1720,8 +1721,27 @@ límite técnico 18:11:59. No instalar, reset, profiling, GET auxiliar ni harnes
 Calibración host 17:23:47: sintaxis, nueve helpers AST-idénticos, consentimiento
 heredado cotejado con el original y último informe validado; sin acción de dispositivo.
 Evidencia `download-real-pipeline-c160-budget-tail-20261027/controller-calibration.json`;
-controlador `6f7004c6…b453a7fb`, wrapper `bdfbe3fe…d636a67fa`. A este corte preparado,
-no ejecutado; no reanudar ningún controlador ya terminado.
+controlador `6f7004c6…b453a7fb`, wrapper `bdfbe3fe…d636a67fa`. Ese corte era previo
+al lanzamiento único de la continuación; no reanudar ningún controlador terminado.
+
+### Continuación autorizada tras cancelación, sin repetir la descarga
+
+Al recibir «sigue», el goal anterior figuraba cancelado. Una lectura host 17:34 UTC
+confirmó que el controlador presupuestado original seguía activo, con intención
+Resume persistida y sin resultado final; no se envió otra acción. El usuario eligió
+**«Crear continuación»**, conservando objetivo, criterios y tiempo ya autorizado.
+El nuevo goal tiene 1.800 s desde 17:39:20 hasta 18:09:20 UTC, antes del límite
+anterior 18:11:59. Conserva tareas verificadas y aceptación pendiente; no declara
+el anterior complete/unmet ni amplía cuotas, rondas, destino o plazo del controlador.
+
+Análisis del nuevo tramo preparado sin consultar su captura activa: sintaxis,
+25 asserts previos exactos, tres cambios explícitos por el límite 900/1.500 s y
+dos casos sin ventana visible verificados a las 17:42:37. El resultado censurado
+no se presenta como quince minutos; ausencia de muestras es no disponible, no
+velocidad cero. Conserva siete referencias, scopes y todos los checks de integridad.
+Evidencia externa nueva: `analyzer-calibration.json` y `analyze_real_progress.py`
+(`0e261a45…08874c1`) del workspace budget-tail. No se ha ejecutado todavía sobre
+el tramo activo ni repetido dispositivo, builds, tests, perfiles o análisis cerrados.
 
 ## Matriz de aceptación del objetivo
 
