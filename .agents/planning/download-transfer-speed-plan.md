@@ -236,6 +236,22 @@ completado; se ejecutan instrumentación y calibración antes del ensayo prolong
 
 ## Open Issues
 
+- Diagnóstico del proceso real, antes de otro ajuste: Perfetto propio de cuatro
+  segundos en reposo calibrado en SDK 34, 18 muestras CPU del PID objetivo con
+  callsites/nombres Java y cero errores de unwind/pérdida en esa configuración.
+  Es capacidad del instrumento, no causa del atasco. No usar AM profile global,
+  debuggerd root ni repetir controles HTTP ya rápidos.
+- Contraste prefijado siguiente: misma C158, nuevo Resume desde el checkpoint
+  503.039; primer estado head+body+ready persistente diez segundos muestreados
+  dispara **una sesión propia de 20 s, 19 Hz**, CPU del proceso y scheduling.
+  Configuración ya calibrada, solo cambia duración; buffer 8 MiB, pull ≤16 MiB,
+  sin heap, paquetes, flags de seguridad ni cambios de APK. PID/UID/startticks y
+  nonce propios para terminar únicamente ese consumer si falla el timeout.
+  Máximos 20 min/6 GiB y pausa cooperativa; termina tras 120 s del intento de
+  captura, sea exitoso o no, etiquetado control y no otro benchmark de veinte minutos.
+  CPU/runnable alta en workers frente a prefix/GC apoya contención CPU; trabajadores
+  dormidos con poca espera runnable apoyan bloqueo fuera de CPU. Los frames de
+  CPU solo muestrean ejecución, no prueban el método de un socket bloqueado.
 - Continuación comprobada 27-10: rama limpia `42ae0bd`, C158 sin cambios y último
   checkpoint verificado 503.039. Todos los controles descritos abajo han terminado;
   sus propuestas/estados intermedios son históricos, no instrucciones de replay.

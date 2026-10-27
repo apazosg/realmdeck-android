@@ -1112,6 +1112,55 @@ Evidencia externa: `exact-head-trial-v2/exact-head-analysis.json`,
 congelados, calibraciones y marcadores `exact-head-v2-run-*`. Análisis solo offline;
 ninguna acción ni petición se repitió para cerrar el informe.
 
+### Instrumento de CPU/scheduling: calibración y contraste prefijado
+
+El 27-10 se comprobó solo lectura de capacidades, sin reanudar el cliente. Se evitó
+`am profile`, que comparte un slot global y no da exclusión atómica de perfiles
+ajenos, y `debuggerd`, cuya implementación exige root. No se cambió seguridad.
+Una primera calibración de scheduling dejó TCP/símbolos de bloqueo no utilizables;
+no se interpretaron eventos ausentes como red sana ni se repitió esa captura.
+
+La configuración reducida de sesión **propia** Perfetto (4 s, CPU 19 Hz y sched,
+8 MiB DISCARD, sin frames de kernel) terminó 07:17:13 UTC. Traza de 173.102 bytes,
+18 muestras CPU del PID 11485 con callsites y nombres Java reales; cero errores
+de unwind o pérdida reportados. Se verificó en el SDK 34 del teléfono, sin asumir
+compatibilidad por la versión de una guía. Fue en reposo, con cero updater/guest:
+demuestra que el instrumento funciona, **no** el cuello de la descarga activa.
+Herramienta de análisis oficial, fijada por SHA, instalada solo en artifacts externos.
+
+Próximo control, antes de tuning: **misma C158 y checkpoint 503.039**, nueva
+reanudación, sin reinstalar. Tras diez segundos muestreados head+body+ready, una
+única captura propia de **20 s a 19 Hz**, con la configuración calibrada salvo la
+duración. Se conserva máximo de 1.200 s visibles/6 GiB de progreso nuevo y pausa;
+se solicita también pausa a los 120 s de acabar el intento de captura, cualquiera
+que sea su resultado. Un fin anterior no sustituye los veinte minutos ya medidos.
+Se marcan la captura y su posible perturbación; ningún GET auxiliar nuevo.
+
+Predicciones: workers con demora runnable apreciable y CPU competida por prefix/GC
+apoyan un cuello de scheduling/CPU; workers dormidos sin demora runnable apreciable
+con head/body activo apoyan espera fuera de CPU. Se examinarán stacks CPU y estados
+por TID, sin sumar tiempos de hilos como pared ni atribuir automáticamente un hilo
+idle del pool al callback bloqueado. **Los stacks CPU no muestran todos los métodos
+bloqueados ni identifican por sí solos un socket/CDN**. El resultado decidirá el
+siguiente contraste o cambio mínimo, no se presupone una causa.
+
+Protocolo: guardas frescas de versión, Wi-Fi, guest, consentimiento y checkpoint;
+solo procesos/lecturas UID shell durante el updater. Sesión/PID/startticks/nonce
+propios, sin stop global ni tocar otro perfil; límites de tiempo, buffer y pull,
+y espera de terminación antes del cleanup exclusivo. Calibraciones, SQL y trazas
+privadas en `download-transport-diagnosis-20261027/`, nunca en Git ni subidas.
+
+Controladores nuevos revisados y calibrados solo en host antes de ejecutarlos:
+sintaxis Python/shell, consentimiento exacto de los JSON previos, predicado de
+trigger con datos ya capturados y cinco casos de ownership simulado (propio,
+desaparecido, PID reutilizado, UID ajeno, comando ajeno). Solo el primero permite
+una señal simulada; los otros no señalan. Configuración idéntica a la calibrada
+salvo 4 → 20 s. Hashes congelados en `active-profile-controller-calibration.json`.
+La frescura se toma de la última línea wall/alineación coherente, no del JSON UI
+que se publica más lentamente. Revisión independiente de snapshot, sin inspección
+de archivos ni reruns. El check de ownership y la señal no constituyen un pidfd
+atómico; ese límite no se oculta como exclusión absoluta de carreras.
+
 ## Matriz de aceptación del objetivo
 
 El usuario autorizó «relancemos el goal otras 6 horas». La nueva planificación
