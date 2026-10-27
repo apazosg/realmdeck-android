@@ -1,16 +1,17 @@
 # USB entre dos móviles: datos parciales visibles, reanudación no demostrada
 
-Evidencia del 27-10-2026, corte 19:39:44 UTC. Alcance aprobado en
-[el plan](../.agents/planning/usb-cross-phone-plan.md): inspección de solo lectura
-en el teléfono personal, sin descargar, reparar, preparar carpeta, instalar APK,
-migrar metadatos privados ni cambiar permisos o ajustes.
+Evidencia del 27-10-2026: inspección USB cerrada 19:39:44 UTC y actualización
+expresamente aprobada de la app cerrada 19:52:23. Alcance en
+[el plan](../.agents/planning/usb-cross-phone-plan.md): lectura del cliente y
+reemplazo de la app, sin descargar, reparar, preparar carpeta, migrar metadatos
+privados ni cambiar permisos o ajustes.
 
 ## Resultado observado
 
 - ADB conectado mediante el nuevo endpoint facilitado por el usuario; identificador
   guardado únicamente en `private/`, no en este informe.
-- Segundo móvil: Android SDK36; app **C146 / 0.2.122-performance-preview**, frente a
-  C160 del original. No se instaló ni sustituyó ninguna app.
+- Segundo móvil: Android SDK36; inicialmente **C146 / 0.2.122-performance-preview**.
+  Después se reemplazó por C160 con autorización separada, como se detalla abajo.
 - El volumen USB esperado está montado. La ruta exacta del cliente, el staging y
   su carpeta `Data/data` son legibles por shell UID2000.
 - **81 archivos CASC `data.000`–`data.080`, 51.625.635.891 bytes (48,08 GiB)**.
@@ -57,12 +58,26 @@ Los listados originales anteriores al traslado estaban explícitamente rechazado
 por errores `ls`; no se usan como baseline. Endpoints, rutas privadas, IDs del
 volumen, listados y capturas permanecen fuera de Git.
 
-## Ampliación aprobada después de esa inspección
+## Actualización de la app aprobada y completada
 
 El usuario seleccionó «Actualizar C160»: solo reemplazar la app C146 por la C160
 auditada, preservando datos mediante instalación `-r`, sin desinstalar ni forzar
-una firma incompatible. Se comprobarán hash/tamaño de la APK, ausencia de updater
-o guest de la app, versión/UID y metadatos USB posteriores. No se inicia descarga,
-reparación, adopción del parcial, migración de checkpoint o juego. La actualización
-no convierte por sí sola el staging en cliente completo ni demuestra reanudación.
-En este corte todavía no se ha ejecutado la instalación.
+una firma incompatible. Se ejecutó una vez `install -r --no-streaming`; Android
+confirmó `Success`. Inicio 19:50:37 UTC, final **19:52:23 UTC**:
+
+- Versión posterior **C160 / 0.2.136-bounded-blte-buffers-test**, mismo UID.
+- APK exacta previamente auditada, 484.953.835 bytes, SHA-256
+  `9dcc86b4917842285888d4db177fcaab58111f2f9a9ba9c5d9321d735c57d466`;
+  su hash se comprobó antes de instalar, sin repetir compilación/auditoría.
+- Cero servicios updater antes/después y sin procesos guest de esa app.
+- `.owner` y diccionario completo de nombres/tamaños de los **81 CASC y
+  51.625.635.891 bytes** iguales antes/después de la actualización.
+- Sin desinstalación, borrado, cambio de permisos/ajustes, lanzamiento de app,
+  descarga, reparación, adopción del parcial, migración de checkpoint o juego.
+
+Evidencia externa: `personal-c160-install/summary.json`, `adb-install.txt`,
+metadatos previos/posteriores y `personal-c160-install-calibration.json`.
+El UID y los metadatos comparados no equivalen a cotejar todos los datos privados
+ni autenticar todos los cuerpos CASC. La actualización no convierte el staging
+en cliente completo ni demuestra reanudación. Siguen pendientes el veredicto de
+la app y la devolución del USB al original para comprobar su checkpoint.

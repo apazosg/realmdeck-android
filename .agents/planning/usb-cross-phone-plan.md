@@ -39,8 +39,9 @@ una descarga incompleta. No cambia el objetivo de optimización de descarga.
   `ls` pese a returncode0: evidencia rechazada en `source-usb-inventory-v2/verification.json`,
   no prueba de datos desaparecidos ni inventario válido. No existe hash de todo
   el volumen; no prometer igualdad binaria o integridad completa de sus bytes.
-- El nuevo endpoint facilitado por el usuario conecta: Android SDK36, app C146
-  `0.2.122-performance-preview`, más antigua que C160 del original. Sin reemplazarla.
+- El nuevo endpoint facilitado por el usuario conecta: Android SDK36. La lectura
+  inicial encontró C146 `0.2.122-performance-preview`; el reemplazo autorizado
+  posterior por C160 se registra abajo.
   El volumen esperado está montado. El contexto `run-as` recibe Permission denied
   incluso en la raíz del volumen; shell UID2000 puede leer las rutas exactas.
   Esto no demuestra qué acceso tiene la app ejecutada normalmente.
@@ -58,13 +59,19 @@ una descarga incompleta. No cambia el objetivo de optimización de descarga.
   Después: comprobar versión, UID conservado y metadatos del staging sin iniciar
   descarga. No se fuerza una firma incompatible ni se reintenta una instalación
   de resultado incierto; no se cambia seguridad ni se migra el checkpoint.
+- Reemplazo ejecutado una vez, final 19:52:23 UTC: Android confirmó `Success`,
+  versión C160 `0.2.136-bounded-blte-buffers-test` y mismo UID. Cero servicios updater
+  antes/después; `.owner` y diccionario completo de nombres/tamaños de los 81 CASC
+  sin cambios. No lanzamiento de app, descarga ni juego. No se cotejaron todos los
+  datos privados ni los cuerpos CASC. Evidencia externa:
+  `personal-c160-install/summary.json` y `adb-install.txt`.
 
 ## Implementation / Action Items
 
 - [x] 1. Cerrar el controlador original y verificar pausa/checkpoint/ausencia de trabajo.
 - [x] 2. Usuario comunica traslado al segundo teléfono; no se presupone reutilización.
 - [x] 3. Conectar ADB al endpoint autorizado; comprobar versión Android y app instalada.
-- [ ] 3a. Actualización C160 expresamente aprobada: reemplazo preservador y verificación,
+- [x] 3a. Actualización C160 expresamente aprobada: reemplazo preservador y verificación,
   sin operaciones sobre el cliente ni lanzamiento automático del juego.
 - [ ] 4. Inspeccionar reconocimiento y veredicto sin mutaciones, registrando límites.
   Metadatos del staging comprobados; pendiente el veredicto de la interfaz de la app.
@@ -74,8 +81,8 @@ una descarga incompleta. No cambia el objetivo de optimización de descarga.
 
 ## Open Issues
 
-- La ampliación para actualizar solo la app a C160 está aprobada; pendiente su
-  ejecución y verificación. No autoriza descargar/reparar/adoptar el parcial ni
+- Actualización C160 completada y verificada en versión/UID/metadatos, sin abrir
+  automáticamente la app. No autoriza descargar/reparar/adoptar el parcial ni
   migrar el checkpoint. La inspección de archivos del cliente sigue siendo de
   solo lectura.
 - Pendientes reconocimiento/veredicto en la interfaz de la app y devolución al
