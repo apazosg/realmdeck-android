@@ -374,6 +374,24 @@ descarga». Se vuelve al recorrido productivo ya aprobado, no a un corpus aislad
 
 ## Open Issues
 
+- Continuación **real** C159 terminada 27-10 15:10:28 UTC, una sola vez: 635.669 →
+  670.605 durables, prefix/CRC/retención válidos, cero servicios/HTTP/fases activos.
+  1.214,326 s UI a 1,414441 MB/s; sampler 1,435583 MB/s. Nuevos objetos
+  30.109 pequeños/4.599 intermedios/228 grandes, todos range. El coste raw permanece
+  0,857568 ms/objeto (~15,982 retiros/barrera), pero cambia el tramo: cabeza esperando
+  57,46 %, con readyAhead 46,74 % y cuerpo activo 55,56 %, estados solapados. No se
+  confunde un salto UI de 0 bytes por redondeo GiB con una parada real de red.
+- C160 autenticada desde `5005615`, build Modern offline JDK17 PASS 5 min 17 s,
+  final 15:09:32. APK 484.953.835 bytes, SHA `9dcc86b4…35c57d466`, auditoría PASS:
+  2.226 fuentes matching/178 payloads, 2.218 idénticas C152/2.220 C158/2.222 C159.
+  Frente a C159 solo cambian BLTE/RangeTest/versión/marker; inputs, lineage,
+  privacidad, payloads y auditor intactos. Se cotejan las seis fuentes testeadas.
+  Próximo avance del cliente desde el checkpoint real 670.605: reemplazo `-r`
+  preservador, preparación sin payload, resumen real dentro de límites consentidos
+  y un Download, 1.200 s visibles o señal 6 GiB con pausa cooperativa. Sin scratch,
+  profiling, GET auxiliar ni replay. Los controladores nuevos tienen guardas de
+  contexto y sintaxis verificadas antes de ejecutarse; no hay mejora GC/velocidad
+  atribuida todavía a buffers menores.
 - Siguiente corrección acotada mientras avanza C159 real: reducir asignación de
   buffers encoded del verificador BLTE para objetos/chunks menores de 64 KiB.
   El perfil C158 de 20 s mostró 10,512 s CPU del verifier y 7,192 s del GC;
@@ -386,9 +404,10 @@ descarga». Se vuelve al recorrido productivo ya aprobado, no a un corpus aislad
   54 s, con el mismo archivo de tests y hashes exactos. Incluye N vacío/Z válido
   vacío, límites/cancelación y recuperación de prefix. Revisión snapshot sin
   hallazgos, sin acceso a FS ni rerun. Postimage BLTE revisado actualizado a
-  `6afe01aa…3456f794`; una prueba Python de staging/pins PASS. Candidata pendiente
-  de retag/reconstrucción/auditoría antes de instalar. Ahorro de capacidad asignada
-  no se presenta por sí solo como mejora global de descarga ni como GC medido.
+  `6afe01aa…3456f794`; una prueba Python de staging/pins PASS y tres de retag PASS.
+  Reconstrucción/auditoría C160 completadas; instalación física pendiente.
+  Ahorro de capacidad asignada no se presenta por sí solo como mejora global de
+  descarga ni como GC medido.
 - Propuesta de comparación aislada no adoptada: cero implementación/descargas.
   Usuario confirma continuar el pipeline real e identificar sus bloqueos. Nuevo
   Resume C159 desde 635.669, con preflight y límites ya aprobados; no corpus/harness.

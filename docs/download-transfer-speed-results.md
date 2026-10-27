@@ -1416,8 +1416,8 @@ Calibración estática 27-10 14:32:19 UTC PASS: sintaxis Python/bash, únicos cl
 Reanudar/Pausar, guardas de pausa/recursos AST-idénticas y consentimiento de la C159
 anterior. Checkpoint idle con timeout de 90 s. Fuente `9fb636fa…beeb180d` y wrapper
 `d66546fd…3518e505`; evidencia externa en `download-real-pipeline-c159-20261027/`.
-Se lanzó una sola vez tras registrar el protocolo; al añadir el siguiente cambio
-no se ha incorporado todavía su resultado. No relanzarlo por perder la notificación.
+Se lanzó una sola vez tras registrar el protocolo; el resultado se incorpora abajo.
+No relanzarlo por perder la notificación.
 
 ### Verificador BLTE: buffers proporcionales a la entrada encoded
 
@@ -1451,8 +1451,68 @@ auditor sin cambios. Un check Python de staging/pins PASS (0,05 s).
 
 Evidencia externa en `download-real-pipeline-c159-20261027/encoded-buffer-focused-tests/`:
 `red-summary.json`, `green-summary.json`, XML/logs/hashes y `source-pin-python.log`.
-**Todavía no hay nueva APK instalada ni prueba de mejora de descarga/GC por este
-cambio**; antes de reemplazar C159 se requiere reconstrucción y auditoría exactas.
+**Todavía no hay prueba física de mejora de descarga/GC por este cambio**; la
+reconstrucción y auditoría exactas terminadas se describen abajo.
+
+### C159: el cliente siguió avanzando, no un corpus repetido
+
+Resume único 27-10 14:34:55 UTC, Pause único 15:09:59; cierre **15:10:28 en pausa,
+cero servicios y 7.220 callbacks finalizados**, HTTP/siete fases en cero. Checkpoint
+**635.669 → 670.605**, prefix/CRC/retención válidos: 34.936 nuevos, 1.774.216.826
+bytes encoded. Raw 21/3.746.227 bytes → 8/490.770, ninguna clave inicial perdida.
+Balance de entrada completo 1.770.961.369 bytes, no wire ni numerador UI.
+
+UI **1.214,326 s a 1,414441 MB/s**, límites solo de redondeo 1,370229–1,458652;
+sampler en su intervalo distinto de 1.214,079 s: **1,435583 MB/s**. Misma C159 que
+antes, no cambio de código ni regresión causal demostrada. Nuevos objetos, todos
+range: 30.109 pequeños/439.283.708 bytes, 4.599 intermedios/1.046.744.792 y 228
+grandes/288.188.326; el mayor 2.073.607 bytes. Aún no hay direct/cola grande.
+
+El mecanismo privado conserva su ahorro local: 2.186 intentos de barrera,
+**15,982 objetos/intento y 0,857568 ms raw/objeto**. Hijo 14,484 s incluido en los
+29,960 s raw. Fuente/consumidor cambian con el tramo: sourceResolve 736,975 s,
+privateVerify 117,005, appendAndForce 232,933 con groupForce hijo 224,709, checkpoint
+27,660. Son scopes anidados/concurrentes, no una suma de tiempo de pared ni una
+medida aislada del syscall force. Prefijo verificado: 635.669 objetos, 1.333.809 ms.
+
+En la ventana visible, cabeza esperando **57,46 %**, con readyAhead **46,74 %**,
+cuerpo activo **55,56 %**, headers 51,03 %, cap sin head 40,81 %. Estados 1 Hz
+solapados, no causa única. Una subventana UI muestra cero incremento al mantenerse
+el mismo decimal GiB: **no se declara un bloqueo de red por ese redondeo**; para
+resolver la lentitud por tramo se usan los bytes lógicos exactos del sampler.
+
+Análisis offline ejecutado una vez, sin dispositivo/GET/profiling ni repetir análisis
+anteriores: `download-real-pipeline-c159-20261027/trial/flow-analysis.json`, con
+las cuatro referencias previas conservadas. Progreso e integridad comprobados;
+la variación de tasa no se oculta seleccionando solo la ventana anterior de 3,15 MB/s.
+
+### C160 autenticada; siguiente avance real prefijado
+
+Reconstrucción canónica desde **`5005615`**, Modern offline JDK17 **PASS 5 min 17 s**,
+final 27-10 **15:09:32 UTC**. Auditor intacto **PASS_SOURCE_BUILD_AND_PAYLOAD_AUDIT**:
+2.226 fuentes matching receipt/build y 178 payloads; **2.218 idénticas C152,
+2.220 C158, 2.222 C159**. Frente a C159 solo BLTE, RangeTest, versión y marker.
+Inputs/lineage/privacidad/payloads intactos; seis fuentes generadas coinciden con
+los hashes verificados en sus pruebas. No se repiten los checks verdes.
+
+APK exacta **484.953.835 bytes**, SHA256
+`9dcc86b4917842285888d4db177fcaab58111f2f9a9ba9c5d9321d735c57d466`.
+Evidencia: `download-bounded-blte-c160-20261027/` contiene receipt,
+`source-comparison.json`, `apk-audit.json`, `apk-summary.json` y logs.
+
+Antes de instalar se exige cierre C159 válido y checkpoint **670.605 byte-idéntico**,
+versión/pausa/Wi-Fi/guest/espacio frescos. Reemplazo normal `-r`, sin reset ni downgrade;
+preparación una vez, sin payload. Solo tras inspeccionar el mismo USB/cliente70532
+y costes dentro de los límites ya consentidos se confirma un Download. Ventana
+**1.200 s visibles o señal de 6 GiB lógicos nuevos**, pausa cooperativa y verificación
+final; sin corpus aislado, profiling ni GET auxiliar. Controladores nuevos con
+intent/replay guards, sintaxis/diff revisados y funciones de pausa/recursos
+AST-idénticas; checkpoint solo en idle, timeout90s.
+
+Hipótesis: menos capacidad encoded transitoria en verificaciones pequeñas; decoded
+y tope de grandes no cambian. **No se presupone menor GC ni más throughput** por
+compilar, pasar once tests o auditar la APK. La siguiente observación conserva
+mezcla/origen/scopes y progreso real para evaluar beneficios y regresiones.
 
 ## Matriz de aceptación del objetivo
 
@@ -1475,13 +1535,13 @@ al corte de esa lectura todavía no había profiling ni otra APK/corrección de 
 |---|---|
 | Línea base con unidades, ambos tamaños y preparación separada | C152: 609,206 s; UI, frames y raw balance distinguidos. Comprobado. |
 | Diagnóstico sin sumar relojes concurrentes | C158 distingue espera de fuentes y consumidor; perfil real correlacionado cuantifica retiro raw como coste secuencial relevante. Seleccionada barrera privada agrupada, sin causa única general de red demostrada. |
-| Mejora medida y evaluación por tamaño | C159 reduce coste raw observado a 0,862 ms/objeto y agrupa ~16 retiros por barrera; 3,153 MB/s mixtos observados. Mezcla distinta y ratios de servicio no uniformemente mejores. **[PENDING]** evidencia comparable y evaluación de riesgos/direct/cola grande al avanzar realmente; no se acepta +43,90 % como ganancia causal. |
-| Garantías, pruebas, revisión sensible y APK autenticada | Nueve checks focales, tres de versión, revisión snapshot sensible y APK C159 auditada. Captura con prefix/CRC/retención/ACKs válidos y cero fases activas. Comprobado para estos escenarios, no estabilidad universal. |
-| Informe, pausa final, progreso y commits propios | C159 terminó 11:44:23 en pausa, checkpoint 635.669 válido, cero servicios y callbacks activos; raws retenidos. **[PENDING]** objetivo completo antes de archivar. Sin publicación/push. |
+| Mejora medida y evaluación por tamaño | C159 conserva ~16 retiros/barrera y coste raw 0,862/0,858 ms/objeto; sus ventanas reales de 3,153/1,414 MB/s muestran variación con la misma APK. **[PENDING]** medir C160 y evaluar tamaños/riesgos/direct/cola grande al avanzar realmente; no se atribuye una tasa agregada al código. |
+| Garantías, pruebas, revisión sensible y APK autenticada | C159 y sus verificaciones preservadas; BLTE nuevo RED/11GREEN, staging/pin y tres checks de retag, revisión snapshot y APK C160 auditada. **[PENDING]** continuidad física de C160; no estabilidad universal. |
+| Informe, pausa final, progreso y commits propios | C159 terminó 15:10:28 en pausa, checkpoint 670.605 válido, cero servicios y callbacks activos; raws retenidos. **[PENDING]** objetivo completo antes de archivar. Sin publicación/push. |
 
 ## Pendiente
 
-Continuar la descarga real desde los 635.669 objetos durables, observar bloqueos y
+Continuar la descarga real desde los 670.605 objetos durables, observar bloqueos y
 seleccionar el siguiente cambio mínimo sustentado. Sin harness aislado ni repeticiones
 de controles terminados; las métricas deben declarar tamaño/origen y scopes para
 evaluar mejora y regresiones sin confundir la mezcla con una ganancia causal.
