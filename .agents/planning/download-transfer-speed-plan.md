@@ -415,6 +415,17 @@ descarga». Se vuelve al recorrido productivo ya aprobado, no a un corpus aislad
 
 ## Open Issues
 
+- Última continuación cerrada 27-10 19:14:11 UTC, misma C160: checkpoint
+  803.964 → 822.658 válido, 18.694 nuevos, todos range; ninguna pérdida raw y
+  callbacks/HTTP/fases inactivos. UI 721,430 s a 1,485301 MB/s, censurada por
+  máximo general, no benchmark de veinte minutos. Raw local 0,937360 ms/objeto,
+  sin demostrar ganancia global por tamaño. No repetir controlador o análisis.
+- El usuario solicita una prueba independiente de traslado manual al móvil
+  personal, con revisión sin descargas/mutaciones y vuelta al original:
+  [plan USB](usb-cross-phone-plan.md). Original comprobado pausado/sin hilos de
+  trabajo 19:16:32. El usuario confirma traslado y facilita endpoint privado;
+  aún no se ha conectado ni probado reutilización en el segundo teléfono.
+
 - Continuación `697f3195…64fa7` autorizada por «Continuar una hora», objetivos y cinco
   criterios intactos. Controlador nuevo desde 803.964: 1.200/1.800 s, 6 GiB,
   deadline 19:15 UTC/cleanup diez minutos. Calibración host 18:39:36: sintaxis,

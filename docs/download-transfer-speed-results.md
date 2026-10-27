@@ -4,10 +4,11 @@ Fecha: 2026-10-26. Goal original `5caa6403-5b8f-47dc-ba95-ba40fbbe686e`;
 continuaciones autorizadas `fd7baae8-8a14-47b0-8452-6d8f7434217e` y
 `0d3ea00f-a91e-4702-88ad-febb37adb87f`; relanzamiento autorizado 2026-10-27:
 `5a98db34-7924-4936-86dd-0e9fce64eacd` (después cancelado). Continuación actual
-`7722a995-d31c-4ec3-b8b9-0795f62a7e81`, expresamente autorizada sin ampliar plazo.
+`697f3195-06ff-491c-b223-8e51e0c64fa7`, tras reemplazar la continuación
+`7722a995-d31c-4ec3-b8b9-0795f62a7e81`, sin ampliación implícita del plazo anterior.
 **Resultados exploratorios; mejora general no validada. Diagnóstico reabierto.**
 
-Último cierre validado: **2026-10-27 17:55:15 UTC, C160, 803.964 objetos durables**,
+Último cierre validado: **2026-10-27 19:14:11 UTC, C160, 822.658 objetos durables**,
 En pausa/Reanudar y cero servicios/HTTP/fases activos. Dos cambios locales conservados:
 barrera privada agrupada con ahorro medido y buffers encoded proporcionados, sin
 ganancia causal global/GC demostrada. El cliente sigue incompleto; no se publica
@@ -1818,8 +1819,36 @@ helpers AST-idénticos al tail, mismo trigger de datos, sintaxis Python/bash y P
 embebido, contexto803964/informeSHA/consentimiento exacto con el original. Los
 checks de guardas anteriores no se repiten. `controller-calibration.json` conserva
 hashes del main `1447e6e3…75ecc7ff` y wrapper `6cd59ffa…f68dbf7df`.
-Controladores previos terminados intactos; todavía no se atribuye resultado al
-nuevo tramo ni se declara mejora causal/GC/direct-tail.
+Controladores previos terminados intactos. El tramo siguiente se cerró y analizó
+una vez, sin atribuir su tasa a una mejora causal/GC/direct-tail.
+
+### Cierre de la hora autorizada y prueba USB separada
+
+Resume único 18:42:49 UTC, Pause único 19:13:26; final **19:14:11**, En pausa/
+Reanudar, cero servicios y 4.130 callbacks terminados con HTTP/siete fases en cero.
+El máximo general llegó primero: ventana censurada, **no benchmark de veinte
+minutos**. UI 19:00:42–19:12:43: **721,430 s, 1,485301 MB/s**, límites solo de
+redondeo 1,410810–1,559791, no intervalos de confianza ni de latencia UI.
+
+Checkpoint **803.964 → 822.658**, prefix/CRC válidos y ninguna clave raw inicial
+perdida sin commit o retención: **18.694 objetos / 1.248.079.093 bytes encoded**.
+Pequeños 14.576/243.049.804 bytes, intermedios 3.946/762.960.972 y grandes
+172/242.068.317; todos range, máximo grande 2.092.964 bytes. Direct/cola grande
+siguen sin observarse. Retiro privado: 1.169 intentos, 15,991 objetos por intento,
+**0,937360 ms/objeto**; 8,141 s hijo incluidos en 17,523 s raw, no se suman otra vez.
+
+Analizador calibrado ejecutado una vez tras el cierre. Evidencia externa:
+`download-real-pipeline-c160-authorized-hour-20261027/trial/flow-analysis.json`, SHA
+`0da70bba…f555c1d`; ocho referencias anteriores conservadas, sin replay. Misma APK,
+sin profiling, GET auxiliar ni ajuste. No aceptación de mejora global por tamaño.
+
+El usuario solicita después mover el USB a su móvil personal: prueba separada de
+[reconocimiento y conservación](../.agents/planning/usb-cross-phone-plan.md), sin
+nuevas descargas. Lectura fresca del original **19:16:32**: pausa, cero servicios
+y cero hilos fetch/prefix. Se indicó expulsión segura de Android antes del traslado.
+El checkpoint y recibo son privados del original; el segundo puede bloquear el
+parcial sin que eso implique pérdida. El usuario confirma el traslado, pero aún
+no se ha conectado al teléfono personal ni observado reutilización allí.
 
 ## Matriz de aceptación del objetivo
 
@@ -1842,14 +1871,14 @@ al corte de esa lectura todavía no había profiling ni otra APK/corrección de 
 |---|---|
 | Línea base con unidades, ambos tamaños y preparación separada | C152: 609,206 s; UI, frames y raw balance distinguidos. Comprobado. |
 | Diagnóstico sin sumar relojes concurrentes | C158 distingue espera de fuentes y consumidor; perfil real correlacionado cuantifica retiro raw como coste secuencial relevante. Seleccionada barrera privada agrupada, sin causa única general de red demostrada. |
-| Mejora medida y evaluación por tamaño | Ahorro local del retiro privado conservado. C159 3,153/1,414 y C160 2,404/1,938 MB/s con cargas distintas; último tramo censurado 1,741 MB/s añade 8.341 pequeños y 57 grandes range. **[PENDING]** mejora global sustentada, efecto heap/GC y direct/cola grande al avanzar realmente; no se atribuye una tasa agregada al código. |
+| Mejora medida y evaluación por tamaño | Ahorro local del retiro privado conservado. C159 3,153/1,414 y C160 2,404/1,938 MB/s con cargas distintas; último tramo censurado 1,485 MB/s añade 14.576 pequeños y 172 grandes range. **[PENDING]** mejora global sustentada, efecto heap/GC y direct/cola grande al avanzar realmente; no se atribuye una tasa agregada al código. |
 | Garantías, pruebas, revisión sensible y APK autenticada | BLTE RED/11GREEN, staging/pin y tres checks de retag, revisión snapshot y APK C160 auditada; captura real con prefix/CRC/retención/ACKs válidos y cero fases activas. Verificado en estos escenarios, no estabilidad universal. |
-| Informe, pausa final, progreso y commits propios | C160 terminó 17:55:15 en pausa, checkpoint 803.964 válido, cero servicios/HTTP/fases y callbacks activos; raws retenidos. **[PENDING]** objetivo completo antes de archivar. Sin publicación/push. |
+| Informe, pausa final, progreso y commits propios | C160 terminó 19:14:11 en pausa, checkpoint 822.658 válido, cero servicios/HTTP/fases y callbacks activos; raws retenidos. **[PENDING]** objetivo completo antes de archivar. La prueba USB separada no demuestra ganancia de velocidad. Sin publicación/push. |
 
 ## Pendiente
 
 Con margen autorizado y técnico para otra observación, continuar la descarga real
-desde los 803.964 objetos durables, observar bloqueos y seleccionar el siguiente
+desde los 822.658 objetos durables, observar bloqueos y seleccionar el siguiente
 cambio mínimo sustentado. Sin harness aislado ni repeticiones
 de controles terminados; las métricas deben declarar tamaño/origen y scopes para
 evaluar mejora y regresiones sin confundir la mezcla con una ganancia causal.
