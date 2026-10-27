@@ -65,6 +65,21 @@ una descarga incompleta. No cambia el objetivo de optimización de descarga.
   sin cambios. No lanzamiento de app, descarga ni juego. No se cotejaron todos los
   datos privados ni los cuerpos CASC. Evidencia externa:
   `personal-c160-install/summary.json` y `adb-install.txt`.
+- El usuario pidió abrir y observar la app: «hazlo tú mejor así ves qué ocurre».
+  Lanzamiento único de su actividad, 20:06:37 UTC; sin iniciar juego ni operaciones
+  del cliente. Veredicto observado: **«Almacenamiento seleccionado no disponible»**.
+  El único botón pulsado fue `Detalles`, que solo despliega la ruta: **«No conectado»**.
+  Consulta de la operación `MANAGE_EXTERNAL_STORAGE` de esta app: `default` y
+  rechazo reciente; no se ha concedido ni cambiado permiso alguno. Esto no prueba
+  una causa única ni que conceder ese permiso permita reanudar el parcial.
+- Metadatos del USB antes/después de abrir la app iguales: marcador y nombres/tamaños
+  de los 81 CASC, 51.625.635.891 bytes. Cero servicios updater; se verificó que el
+  proceso adicional de su UID es `/system/bin/logcat`, no un guest. El primer
+  controlador se detuvo por rechazar conservadoramente ese logger; se conservó el
+  fallo y se completaron solo lecturas faltantes, sin repetir el lanzamiento.
+- No se guardaron XML de interfaz sin filtrar ni etiquetas de otras apps. El
+  controlador no envió comandos de ajustes; el código C160 preexistente solicita
+  volumen multimedia 1 al abrir. No se midió ni restauró el nivel anterior.
 
 ## Implementation / Action Items
 
@@ -73,20 +88,23 @@ una descarga incompleta. No cambia el objetivo de optimización de descarga.
 - [x] 3. Conectar ADB al endpoint autorizado; comprobar versión Android y app instalada.
 - [x] 3a. Actualización C160 expresamente aprobada: reemplazo preservador y verificación,
   sin operaciones sobre el cliente ni lanzamiento automático del juego.
-- [ ] 4. Inspeccionar reconocimiento y veredicto sin mutaciones, registrando límites.
-  Metadatos del staging comprobados; pendiente el veredicto de la interfaz de la app.
+- [x] 4. Inspeccionar reconocimiento y veredicto sin operaciones del cliente,
+  registrando límites: almacenamiento no disponible, ruta «No conectado»;
+  conservación de metadatos comprobada, reutilización/reanudación no demostrada.
 - [ ] 5. Usuario expulsa/devuelve el USB; verificar checkpoint privado original sin
   cambios y disponibilidad del destino. Una Resume posterior se acuerda aparte.
 - [ ] 6. Documentar conservación, reutilización observada o bloqueo seguro y pendientes.
 
 ## Open Issues
 
-- Actualización C160 completada y verificada en versión/UID/metadatos, sin abrir
-  automáticamente la app. No autoriza descargar/reparar/adoptar el parcial ni
+- Actualización C160 completada y verificada en versión/UID/metadatos. La app se
+  abrió después por petición expresa, sin descargar/reparar/adoptar el parcial ni
   migrar el checkpoint. La inspección de archivos del cliente sigue siendo de
   solo lectura.
-- Pendientes reconocimiento/veredicto en la interfaz de la app y devolución al
-  original. La conexión y versión ya se comprobaron con el nuevo endpoint.
+- El veredicto de la app está observado y no admite el destino seleccionado en
+  este estado. No cambiar permisos amplios ni la selección de almacenamiento sin
+  decisión expresa; no prometer que eso migre el checkpoint del original.
+- Pendiente expulsión/devolución al original y comprobación de su checkpoint.
 - Primer intento de conexión 19:24 UTC no conectó; no se ejecutaron consultas
   sobre la app, acciones UI, instalaciones o escrituras de cliente en el personal.
 - El traslado fue confirmado; no hay confirmación expresa de expulsión del sistema.

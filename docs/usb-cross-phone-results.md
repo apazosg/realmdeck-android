@@ -1,10 +1,12 @@
 # USB entre dos móviles: datos parciales visibles, reanudación no demostrada
 
-Evidencia del 27-10-2026: inspección USB cerrada 19:39:44 UTC y actualización
-expresamente aprobada de la app cerrada 19:52:23. Alcance en
+Evidencia del 27-10-2026: inspección USB cerrada 19:39:44 UTC, actualización
+expresamente aprobada de la app cerrada 19:52:23 y observación de su interfaz
+cerrada 20:13:03. Alcance en
 [el plan](../.agents/planning/usb-cross-phone-plan.md): lectura del cliente y
 reemplazo de la app, sin descargar, reparar, preparar carpeta, migrar metadatos
-privados ni cambiar permisos o ajustes.
+privados ni conceder permisos. No se enviaron comandos de ajustes; los efectos
+propios de abrir la app se acotan más abajo.
 
 ## Resultado observado
 
@@ -29,8 +31,8 @@ rutas; se usó esa lectura ordinaria, sin root ni cambios de seguridad. El resul
 
 ## Qué no demuestra
 
-No se ha observado aún el veredicto de la interfaz del segundo móvil ni se ha
-intentado reanudar. El checkpoint y el recibo pertenecen al almacenamiento privado
+La interfaz del segundo móvil declara el almacenamiento seleccionado no disponible;
+no se ha intentado reanudar. El checkpoint y el recibo pertenecen al almacenamiento privado
 del original: ver los archivos USB no migra ese estado. No se han copiado esos
 metadatos ni el staging, ni falseado una instalación terminada.
 
@@ -79,5 +81,44 @@ Evidencia externa: `personal-c160-install/summary.json`, `adb-install.txt`,
 metadatos previos/posteriores y `personal-c160-install-calibration.json`.
 El UID y los metadatos comparados no equivalen a cotejar todos los datos privados
 ni autenticar todos los cuerpos CASC. La actualización no convierte el staging
-en cliente completo ni demuestra reanudación. Siguen pendientes el veredicto de
-la app y la devolución del USB al original para comprobar su checkpoint.
+en cliente completo ni demuestra reanudación. El veredicto posterior de la app
+se detalla abajo; falta devolver el USB al original y comprobar su checkpoint.
+
+## Apertura de C160 y veredicto real de la interfaz
+
+El usuario pidió «hazlo tú mejor así ves qué ocurre». Se abrió una vez la actividad
+de la app a las 20:06:37 UTC, sin abrir el juego ni pulsar operaciones del cliente.
+La lectura posterior muestra el nombre del USB y **«Almacenamiento seleccionado
+no disponible»**. Se pulsó únicamente **Detalles** —despliega texto, no cambia
+destino— y la ruta indicada es **«No conectado»**.
+
+Una consulta de solo lectura a la operación `MANAGE_EXTERNAL_STORAGE` de esta app
+devolvió `default`, con un rechazo reciente. No se concedió permiso ni se cambió
+la selección. La ruta no resuelta y ese registro son observaciones, **no una prueba
+de causa única ni garantía de que un permiso amplio resuelva la reutilización**.
+La app todavía no reconoce este destino como utilizable; no se ha probado reanudar.
+
+El marcador y el diccionario completo de nombres/tamaños de los 81 CASC coinciden
+con la lectura inmediatamente anterior a abrir la app. Cero servicios updater al
+cierre; sin Descargar/Reanudar/Reparar/Preparar, adopción o migración. No es una
+verificación de todos los cuerpos CASC ni del checkpoint privado del original.
+
+El primer controlador se detuvo después de abrir por una guarda demasiado estricta
+contra procesos auxiliares. Una lectura limitada a su UID identificó `logcat`, y
+su ejecutable `/system/bin/logcat` se verificó; no era un guest. El informe fallido
+queda preservado. Se completaron solo las lecturas faltantes, sin relanzar la app.
+La primera lista conservadora de etiquetas omitió el estado; el seguimiento recogió
+los textos de estado definidos en la propia app. No se almacenaron XML sin filtrar
+ni etiquetas de otras apps o campos de credenciales.
+
+No se enviaron comandos de ajustes ni permisos. Abrir C160 ejecuta su comportamiento
+preexistente de solicitar volumen multimedia 1; no se midió ni restauró el valor
+anterior. No debe describirse esta apertura como ausencia absoluta de efectos sobre
+ajustes del dispositivo.
+
+Evidencia externa: `personal-c160-ui/summary.json`,
+`personal-c160-startup-process-diagnosis/summary.json`,
+`personal-c160-ui-followup/summary.json` y `personal-c160-storage-details/summary.json`.
+La próxima comprobación ya acordada requiere expulsar y devolver físicamente el USB
+al original. Cambiar permisos amplios o selección del personal necesita otra decisión;
+no se han realizado para intentar forzar el reconocimiento.
