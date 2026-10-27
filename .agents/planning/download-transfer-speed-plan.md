@@ -236,13 +236,25 @@ completado; se ejecutan instrumentación y calibración antes del ensayo prolong
 
 ## Open Issues
 
+- C159 terminó una vez 27-10 11:44:23 UTC, en pausa/cero servicios: 1.216,275 s,
+  3,152689 MB/s UI, sampler 3,132912 MB/s. Checkpoint 573.476 → 635.669 válido,
+  62.193 nuevos (53.401/8.233/559), todos range; ninguna pérdida raw, callbacks/fases0.
+  3.888 barreras privadas para 62.193 retiros (~16/attempt), coste raw inclusivo
+  0,861673 ms/objeto frente a 4,315/6,098/2,950 en las tres referencias C158.
+  La reducción local está respaldada; no se acepta mejora general por tamaño.
+- La UI sube 43,90 % frente a C158 última, pero el objeto medio sube 41,11 %;
+  algunos ratios de servicio homogéneos son inferiores y faltan direct/cola grande.
+  Pendiente diseñar/acordar carga mixta equivalente con mismos objetos/orden y
+  recorrido real, cachés declaradas y scratch aislado si fuera necesario, sin
+  falsear catálogo/checkpoint ni publicar/tocar el cliente. No nuevo harness ni
+  otro tuning automático. El plan permanece en progreso y no se archiva.
 - C159 instalada una vez 10:59:24, checkpoint 573.476 byte-idéntico y cero servicios.
   El primer preflight acabó por TimeoutExpired sin acciones ni payload; comando
   exacto desconocido. Continuación separada solo para preparación/primer ensayo,
   con fases observadas y read idle del checkpoint de 41 MB limitado a 90 s.
   Calibración estática PASS; no reinstalar ni reproducir controladores terminados.
-  Analizador offline preparado con tres referencias C158, no selecciona la más
-  favorable; esperar el resultado original antes de afirmar coste o velocidad.
+  Ese preflight es histórico: la continuación terminó y se analizó una sola vez.
+  Se conservan las tres referencias C158; no se elige solo la más favorable.
 - Barrera privada agrupada implementada y verificada localmente: RED real 1 fallo
   esperado con el mismo test; GREEN nueve checks focales, cero fallos/errores/skips,
   Gradle 1 min 19 s, JUnit 10:29:08/18 UTC. Fuente updater `722f3e7e…f2ad92f3`,

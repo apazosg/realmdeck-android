@@ -1320,7 +1320,7 @@ exigirá el nuevo resumen inspeccionado; el resto del controlador y sus guardas 
 idénticos. Calibración estática 11:04:55 PASS, sin acción de dispositivo. Continúa
 solo preparación y primer payload C159, con el máximo aprobado y pausa cooperativa.
 
-Análisis offline preparado, todavía sin ejecutarlo sobre el ensayo C159: continuidad
+Análisis offline preparado antes del ensayo C159: continuidad
 prefix/CRC/raw/ACKs, paredes por fase y tamaños/origen, intentos/ns de barrera privada
 incluidos en el timer raw existente. Se preservan **los tres** informes C158 de
 referencia: 61.651 objetos/4,315 ms raw por objeto; 8.786/6,098 ms; 27.106/2,950 ms.
@@ -1329,6 +1329,77 @@ presentar un cambio de mezcla como ganancia causal. Los contadores antiguos no
 medían intentos de barrier; la inferencia por ACK se distingue del contador nuevo.
 Evidencia externa: `preflight-continuation-calibration.json`, reportes originales,
 nuevos controladores protegidos y `mixed-analyzer-calibration.json`.
+
+### C159: ensayo mixto terminado y mejora local medida
+
+Preparación terminada 11:12:55 UTC sin payload: mismo USB/cliente 1.60.1.70532,
+51,8 GiB de descarga, 54,0 adicionales, app ≤1,7 y cliente ≤52,3; dentro de los
+límites consentidos. Download único 11:13:38, Pause único 11:44:01; final
+**11:44:23, En pausa/Reanudar, cero servicios** y 13.193 callbacks finalizados.
+Todos los gauges HTTP/fases quedan en cero. No hubo profiling ni GET auxiliar.
+
+Ventana visible **1.216,275 s, 3,152689 MB/s**, límites solo de redondeo
+3,108506–3,196873, no intervalos de confianza ni de latencia UI. Subventanas:
+2,936 / 1,957 / 4,444 / 4,340 / 3,476 / 3,031 / 1,743 / 3,488 / 2,600 / 3,492 MB/s.
+El sampler exacto, en su intervalo distinto de 1.215,167 s, mide **3,132912 MB/s**.
+No se alcanzó la señal de 6 GiB; no es una ventana censurada por ese límite.
+
+Checkpoint **573.476 → 635.669**, prefix/CRC válidos: **62.193 objetos durables**,
+3.906.552.603 bytes encoded, cero append sin checkpoint. Raw 14 claves/3.417.331
+bytes → 21/3.746.227; ninguna clave inicial perdida sin commit o retención.
+Balance de entrada completo 3.906.881.499 bytes, no bytes wire ni numerador UI.
+Distribución real, toda **range**:
+
+| Tamaño | Objetos | Encoded bytes | Mediana encoded | Máximo encoded |
+|---|---:|---:|---:|---:|
+| Pequeño | 53.401 | 1.055.403.239 | 15.122 | 65.532 |
+| Intermedio | 8.233 | 2.125.649.014 | 140.920 | 1.048.339 |
+| Grande | 559 | 725.500.350 | 1.219.014 | 2.092.815 |
+
+**Mecanismo local respaldado:** 3.888 intentos de barrera privada, **15,996 objetos
+retirados por intento**, frente a la fuerza por objeto del código C158. El contador
+antiguo de llamadas no existía: esa comparación de frecuencia previa es de código,
+no una medición de syscalls. Tiempo hijo 28,178 s **incluido** en los 53,590 s del
+timer raw anterior: **0,861673 ms/objeto**, frente a 4,315388 / 6,097769 / 2,950417
+de las tres referencias. Contra la última captura de veinte minutos, descenso
+observado del coste raw por objeto de **80,03 %**. No se suma el hijo al padre.
+Integridad/retención y barreras Data/checkpoint/ACK se verificaron en este escenario.
+
+**No equivale a 43,90 % de ganancia causal de descarga.** Contra la última C158,
+la UI sube 2,190826 → 3,152689 MB/s, pero el tamaño medio durable también aumenta
+44.512 → 62.813 bytes (**41,11 %**). El proxy objetos de toda la ejecución dividido
+por segundos UI cambia solo 0,45 %; no es objects/s de la ventana exacta. No se elige
+la referencia anterior más lenta para atribuir el aumento completo al código.
+
+| Cohorte de callbacks exitosos | C158 última → C159, MB por segundo de servicio |
+|---|---:|
+| Pequeña homogénea | 0,332616 → 0,441584 |
+| Intermedia homogénea | 1,450196 → 1,248303 |
+| Grande homogénea | 2,030706 → 1,873891 |
+| Mixta | 1,485178 → 1,361715 |
+
+Son relojes concurrentes, no throughput global ni velocidad de red aislada por
+clase. Cambiaron tamaños y miembros por callback; algunos ratios son inferiores.
+No prueban una regresión causal, pero impiden declarar que todos los tamaños se
+aceleraron. La captura contiene 559 grandes range hasta unos 2 MiB, **no direct ni
+la cola grande**. Temperatura 31,8 → 36,4 °C; IO por `/proc` denegado, no IO cero.
+Los estados 1 Hz siguen solapados: head 34,68 %, cap sin head 61,94 %, headers
+58,24 %, cuerpo 30,73 %. No son una partición causal de tiempo de pared.
+
+El análisis se ejecutó una vez, después del cierre. Evidencia externa del workspace
+C159: `trial/flow-analysis.json`, `trial/observational-comparison.json`, checkpoint,
+raws, wall-alignment y recursos. **Reducción del coste privado validada para esta
+captura; mejora general de transferencia todavía no aceptada.**
+
+### Siguiente puerta: carga equivalente, no otra tasa secuencial
+
+Falta diseñar una comparación con los mismos objetos y orden mixto, tamaños/orígenes
+justificados por el catálogo activo, incluyendo direct y cola grande, condiciones
+de caché declaradas y el recorrido real de autenticación/CASC/retiro. Si requiere
+scratch aislado, debe especificarse su punto de entrada, límites y exclusión de
+publicación antes de aprobarlo: **sin falsear catálogo/checkpoint ni tocar el cliente
+instalado**. No se ha implementado ni lanzado ese harness; tampoco se cambia otra
+vez la estrategia por el aumento agregado de esta captura.
 
 ## Matriz de aceptación del objetivo
 
@@ -1351,15 +1422,15 @@ al corte de esa lectura todavía no había profiling ni otra APK/corrección de 
 |---|---|
 | Línea base con unidades, ambos tamaños y preparación separada | C152: 609,206 s; UI, frames y raw balance distinguidos. Comprobado. |
 | Diagnóstico sin sumar relojes concurrentes | C158 distingue espera de fuentes y consumidor; perfil real correlacionado cuantifica retiro raw como coste secuencial relevante. Seleccionada barrera privada agrupada, sin causa única general de red demostrada. |
-| Mejora medida y evaluación por tamaño | C156/C157 medidas, pero solo 151/5 grandes y tamaños distintos. +16,90 % C155 y −47,57 % C157 observacionales no validan mejora general. **[PENDING]** comparación representativa. |
-| Garantías, pruebas, revisión sensible y APK autenticada | Verificaciones anteriores preservadas. Cambio C159: nueve checks focales, tres de versión y revisión snapshot sensible; nueva APK exacta auditada. **[PENDING]** continuidad física de C159. |
-| Informe, pausa final, progreso y commits propios | Control del 27-10 terminó 09:26:11 en pausa, checkpoint 573.476 válido, cero trabajo activo y raws retenidos. **[PENDING]** mejora demostrada y objetivo completo antes de archivar. Sin publicación/push. |
+| Mejora medida y evaluación por tamaño | C159 reduce coste raw observado a 0,862 ms/objeto y agrupa ~16 retiros por barrera; 3,153 MB/s mixtos observados. Mezcla distinta y ratios de servicio no uniformemente mejores. **[PENDING]** carga equivalente y cobertura direct/cola grande; no se acepta +43,90 % como ganancia causal. |
+| Garantías, pruebas, revisión sensible y APK autenticada | Nueve checks focales, tres de versión, revisión snapshot sensible y APK C159 auditada. Captura con prefix/CRC/retención/ACKs válidos y cero fases activas. Comprobado para estos escenarios, no estabilidad universal. |
+| Informe, pausa final, progreso y commits propios | C159 terminó 11:44:23 en pausa, checkpoint 635.669 válido, cero servicios y callbacks activos; raws retenidos. **[PENDING]** objetivo completo antes de archivar. Sin publicación/push. |
 
 ## Pendiente
 
-Diseñar un diagnóstico discriminante y una validación representativa antes de otro
-cambio de estrategia. C153/C154/C155/C156/C157 terminaron pausadas; no se repiten
-sus ensayos ni sus checks verdes.
+Diseñar y acordar la validación sobre carga equivalente antes de otro cambio de
+estrategia. C158/C159 y controles anteriores terminaron; no se repiten sus
+controladores, análisis ni checks verdes. El cliente conserva 635.669 objetos durables.
 El goal **no** cumple todavía la mejora exigida.
 La línea base mide variación actual, pero no demuestra una causa única de todos
 los descensos históricos ni mejora aislada por tamaño; el uplift agregado de C155
