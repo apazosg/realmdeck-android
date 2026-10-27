@@ -1304,6 +1304,32 @@ secuenciales distintos **no** se usará por sí sola como ganancia causal. La
 comparación mixta equivalente y la cobertura pendiente de direct/cola grande no
 se dan por satisfechas al compilar, instalar o superar las regresiones locales.
 
+### C159: instalación preservadora y continuación tras timeout de preflight
+
+Instalación única terminada 10:59:24 UTC: versión 159, APK auditada exacta,
+checkpoint **573.476 / 41.290.312 bytes** idéntico, cold Home y cero servicios.
+La primera preparación terminó con `TimeoutExpired` **antes de cualquier acción**:
+actions/samples vacíos, payloadConfirmed=false y ningún ensayo creado. No es una
+medición fallida de descarga. El reporte no identifica el comando concreto;
+no se atribuye el timeout con certeza a leer el checkpoint.
+
+Se conserva esa evidencia y se continúa en un namespace nuevo, sin reinstalar ni
+repetir clicks enviados. El preflight registra fases y da 90 s al único read idle
+del checkpoint de 41 MB, en vez del default de 15 s del helper. El primer ensayo
+exigirá el nuevo resumen inspeccionado; el resto del controlador y sus guardas son
+idénticos. Calibración estática 11:04:55 PASS, sin acción de dispositivo. Continúa
+solo preparación y primer payload C159, con el máximo aprobado y pausa cooperativa.
+
+Análisis offline preparado, todavía sin ejecutarlo sobre el ensayo C159: continuidad
+prefix/CRC/raw/ACKs, paredes por fase y tamaños/origen, intentos/ns de barrera privada
+incluidos en el timer raw existente. Se preservan **los tres** informes C158 de
+referencia: 61.651 objetos/4,315 ms raw por objeto; 8.786/6,098 ms; 27.106/2,950 ms.
+Esa variación del mismo código impide elegir solo la referencia más favorable o
+presentar un cambio de mezcla como ganancia causal. Los contadores antiguos no
+medían intentos de barrier; la inferencia por ACK se distingue del contador nuevo.
+Evidencia externa: `preflight-continuation-calibration.json`, reportes originales,
+nuevos controladores protegidos y `mixed-analyzer-calibration.json`.
+
 ## Matriz de aceptación del objetivo
 
 El usuario autorizó «relancemos el goal otras 6 horas». La nueva planificación

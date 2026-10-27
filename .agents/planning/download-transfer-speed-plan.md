@@ -236,6 +236,13 @@ completado; se ejecutan instrumentación y calibración antes del ensayo prolong
 
 ## Open Issues
 
+- C159 instalada una vez 10:59:24, checkpoint 573.476 byte-idéntico y cero servicios.
+  El primer preflight acabó por TimeoutExpired sin acciones ni payload; comando
+  exacto desconocido. Continuación separada solo para preparación/primer ensayo,
+  con fases observadas y read idle del checkpoint de 41 MB limitado a 90 s.
+  Calibración estática PASS; no reinstalar ni reproducir controladores terminados.
+  Analizador offline preparado con tres referencias C158, no selecciona la más
+  favorable; esperar el resultado original antes de afirmar coste o velocidad.
 - Barrera privada agrupada implementada y verificada localmente: RED real 1 fallo
   esperado con el mismo test; GREEN nueve checks focales, cero fallos/errores/skips,
   Gradle 1 min 19 s, JUnit 10:29:08/18 UTC. Fuente updater `722f3e7e…f2ad92f3`,
