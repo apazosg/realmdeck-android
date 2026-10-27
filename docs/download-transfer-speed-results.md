@@ -1618,7 +1618,48 @@ acciones Reanudar/Pausar, consentimiento real y referencia cerrada 709.577 váli
 No se repiten sus casos de guardas ni se importa el controlador para comprobarlo.
 Evidencia `download-real-pipeline-c160-20261027/controller-calibration.json`;
 fuente `e2942263…1056a937`, wrapper `6bda6648…7be00740`. A este corte todavía no
-se ha ejecutado la nueva continuación.
+se había ejecutado la nueva continuación; posteriormente se lanzó una sola vez.
+Se espera el resultado original, sin reproducir Resume ni consultar repetidamente
+su estado. Analizador offline preparado: 28 guardas equivalentes salvo los 2.700 s,
+seis referencias cerradas, checkpoint previo 709.577; todavía no ejecutado sobre
+la continuación. Calibración `analyzer-calibration.json`, 16:17:46 UTC, fuente
+`2e3a133e…2c363aa`; ningún nuevo test, perfil o GET en esa preparación.
+
+### C160 cerrada: pausa de consumidor y mezcla por subventana
+
+Este análisis usa **solo la primera captura C160 ya cerrada a las 16:00:21**,
+no el Resume largo posterior. Nuevos subscopes exactos y frames ACK, sin volver a
+ejecutar el analizador completo ni efectuar acciones en el teléfono.
+
+| Subventana | MB/s lógicos exactos | ACKs/s | Media encoded por ACK | Pequeños/intermedios/grandes ACK |
+|---|---:|---:|---:|---:|
+| 1 | 0,440428 | 45,88 | 9.914 bytes | 5.586/62/0 |
+| 6 | 4,741712 | 19,08 | 245.837 bytes | 1.471/667/192 |
+| 10 | 0,589805 | 37,86 | 15.762 bytes | 4.488/134/2 |
+
+Menos MB/s no implica menos objetos procesados. Son cohortes de ACK, no una
+asignación del tráfico concurrente a esos mismos objetos; no prueban ganancia causal.
+
+Pausa lógica real de **35,027 s** (15:39:16.406–15:39:51.433 UTC), sin nuevos
+bytes lógicos/cuerpo ni ACKs. En todas las muestras hay 34 reservas, 18–33 objetos
+ready, cero head pendiente y cero HTTP/callbacks activos. Esto respalda presión
+del consumidor con trabajo listo; el muestreo 1 Hz no demuestra estado continuo
+de todos los sockets entre muestras.
+
+El **primer registro acumulado**, hasta 256 objetos, incluye appendAndForce
+48,369 s, transición de segmento 43,324 s y groupForce 5,008 s. Los hijos están
+dentro del padre. No hay un batch anterior que encierre la pausa inicial: esos
+acumulados incluyen trabajo fuera del flat y **no atribuyen los 35 s a una llamada
+concreta de force**. Los flats siguientes de 5,003 y 4,003 s quedan dentro de
+brackets más gruesos de 32,014 y 8,139 s, con groupForce hijo de 17,931 y 5,101 s;
+tampoco son trazas de syscalls ni tiempos exclusivos de cada flat.
+
+Evidencia externa nueva del workspace `download-bounded-blte-c160-20261027`:
+`trial/exact-subwindow-diagnostic.json`, `trial/subwindow-consumer-context.json` y
+`trial/subwindow-context-verification.json` (16:27:14 UTC). Validados diez scopes,
+sumas de clases ACK, hashes de fuentes/reportes, relojes APP para duraciones y
+receipt-host solo para selección UI. Sin alterar código C160, cadencia durable,
+cuotas o estrategia; sin repetir controles anteriores ni afirmar efecto GC.
 
 ## Matriz de aceptación del objetivo
 

@@ -385,6 +385,18 @@ descarga». Se vuelve al recorrido productivo ya aprobado, no a un corpus aislad
 
 ## Open Issues
 
+- Análisis nuevo de la **primera C160 ya cerrada** (670.605 → 709.577), sin tocar
+  la continuación larga: pausa lógica de 35,027 s, cero bytes cuerpo/ACKs, 34 claves
+  reservadas y 18–33 ready; HTTP/callbacks cero en todas las muestras. El primer
+  batch acumulado de 256 objetos registra append 48,369 s, con transición de
+  segmento 43,324 s y groupForce 5,008 s anidados. No hay batch previo que encierre
+  esa pausa: no atribuir sus 35 s a un syscall ni sumar hijos al padre. Otros flats
+  de 5,003/4,003 s tienen brackets más gruesos. No alterar barreras por esta lectura.
+  Subventana pequeña: 0,440428 MB/s con 45,88 ACKs/s/media 9.914 bytes; otra de
+  4,741712 MB/s solo 19,08 ACKs/s/media 245.837. Separar tamaño de bloqueo.
+  Reportes nuevos exact-subwindow/subwindow-consumer/context-verification en el
+  workspace C160 original, no replay del análisis completo ni del dispositivo.
+  La continuación larga desde 709.577 se lanzó una vez; se espera su resultado.
 - En datos C159 ya cerrados, la subventana UI cero fue 0,296355 MB/s exactos y
   35,25 ACKs/s (4.287 pequeños/17 intermedios, media 8.438 encoded bytes), frente
   a 3,230361 MB/s y 24,79 ACKs/s en un scope de media 129.913 bytes. Separar mezcla
@@ -404,7 +416,7 @@ descarga». Se vuelve al recorrido productivo ya aprobado, no a un corpus aislad
   2.226 fuentes matching/178 payloads, 2.218 idénticas C152/2.220 C158/2.222 C159.
   Frente a C159 solo cambian BLTE/RangeTest/versión/marker; inputs, lineage,
   privacidad, payloads y auditor intactos. Se cotejan las seis fuentes testeadas.
-  Próximo avance del cliente desde el checkpoint real 670.605: reemplazo `-r`
+  Registro histórico del avance desde el checkpoint real 670.605: reemplazo `-r`
   preservador, preparación sin payload, resumen real dentro de límites consentidos
   y un Download, 1.200 s visibles o señal 6 GiB con pausa cooperativa. Sin scratch,
   profiling, GET auxiliar ni replay. Los controladores nuevos tienen guardas de
@@ -423,8 +435,9 @@ descarga». Se vuelve al recorrido productivo ya aprobado, no a un corpus aislad
   vacío, límites/cancelación y recuperación de prefix. Revisión snapshot sin
   hallazgos, sin acceso a FS ni rerun. Postimage BLTE revisado actualizado a
   `6afe01aa…3456f794`; una prueba Python de staging/pins PASS y tres de retag PASS.
-  Reconstrucción/auditoría C160 completadas; cadena física lanzada una vez,
-  resultado todavía no incorporado. Analizador preparado, no reejecutar controladores.
+  Reconstrucción/auditoría y primera cadena física C160 completadas, hasta 709.577;
+  la nueva continuación larga está lanzada, sin resultado incorporado todavía.
+  No reejecutar controladores ni análisis completos ya terminados.
   Ahorro de capacidad asignada no se presenta por sí solo como mejora global de
   descarga ni como GC medido.
 - Propuesta de comparación aislada no adoptada: cero implementación/descargas.
