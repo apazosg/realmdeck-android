@@ -243,8 +243,18 @@ completado; se ejecutan instrumentación y calibración antes del ensayo prolong
   hasta force, cancelación parcial (un force para dos unlinks), fallo sin admisión
   ni retry implícito y reanudación sin redescargar lo checkpointed; joins/orden y
   barrera CASC16 preservados. Revisión independiente del snapshot de código y esa
-  evidencia, sin FS/reruns, sin defectos accionables. Falta nueva APK auditada y
-  evidencia física; no se declara aún mejora de transferencia ni de todos los tamaños.
+   evidencia, sin FS/reruns, sin defectos accionables. No se declara aún mejora de
+   transferencia ni de todos los tamaños.
+- C159 reconstruida desde `d9b976e`, build Modern offline JDK17 PASS en 5 min 13 s,
+  terminado 10:50:45 UTC; auditoría exacta PASS (2.226 fuentes matching/178 payloads).
+  2.220 fuentes idénticas a C152 y 2.222 a C158; solo updater/test/versión/marker
+  cambian frente a C158. Transfer, inputs, lineage, privacidad, payloads y auditor
+  intactos. APK 484.953.483 bytes, SHA `617d5a24…900266f`.
+  Ensayo nuevo prefijado desde 573.476, tras reemplazo y preparación preservadores:
+  1.200 s visibles o 6 GiB de progreso lógico, pausa cooperativa, sin profiling ni
+  GET auxiliares. Medir intentos/ns de barrera y coste raw inclusivo por retiro;
+  registrar mezcla/origen y diferencias de caché/activación. Una tasa secuencial
+  favorable no acredita ganancia causal ni cobertura de direct/cola grande.
 - Perfil de tiempo fijo terminado y traza original recuperada, sin repetir captura:
   main final 09:26:11 en pausa, checkpoint 564.690 → 573.476, prefix/CRC/retención
   válidos, 8.786 nuevos (7.275 pequeños/1.498 intermedios/13 grandes, todos range).

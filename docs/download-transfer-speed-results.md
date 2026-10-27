@@ -1272,8 +1272,37 @@ La revisión independiente recibió el snapshot real del flujo y después los nu
 GREEN/hashes; sin defectos accionables, **sin acceso a archivos ni reruns**.
 Evidencia `download-transport-diagnosis-20261027/private-retirement-focused-tests/`
 (inputs, XML nuevos, logs y resúmenes). No se repite la suite ni los verdes previos.
-Estas pruebas validan el protocolo local, **no** velocidad física: build/auditoría
-de candidata y comparación mixta con sus límites siguen pendientes.
+Estas pruebas validan el protocolo local, **no** velocidad física.
+
+### C159 autenticada; ensayo mixto prefijado
+
+Fuente `d9b976e` (cambio `5b5bb49`), versión `159`/
+`0.2.135-grouped-raw-retirement-test`. Build Modern offline JDK17 **PASS 5 min 13 s**,
+terminado 27-10 10:50:45 UTC. Auditoría exacta **PASS_SOURCE_BUILD_AND_PAYLOAD_AUDIT**:
+2.226 fuentes matching con receipt y 178 payloads; **2.220** idénticas a C152 y
+**2.222** a C158. Frente a C158 cambian solo updater/test/versión/marker; transfer,
+su test, inputs, lineage, privacidad, payloads y auditor permanecen intactos. Las
+fuentes generadas coinciden con los hashes GREEN indicados arriba.
+
+APK **484.953.483 bytes**, SHA-256
+`617d5a24581414d94ce33a44024790d77bf226cf9448bc7103c87befe900266f`.
+Receipts, source-comparison, build/audit y APK externa en
+`download-grouped-raw-retirement-c159-20261027/`; no se repiten build/auditoría/tests.
+
+Ensayo nuevo sobre el cliente real desde checkpoint **573.476**: reemplazo `-r`
+preservador, preparación sin confirmar payload y un único Download tras inspeccionar
+el mismo cliente/USB y los costes dentro del consentimiento previo. Los controles
+se revisaron completos y pasaron sintaxis/AST antes de operar. Se fijan **1.200 s
+visibles o señal de pausa a 6 GiB lógicos**, pausa cooperativa y verificación final
+de continuidad/retención/cero trabajo activo; no profiling ni GET auxiliares.
+
+Predicción local: menos barreras privadas por raw retirado y menor coste raw
+inclusivo, sin liberar capacidad antes de force ni perder durabilidad. Se informarán
+ambos contadores nuevos, composición/tamaños/origen, fases y límites; no se sumará
+el subcoste de force otra vez al total raw. La evolución de MB/s en objetos
+secuenciales distintos **no** se usará por sí sola como ganancia causal. La
+comparación mixta equivalente y la cobertura pendiente de direct/cola grande no
+se dan por satisfechas al compilar, instalar o superar las regresiones locales.
 
 ## Matriz de aceptación del objetivo
 
@@ -1297,7 +1326,7 @@ al corte de esa lectura todavía no había profiling ni otra APK/corrección de 
 | Línea base con unidades, ambos tamaños y preparación separada | C152: 609,206 s; UI, frames y raw balance distinguidos. Comprobado. |
 | Diagnóstico sin sumar relojes concurrentes | C158 distingue espera de fuentes y consumidor; perfil real correlacionado cuantifica retiro raw como coste secuencial relevante. Seleccionada barrera privada agrupada, sin causa única general de red demostrada. |
 | Mejora medida y evaluación por tamaño | C156/C157 medidas, pero solo 151/5 grandes y tamaños distintos. +16,90 % C155 y −47,57 % C157 observacionales no validan mejora general. **[PENDING]** comparación representativa. |
-| Garantías, pruebas, revisión sensible y APK autenticada | Diez regresiones y revisión del cambio sensible; cuatro checks iniciales, dos tras simplificar métricas y tres de versión. Ambas APK auditadas; ensayos con prefix/CRC/retención válidos. Comprobado para estos escenarios. |
+| Garantías, pruebas, revisión sensible y APK autenticada | Verificaciones anteriores preservadas. Cambio C159: nueve checks focales, tres de versión y revisión snapshot sensible; nueva APK exacta auditada. **[PENDING]** continuidad física de C159. |
 | Informe, pausa final, progreso y commits propios | Control del 27-10 terminó 09:26:11 en pausa, checkpoint 573.476 válido, cero trabajo activo y raws retenidos. **[PENDING]** mejora demostrada y objetivo completo antes de archivar. Sin publicación/push. |
 
 ## Pendiente
