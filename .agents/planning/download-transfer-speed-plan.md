@@ -15,8 +15,9 @@ observaciones aún no están confirmadas; no se convierten en una línea base me
 ni en un mínimo de velocidad prometido.
 
 Goal original: `5caa6403-5b8f-47dc-ba95-ba40fbbe686e`; continuación de una hora
-`fd7baae8-8a14-47b0-8452-6d8f7434217e`; sucesor actual de seis horas autorizado:
-`0d3ea00f-a91e-4702-88ad-febb37adb87f`. Este trabajo parte de C152 y se centra
+`fd7baae8-8a14-47b0-8452-6d8f7434217e`; continuación de seis horas
+`0d3ea00f-a91e-4702-88ad-febb37adb87f`; relanzamiento actual autorizado:
+`5a98db34-7924-4936-86dd-0e9fce64eacd`. Este trabajo parte de C152 y se centra
 en transferencia efectiva, no en volver a optimizar el inicio de la descarga.
 El usuario aprobó este plan el 2026-10-26: «adelante. vamos a ello». Se ejecutan
 diagnóstico, cambios mínimos y ensayos acotados dentro de las garantías y límites
@@ -26,6 +27,8 @@ nuevo objetivo». El sucesor conserva el objetivo, los cinco criterios originale
 y las fases verificadas; no reinicia mediciones ni debilita la aceptación.
 El usuario aprobó después ampliar ese margen a seis horas. Es un límite de
 seguridad, no una razón para consumirlo ni para cerrar con evidencia insuficiente.
+El 2026-10-27 autorizó otro tramo de seis horas: «relancemos el goal otras 6 horas».
+Se trasladan los cinco criterios y las fases verificadas, no se reinician ensayos.
 
 ## Content
 
@@ -233,6 +236,16 @@ completado; se ejecutan instrumentación y calibración antes del ensayo prolong
 
 ## Open Issues
 
+- Continuación comprobada 27-10: rama limpia `42ae0bd`, C158 sin cambios y último
+  checkpoint verificado 503.039. Todos los controles descritos abajo han terminado;
+  sus propuestas/estados intermedios son históricos, no instrucciones de replay.
+  Lectura de capacidades 06:26 UTC: instalada 158, cero servicios/guest; Perfetto
+  registra `linux.ftrace`, `linux.perf` y `linux.process_stats`, y ActivityManager
+  anuncia profiling por muestreo. La lectura directa de eventos ftrace está denegada:
+  no elevar permisos ni interpretar el registro de un datasource como acceso probado.
+  No se inició tracing, UI ni payload. Próximo diagnóstico debe observar el proceso
+  real durante la espera, con captura acotada y calibración antes de otro Resume,
+  no repetir controles de fuente aislados ya rápidos ni cambiar parámetros a ciegas.
 - Control de cabeza V2 terminó una vez 27-10 01:38:48 UTC, exit 0, en pausa y sin
   trabajo activo. Checkpoint 482.513 → 503.039 válido, 20.526 frames coincidentes con
   el orden congelado, retención raw conservada. Ventana parcial de control 842,927 s,

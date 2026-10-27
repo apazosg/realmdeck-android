@@ -2,7 +2,8 @@
 
 Fecha: 2026-10-26. Goal original `5caa6403-5b8f-47dc-ba95-ba40fbbe686e`;
 continuaciones autorizadas `fd7baae8-8a14-47b0-8452-6d8f7434217e` y
-`0d3ea00f-a91e-4702-88ad-febb37adb87f` (actual, seis horas de margen).
+`0d3ea00f-a91e-4702-88ad-febb37adb87f`; relanzamiento autorizado 2026-10-27:
+`5a98db34-7924-4936-86dd-0e9fce64eacd` (actual, otras seis horas de margen).
 **Resultados exploratorios; mejora general no validada. Diagnóstico reabierto.**
 
 El [plan aprobado](../.agents/planning/download-transfer-speed-plan.md) se centra
@@ -1112,6 +1113,21 @@ congelados, calibraciones y marcadores `exact-head-v2-run-*`. Análisis solo off
 ninguna acción ni petición se repitió para cerrar el informe.
 
 ## Matriz de aceptación del objetivo
+
+El usuario autorizó «relancemos el goal otras 6 horas». La nueva planificación
+conserva íntegros los cinco criterios y todo el trabajo verificado, sin marcar el
+anterior como completado ni repetir los ensayos. Rama/artefactos comprobados al
+retomar: `42ae0bd` limpio; último checkpoint probado 503.039 y controles terminados.
+
+Lectura de capacidades del dispositivo 27-10 06:26:00–06:26:02 UTC: instalada C158,
+cero servicios updater antes/después y sin guest; ningún click, GET, tracing o ajuste.
+Perfetto v34 registra `linux.ftrace`, `linux.perf` y `linux.process_stats`; atrace
+anuncia sched/network/disk y `am help` profiling por muestreo. El fichero de eventos
+ftrace no es legible desde shell: no se cambian permisos ni se asume que un productor
+registrado garantice una captura utilizable. Evidencia privada externa:
+`download-transport-diagnosis-20261027/profiler-capabilities/`. Se evaluará captura
+acotada del proceso real, sin heap dumps/payloads ni otro control de fuente ya medido;
+todavía no se ha ejecutado profiling ni hay otra APK o corrección de transporte.
 
 | Criterio | Evidencia y estado |
 |---|---|
