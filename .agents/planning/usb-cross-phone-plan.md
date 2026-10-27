@@ -14,9 +14,10 @@ el objetivo es poder moverlo de un móvil a otro». El USB permanece en el segun
 móvil: devolverlo al original no constituye una solución de portabilidad.
 La inspección y C160 ya están verificadas. El usuario eligió **«Ambos»**:
 reutilizar el cliente terminado y continuar el parcial en el segundo móvil.
-Se resuelve primero la selección; la adopción del parcial requiere el protocolo
-y los UC/AC correspondientes antes de cambios de cliente. No se ha reiniciado
-el goal de rendimiento.
+La selección está resuelta y después aprobó **«Aprobar criterios»** para
+US-009-UC-05 / AC-06–09. Se desarrollan requisitos y diseño para revisión;
+la adopción sigue sin implementar ni ejecutar. No se ha reiniciado el goal
+de rendimiento.
 
 ## Content
 
@@ -29,7 +30,8 @@ el goal de rendimiento.
   recibo propio: un rechazo del segundo móvil no demuestra pérdida del contenido.
 - No copiar recibos/checkpoints, falsear `.build.info`, publicar staging, saltarse
   guardas ni anunciar cliente completo. Aplican [US-007](../specs/US-007.md),
-  [US-008](../specs/US-008.md) y [US-009](../specs/US-009.md); sin cambiar requisitos.
+  [US-008](../specs/US-008.md) y [US-009](../specs/US-009.md); se conservan las
+  guardas normales y la nueva entrada tiene requisitos en revisión.
 - El usuario realiza el traslado físico y la expulsión de Android. La ausencia
   de escritores de la app no garantiza ausencia de escrituras del sistema.
 - En el teléfono personal, conectar solo al endpoint facilitado. No heredar la
@@ -113,9 +115,9 @@ el goal de rendimiento.
    archivos no demuestra que el juego arranque en ese hardware.
 4. **Decisión del usuario: «Ambos»**, incluyendo continuar una descarga parcial.
    El USB actual no contiene una instalación publicada y el checkpoint/
-   recibo siguen en el original. Ese traspaso no está descrito por el flujo actual
-   de US-009. Aprobar primero sus UC/AC y derivar requisitos/pruebas
-   antes de implementar un protocolo de reutilización/adopción verificada.
+   recibo siguen en el original. Ese traspaso no existe en el updater actual.
+   Los nuevos UC/AC de US-009 están aprobados; revisar los FR/NFR y el diseño
+   antes de derivar sus pruebas e implementar la adopción verificada.
    No copiar estado privado, falsear recibos/checkpoints o publicar un parcial
    como solución provisional; no empezar otra descarga completa automáticamente.
 5. Antes de cualquier cambio de cliente: plan/coste/consentimiento explícitos,
@@ -123,9 +125,9 @@ el goal de rendimiento.
    APK, identificar y auditar esa candidata antes de acordar su instalación.
    El código vigente y la C160 no se modifican en esta fase de definición.
 
-La respuesta confirma el alcance y la corrección del destino mediante su flujo
-normal. No constituye aprobación de un protocolo de migración aún no definido:
-el tratamiento del parcial continúa pendiente de especificación y validación.
+La respuesta «Ambos» confirmó el alcance y después «Aprobar criterios» confirmó
+los UC/AC. No constituye aprobación del protocolo de recuperación ni evidencia
+de reutilización: FR/NFR, diseño, pruebas e implementación siguen sus puertas.
 
 ### Selección corregida y puerta de adopción pendiente
 
@@ -149,11 +151,13 @@ el tratamiento del parcial continúa pendiente de especificación y validación.
   privado ligado a identidad; no hay entrada de adopción de ese parcial en otro
   teléfono. Los segmentos pueden investigarse para recuperar objetos, pero su
   presencia o `.owner` no demuestra integridad ni qué se reconoció durable.
-- Se propone [US-009-UC-05 y AC-06–09](../specs/US-009.md), marcados **[PROPOSED]**:
+- El usuario aprobó [US-009-UC-05 y AC-06–09](../specs/US-009.md):
   distinguir completo/parcial, reutilizar solo objetos autenticados, establecer
   estado nuevo sin copiar el privado del original y recuperar fallos sin pérdida
-  ni sobrescritura por estado antiguo. Pendiente aprobación del comportamiento
-  antes de FR/NFR, pruebas e implementación; no se altera la guarda actual.
+  ni sobrescritura por estado antiguo. FR-009–013 y NFR-004 son borradores para
+  revisión; no se altera todavía la guarda actual. El
+  [diseño propuesto](../../docs/usb-portability-recovery-design.md) separa revisión,
+  verificación, plan y adopción con generación nueva de propiedad sin mover CASC.
 - Evidencia externa: `personal-storage-options*/summary.json`,
   `personal-current-usb-selection/summary.json`, sus metadatos antes/después y
   `permission-verification.json`. No repetir esas acciones ya confirmadas.
@@ -174,6 +178,9 @@ el tratamiento del parcial continúa pendiente de especificación y validación.
   retirada como próximo paso, pues no resolvería el objetivo aclarado.
 - [x] 5a. Selección del volumen real resuelta por preflight normal: identidad/ruta
   correctas, sin permiso amplio, 81 metadatos CASC y marcadores preservados.
+- [x] 5a.1. Usuario aprueba los criterios de portabilidad UC-05 / AC-06–09.
+- [ ] 5a.2. Aprobar FR-009–013/NFR-004 y el diseño de recuperación; derivar después
+  pruebas focales antes de implementar o mutar el staging.
 - [ ] 5b. Validar reutilización del cliente terminado y, si se aprueba, continuidad
   del parcial con un protocolo especificado y verificado; no asumir que ya existe.
 - [ ] 6. Documentar conservación, reutilización observada o bloqueo seguro y pendientes.
@@ -188,8 +195,17 @@ el tratamiento del parcial continúa pendiente de especificación y validación.
   todavía a mutar/adoptar el staging con un protocolo sin especificar/aprobar.
 - El desajuste de selección está resuelto. Falta adopción/reutilización del parcial;
   el estado privado del original no es transferible por copiarlo o saltarse guardas.
-- Aprobar los UC/AC propuestos en US-009 antes de definir la recuperación nueva.
-  No se han derivado requisitos/tests ni implementado adopción desde esa propuesta.
+- UC/AC aprobados explícitamente. Los nuevos FR/NFR y el diseño están redactados
+  para revisión, no aprobados todavía. No se han añadido tests ni código de adopción.
+- Mantener la ruta es relevante: las cabeceras de segmento CASC incorporan su ruta
+  absoluta. El diseño propone una nueva generación del marcador, enlazada por el
+  `markerHash` del recibo, para invalidar estado obsoleto sin renombrar los segmentos.
+  No se ejecuta esa transición ni se confía en el marcador como prueba de objetos.
+- El diseño para revisión concreta exclusión en host único, intent antes de cambiar
+  propiedad, reserva del workspace antiguo y recuperación por bindings exactos.
+  La representabilidad sin truncar datos extranjeros y el bloqueo de estado obsoleto
+  en todas las rutas mutantes requieren pruebas; no se dan por demostrados por la
+  revisión preliminar de un snapshot, sin acceso a archivos ni ejecución.
 - No conceder permiso amplio como atajo: contradice los requisitos vigentes. Si un
   cambio de contrato resultase imprescindible, requiere otra decisión explícita.
 - US-007 cubre selección sin migración y US-009 revisión/reutilización de una fuente

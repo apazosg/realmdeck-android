@@ -31,8 +31,8 @@ rutas; se usó esa lectura ordinaria, sin root ni cambios de seguridad. El resul
 
 ## Qué no demuestra
 
-La interfaz del segundo móvil declara el almacenamiento seleccionado no disponible;
-no se ha intentado reanudar. El checkpoint y el recibo pertenecen al almacenamiento privado
+En la primera apertura, la interfaz declaró el almacenamiento seleccionado no
+disponible; no se ha intentado reanudar. El checkpoint y el recibo pertenecen al almacenamiento privado
 del original: ver los archivos USB no migra ese estado. No se han copiado esos
 metadatos ni el staging, ni falseado una instalación terminada.
 
@@ -188,11 +188,18 @@ entrada de adopción de segmentos parciales sin ese estado. Esto no demuestra qu
 los segmentos sean irrecuperables: requiere especificar y probar la recuperación
 acotada con catálogo oficial y autenticación por objeto, no falsear un checkpoint.
 
-El borrador [US-009-UC-05 / AC-06–09](../.agents/specs/US-009.md) propone ese
-comportamiento, incluida recuperación ante fallos y rechazo del estado privado
-obsoleto. Está marcado **[PROPOSED]** y pendiente de aprobación antes de derivar
-FR/NFR y pruebas o modificar el updater. Cliente completo y parcial son el alcance
-confirmado; la portabilidad completa aún no está implementada ni aceptada.
+El usuario aprobó después [US-009-UC-05 / AC-06–09](../.agents/specs/US-009.md),
+incluyendo recuperación ante fallos y rechazo del estado privado obsoleto. Los
+nuevos FR-009–013/NFR-004 y el [diseño de recuperación](usb-portability-recovery-design.md)
+son propuestas para revisión, no una adopción ejecutada. Cliente completo y parcial
+son el alcance confirmado; la portabilidad completa no está implementada ni aceptada.
+
+La inspección posterior del código añade una restricción al diseño: la cabecera
+de cada segmento depende de la ruta absoluta de `Data/data`. Renombrar el staging
+no permite entregar sin más sus bytes al writer existente. Se propone mantener
+la ruta y cambiar una generación de propiedad ligada al recibo nuevo, con intent
+durable y consentimiento del plan; no copiar el checkpoint original ni omitir la
+autenticación de objetos. Es un diseño pendiente, no una modificación del USB.
 
 Evidencia externa: `personal-storage-options/summary.json`,
 `personal-storage-options-after-foreground/summary.json`,
