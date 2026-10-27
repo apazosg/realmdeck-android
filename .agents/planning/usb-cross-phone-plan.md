@@ -51,12 +51,21 @@ una descarga incompleta. No cambia el objetivo de optimización de descarga.
   No se han leído ni autenticado todos los cuerpos CASC; no es una prueba de
   integridad completa o de reanudación en el segundo móvil.
 - Resultado y límites en [el informe USB](../../docs/usb-cross-phone-results.md).
+- Ampliación explícitamente aprobada: el usuario seleccionó «Actualizar C160».
+  Se permite reemplazar únicamente la app personal por la APK C160 exacta ya
+  auditada, mediante `adb install -r --no-streaming`, sin desinstalar/borrar datos.
+  Antes: comprobar hash/tamaño/auditoría y ausencia de updater/guest de esa app.
+  Después: comprobar versión, UID conservado y metadatos del staging sin iniciar
+  descarga. No se fuerza una firma incompatible ni se reintenta una instalación
+  de resultado incierto; no se cambia seguridad ni se migra el checkpoint.
 
 ## Implementation / Action Items
 
 - [x] 1. Cerrar el controlador original y verificar pausa/checkpoint/ausencia de trabajo.
 - [x] 2. Usuario comunica traslado al segundo teléfono; no se presupone reutilización.
 - [x] 3. Conectar ADB al endpoint autorizado; comprobar versión Android y app instalada.
+- [ ] 3a. Actualización C160 expresamente aprobada: reemplazo preservador y verificación,
+  sin operaciones sobre el cliente ni lanzamiento automático del juego.
 - [ ] 4. Inspeccionar reconocimiento y veredicto sin mutaciones, registrando límites.
   Metadatos del staging comprobados; pendiente el veredicto de la interfaz de la app.
 - [ ] 5. Usuario expulsa/devuelve el USB; verificar checkpoint privado original sin
@@ -65,12 +74,10 @@ una descarga incompleta. No cambia el objetivo de optimización de descarga.
 
 ## Open Issues
 
-- El usuario pregunta si conviene actualizar C146. Se propone reemplazar solo la
-  app por la C160 exacta ya auditada, conservando datos (`adb install -r`, sin
-  desinstalar/borrar ni forzar una firma incompatible). Requiere autorización
-  expresa porque la instalación estaba excluida del alcance de solo lectura.
-  No autoriza descargar/reparar/adoptar el parcial ni migrar el checkpoint; no se
-  ha implementado ni ejecutado esa actualización.
+- La ampliación para actualizar solo la app a C160 está aprobada; pendiente su
+  ejecución y verificación. No autoriza descargar/reparar/adoptar el parcial ni
+  migrar el checkpoint. La inspección de archivos del cliente sigue siendo de
+  solo lectura.
 - Pendientes reconocimiento/veredicto en la interfaz de la app y devolución al
   original. La conexión y versión ya se comprobaron con el nuevo endpoint.
 - Primer intento de conexión 19:24 UTC no conectó; no se ejecutaron consultas

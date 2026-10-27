@@ -56,3 +56,13 @@ Workspace externo `usb-cross-phone-20261027/`:
 Los listados originales anteriores al traslado estaban explícitamente rechazados
 por errores `ls`; no se usan como baseline. Endpoints, rutas privadas, IDs del
 volumen, listados y capturas permanecen fuera de Git.
+
+## Ampliación aprobada después de esa inspección
+
+El usuario seleccionó «Actualizar C160»: solo reemplazar la app C146 por la C160
+auditada, preservando datos mediante instalación `-r`, sin desinstalar ni forzar
+una firma incompatible. Se comprobarán hash/tamaño de la APK, ausencia de updater
+o guest de la app, versión/UID y metadatos USB posteriores. No se inicia descarga,
+reparación, adopción del parcial, migración de checkpoint o juego. La actualización
+no convierte por sí sola el staging en cliente completo ni demuestra reanudación.
+En este corte todavía no se ha ejecutado la instalación.
