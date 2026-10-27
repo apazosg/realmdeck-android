@@ -1391,15 +1391,32 @@ C159: `trial/flow-analysis.json`, `trial/observational-comparison.json`, checkpo
 raws, wall-alignment y recursos. **Reducción del coste privado validada para esta
 captura; mejora general de transferencia todavía no aceptada.**
 
-### Siguiente puerta: carga equivalente, no otra tasa secuencial
+### Propuesta aislada no adoptada; continuidad de la descarga real
 
-Falta diseñar una comparación con los mismos objetos y orden mixto, tamaños/orígenes
-justificados por el catálogo activo, incluyendo direct y cola grande, condiciones
-de caché declaradas y el recorrido real de autenticación/CASC/retiro. Si requiere
-scratch aislado, debe especificarse su punto de entrada, límites y exclusión de
-publicación antes de aprobarlo: **sin falsear catálogo/checkpoint ni tocar el cliente
-instalado**. No se ha implementado ni lanzado ese harness; tampoco se cambia otra
-vez la estrategia por el aumento agregado de esta captura.
+Se propuso una comparación con los mismos objetos y orden mixto en scratch, con
+tamaños/orígenes del catálogo activo y el recorrido real de autenticación/CASC/retiro.
+Su aislamiento y límites requerían decisión previa, **sin falsear catálogo/checkpoint
+ni tocar el cliente instalado**. No se implementó ni lanzó ese harness; tampoco se
+cambió otra vez la estrategia por el aumento agregado de esta captura.
+
+El usuario corrige la dirección: «insisto que la descarga es completa de distintos
+tipos de archivo. detectemos bloqueos, lentitud, cuellos de botella y continuemos
+con la descarga». La alternativa aislada queda descartada, no pendiente de construir.
+Se mantiene el análisis de comparabilidad, sin exigir redescargar los mismos blobs
+como condición para avanzar ni atribuir automáticamente una tasa secuencial al código.
+
+Siguiente avance real prefijado: **C159 sin cambios**, nuevo Resume desde 635.669,
+tras comprobar versión/pausa/Wi-Fi/guest/espacio/consentimiento y checkpoint idéntico.
+1.200 s visibles o señal de 6 GiB nuevos, pausa cooperativa, logs y recursos existentes;
+sin reinstalación, scratch, profiling ni GET auxiliar. Controlador nuevo, con intent
+durable y bloqueo contra replay; no relanzar ninguno de los terminados. Comparar
+el coste de fuentes/consumidor y la mezcla real, conservando explícitos los límites.
+
+Calibración estática 27-10 14:32:19 UTC PASS: sintaxis Python/bash, únicos clicks
+Reanudar/Pausar, guardas de pausa/recursos AST-idénticas y consentimiento de la C159
+anterior. Checkpoint idle con timeout de 90 s. Fuente `9fb636fa…beeb180d` y wrapper
+`d66546fd…3518e505`; evidencia externa en `download-real-pipeline-c159-20261027/`.
+Al escribir esto el controlador está preparado, **todavía no ejecutado**.
 
 ## Matriz de aceptación del objetivo
 
@@ -1422,15 +1439,16 @@ al corte de esa lectura todavía no había profiling ni otra APK/corrección de 
 |---|---|
 | Línea base con unidades, ambos tamaños y preparación separada | C152: 609,206 s; UI, frames y raw balance distinguidos. Comprobado. |
 | Diagnóstico sin sumar relojes concurrentes | C158 distingue espera de fuentes y consumidor; perfil real correlacionado cuantifica retiro raw como coste secuencial relevante. Seleccionada barrera privada agrupada, sin causa única general de red demostrada. |
-| Mejora medida y evaluación por tamaño | C159 reduce coste raw observado a 0,862 ms/objeto y agrupa ~16 retiros por barrera; 3,153 MB/s mixtos observados. Mezcla distinta y ratios de servicio no uniformemente mejores. **[PENDING]** carga equivalente y cobertura direct/cola grande; no se acepta +43,90 % como ganancia causal. |
+| Mejora medida y evaluación por tamaño | C159 reduce coste raw observado a 0,862 ms/objeto y agrupa ~16 retiros por barrera; 3,153 MB/s mixtos observados. Mezcla distinta y ratios de servicio no uniformemente mejores. **[PENDING]** evidencia comparable y evaluación de riesgos/direct/cola grande al avanzar realmente; no se acepta +43,90 % como ganancia causal. |
 | Garantías, pruebas, revisión sensible y APK autenticada | Nueve checks focales, tres de versión, revisión snapshot sensible y APK C159 auditada. Captura con prefix/CRC/retención/ACKs válidos y cero fases activas. Comprobado para estos escenarios, no estabilidad universal. |
 | Informe, pausa final, progreso y commits propios | C159 terminó 11:44:23 en pausa, checkpoint 635.669 válido, cero servicios y callbacks activos; raws retenidos. **[PENDING]** objetivo completo antes de archivar. Sin publicación/push. |
 
 ## Pendiente
 
-Diseñar y acordar la validación sobre carga equivalente antes de otro cambio de
-estrategia. C158/C159 y controles anteriores terminaron; no se repiten sus
-controladores, análisis ni checks verdes. El cliente conserva 635.669 objetos durables.
+Continuar la descarga real desde los 635.669 objetos durables, observar bloqueos y
+seleccionar el siguiente cambio mínimo sustentado. Sin harness aislado ni repeticiones
+de controles terminados; las métricas deben declarar tamaño/origen y scopes para
+evaluar mejora y regresiones sin confundir la mezcla con una ganancia causal.
 El goal **no** cumple todavía la mejora exigida.
 La línea base mide variación actual, pero no demuestra una causa única de todos
 los descensos históricos ni mejora aislada por tamaño; el uplift agregado de C155

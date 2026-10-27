@@ -201,9 +201,11 @@ orden o contratos. El trabajo ya verificado permanece verificado. El usuario
 aprobó expresamente la revisión el 2026-10-26: **«adelante»**. El punto 1 está
 completado; se ejecutan instrumentación y calibración antes del ensayo prolongado.
 
-### Comparación equivalente propuesta: aislamiento previo, no otra instalación
+### Propuesta de comparación aislada no adoptada (histórico; no ejecutar)
 
-**Pendiente de autorización específica antes de implementar o ejecutar.** El
+**No autorizada ni implementada.** El usuario solicita continuar la descarga real,
+no este adaptador ni la repetición deliberada de blobs. Se conserva la propuesta
+como registro de la alternativa descartada, no como instrucciones de ejecución. El
 resultado C159 respalda un coste local menor, pero sus objetos son distintos de
 los de C158. El siguiente paso no es otro tuning ni repetir el ensayo terminado.
 Es una comparación nueva de un corpus fijo, con el cliente real sin modificar.
@@ -302,10 +304,36 @@ Es una comparación nueva de un corpus fijo, con el cliente real sin modificar.
   evidencia será física sobre USB pero acotada: no certificará cliente completo,
   rendimiento de todos los dispositivos ni estabilidad de sesión de juego.
 
-La autorización solicitada incluye este nuevo aislamiento/entrada diagnóstica,
-reemplazos de APK preservadores y consumo adicional de red. **No está concedida
-por la ampliación temporal.** Si el diseño exige más cambios de los descritos,
-se registra antes de implementar; no se generaliza el adaptador por anticipación.
+La autorización de tiempo no concedió este aislamiento/entrada diagnóstica ni sus
+reemplazos y consumo adicional. No se implementa este harness.
+
+### Continuidad real e identificación del siguiente coste (dirección confirmada)
+
+El usuario precisa: «insisto que la descarga es completa de distintos tipos de
+archivo. detectemos bloqueos, lentitud, cuellos de botella y continuemos con la
+descarga». Se vuelve al recorrido productivo ya aprobado, no a un corpus aislado.
+
+- Reanudar una vez la C159 ya auditada desde el último checkpoint 635.669, solo
+  después de preflight fresco de versión/pausa/Wi-Fi/espacio/ausencia de guest y
+  checkpoint byte-idéntico al cierre anterior. Conservar consentimiento real;
+  no confirmar un coste o destino nuevos de forma automática.
+- Continuar avanzando datos reales: siguiente ventana de 1.200 s visibles o señal
+  de 6 GiB nuevos, pausa cooperativa y comprobación de durabilidad/retención/joins.
+  No reinstalar, cambiar la APK, hacer profiling, GET auxiliar, scratch o reset
+  para esta observación. Controlador/artefactos nuevos; no relanzar los terminados.
+- Correlacionar fases HTTP, cabeza/ready, presupuesto, writer y coste de barreras
+  con los agregados existentes; obtener la mezcla/tamaños/orígenes del progreso
+  real. No adelantar artificialmente objetos direct para completar una casilla.
+- Examinar los costes restantes de persistencia, verificación y GC a partir de
+  esos datos y fuentes actuales. El timer groupForce incluye comprobaciones,
+  apertura, force y cierre: no atribuir sus ~385 s previos exclusivamente al
+  syscall. Elegir el siguiente cambio mínimo solo con evidencia; no subir cuotas
+  ni reducir autenticación o barreras de durabilidad.
+- La comparación sigue requiriendo condiciones y scopes declarados, evaluación
+  de ambos tamaños/regresiones y evidencia de mejora; no exige redescargar los
+  mismos objetos. Costes locales y tasas secuenciales se distinguen. Si el mix
+  cambia o falta direct/cola grande, declararlo sin convertir esa carencia en
+  razón para detener el avance real ni afirmar causalidad que no se ha medido.
 
 ### Aceptación y validación
 
@@ -346,11 +374,9 @@ se registra antes de implementar; no se generaliza el adaptador por anticipació
 
 ## Open Issues
 
-- Pendiente autorización específica de la comparación equivalente propuesta arriba:
-  adaptador diagnóstico acotado/aislamiento real, cuatro corpus idénticos y control
-  de frontera; coste esperado ~9,5 GB y parada cooperativa por 12 GiB de cuerpo.
-  Solo se han hecho lecturas de fuente y viabilidad offline; sin nuevo código de
-  implementación, APK, instrumentación, lease, cambio de dispositivo ni GET.
+- Propuesta de comparación aislada no adoptada: cero implementación/descargas.
+  Usuario confirma continuar el pipeline real e identificar sus bloqueos. Nuevo
+  Resume C159 desde 635.669, con preflight y límites ya aprobados; no corpus/harness.
 - C159 terminó una vez 27-10 11:44:23 UTC, en pausa/cero servicios: 1.216,275 s,
   3,152689 MB/s UI, sampler 3,132912 MB/s. Checkpoint 573.476 → 635.669 válido,
   62.193 nuevos (53.401/8.233/559), todos range; ninguna pérdida raw, callbacks/fases0.
@@ -359,10 +385,10 @@ se registra antes de implementar; no se generaliza el adaptador por anticipació
   La reducción local está respaldada; no se acepta mejora general por tamaño.
 - La UI sube 43,90 % frente a C158 última, pero el objeto medio sube 41,11 %;
   algunos ratios de servicio homogéneos son inferiores y faltan direct/cola grande.
-  Pendiente diseñar/acordar carga mixta equivalente con mismos objetos/orden y
-  recorrido real, cachés declaradas y scratch aislado si fuera necesario, sin
-  falsear catálogo/checkpoint ni publicar/tocar el cliente. No nuevo harness ni
-  otro tuning automático. El plan permanece en progreso y no se archiva.
+  La propuesta de fijar los mismos objetos/orden en scratch no fue adoptada;
+  seguir la mezcla real y declarar tamaños/cachés/condiciones al comparar costes
+  y tasas. No falsear catálogo/checkpoint ni crear un harness o tuning automático.
+  El plan permanece en progreso y no se archiva.
 - C159 instalada una vez 10:59:24, checkpoint 573.476 byte-idéntico y cero servicios.
   El primer preflight acabó por TimeoutExpired sin acciones ni payload; comando
   exacto desconocido. Continuación separada solo para preparación/primer ensayo,
