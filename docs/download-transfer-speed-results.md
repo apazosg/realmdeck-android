@@ -1486,6 +1486,42 @@ anteriores: `download-real-pipeline-c159-20261027/trial/flow-analysis.json`, con
 las cuatro referencias previas conservadas. Progreso e integridad comprobados;
 la variación de tasa no se oculta seleccionando solo la ventana anterior de 3,15 MB/s.
 
+### C159: distinguir objetos pequeños, redondeo UI y pausas del consumidor
+
+Análisis adicional **solo de los datos ya cerrados**, sin repetir descarga ni el
+analizador completo. Los intervalos UI seleccionan filas por recepción host; sus
+tasas exactas usan el reloj `elapsedNanos` del sampler, no la latencia de recepción.
+La subventana UI de cero incremento sí transfirió **36.188.128 bytes lógicos/de
+cuerpo en 122,111 s: 0,296355 MB/s**. En ese scope se reconocieron 4.304 objetos
+(4.287 pequeños/17 intermedios), **35,25 objetos/s**, media encoded 8.438 bytes.
+No era una detención total: procesaba más objetos, pero mucho más pequeños.
+
+En contraste, otro scope produjo **3,230361 MB/s**, 3.028 ACKs en 122,127 s
+(2.361 pequeños/534 intermedios/133 grandes), **24,79 objetos/s**, media encoded
+129.913 bytes. Bytes lógicos de red y bytes durables de estos ACKs siguen siendo
+numeradores distintos; no se deriva una mejora o regresión de código de esa mezcla.
+
+También hubo pausas reales del progreso lógico de **20,015 / 17,010 / 12,007 s**.
+En sus muestras left-held el presupuesto estaba lleno, sin cabeza esperando,
+sin HTTP/callbacks activos y con **18 objetos listos**. Los endpoints de las dos
+primeras ya muestran nuevos HTTP; 1 Hz no prueba ocupación continua exacta.
+Esto señala backpressure del consumidor, no falta de objetos listos ni, por sí
+solo, un fallo de CDN.
+
+Las tres pausas caen en **el mismo** bracket de logs 512 → 768 objetos,
+62,191 s: appendAndForce aumenta 52,574 s, con groupForce hijo **52,398 s**;
+sourceResolve 7,185 s, privateVerify 1,715 y checkpoint 0,112. No se suman tres
+veces ese bracket ni el hijo al padre. Es un scope de 256 objetos, **más grueso
+que cada pausa**, y `groupForce` incluye validación/open/force/close, no solo el
+syscall. Antes de otra corrección de persistencia hay que distinguir esos costes;
+no se cambian las barreras Data/checkpoint/ACK ni su frecuencia por esta evidencia.
+
+Evidencia externa C159 real: `trial/exact-subwindow-diagnostic.json`,
+`trial/subwindow-consumer-context.json` y `trial/subwindow-context-verification.json`
+con la clarificación de scopes.
+Los tamaños proceden de los frames reconocidos por el contador de ACKs, no de
+imputar el coste de callbacks mixtos ni de considerar todo checkpoint ya reconocido.
+
 ### C160 autenticada; siguiente avance real prefijado
 
 Reconstrucción canónica desde **`5005615`**, Modern offline JDK17 **PASS 5 min 17 s**,
@@ -1513,6 +1549,11 @@ Hipótesis: menos capacidad encoded transitoria en verificaciones pequeñas; dec
 y tope de grandes no cambian. **No se presupone menor GC ni más throughput** por
 compilar, pasar once tests o auditar la APK. La siguiente observación conserva
 mezcla/origen/scopes y progreso real para evaluar beneficios y regresiones.
+
+Cadena física lanzada una sola vez tras esos gates; resultado aún no incorporado
+a este corte. El analizador C160 quedó preparado y calibrado, con las cinco
+referencias anteriores preservadas; no se consulta repetidamente ni se reinicia
+el controlador para obtener su resultado.
 
 ## Matriz de aceptación del objetivo
 

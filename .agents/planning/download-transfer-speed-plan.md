@@ -374,6 +374,13 @@ descarga». Se vuelve al recorrido productivo ya aprobado, no a un corpus aislad
 
 ## Open Issues
 
+- En datos C159 ya cerrados, la subventana UI cero fue 0,296355 MB/s exactos y
+  35,25 ACKs/s (4.287 pequeños/17 intermedios, media 8.438 encoded bytes), frente
+  a 3,230361 MB/s y 24,79 ACKs/s en un scope de media 129.913 bytes. Separar mezcla
+  y redondeo de bloqueo real. Pausas lógicas de 20,015/17,010/12,007 s tienen
+  muestras sin head/HTTP y 18 ready, cap lleno: presión del consumidor. Comparten
+  un solo bracket de 256 objetos/62,191 s con 52,398 s groupForce hijo; no sumarlo
+  por pausa ni atribuir el tiempo grueso a un syscall. No alterar durabilidad.
 - Continuación **real** C159 terminada 27-10 15:10:28 UTC, una sola vez: 635.669 →
   670.605 durables, prefix/CRC/retención válidos, cero servicios/HTTP/fases activos.
   1.214,326 s UI a 1,414441 MB/s; sampler 1,435583 MB/s. Nuevos objetos
@@ -405,7 +412,8 @@ descarga». Se vuelve al recorrido productivo ya aprobado, no a un corpus aislad
   vacío, límites/cancelación y recuperación de prefix. Revisión snapshot sin
   hallazgos, sin acceso a FS ni rerun. Postimage BLTE revisado actualizado a
   `6afe01aa…3456f794`; una prueba Python de staging/pins PASS y tres de retag PASS.
-  Reconstrucción/auditoría C160 completadas; instalación física pendiente.
+  Reconstrucción/auditoría C160 completadas; cadena física lanzada una vez,
+  resultado todavía no incorporado. Analizador preparado, no reejecutar controladores.
   Ahorro de capacidad asignada no se presenta por sí solo como mejora global de
   descarga ni como GC medido.
 - Propuesta de comparación aislada no adoptada: cero implementación/descargas.
