@@ -39,8 +39,9 @@ metadatos ni el staging, ni falseado una instalación terminada.
 No existe un inventario USB anterior válido para comparar todos los tamaños, ni se
 han autenticado de nuevo todos los cuerpos. Coincidir el marcador confirma la
 identidad del staging observada, **no la integridad de todos sus bytes**. El último
-checkpoint original validado conserva 822.658 objetos, antes del traslado; falta
-devolver el USB y verificar continuidad allí. Una Resume posterior se acuerda aparte.
+checkpoint original validado conserva 822.658 objetos, antes del traslado; no se
+ha verificado un retorno. El usuario aclara después que el objetivo es resolver
+la portabilidad en el segundo móvil, no volver al original como solución.
 
 ## Evidencia y diagnóstico de los instrumentos
 
@@ -82,7 +83,7 @@ metadatos previos/posteriores y `personal-c160-install-calibration.json`.
 El UID y los metadatos comparados no equivalen a cotejar todos los datos privados
 ni autenticar todos los cuerpos CASC. La actualización no convierte el staging
 en cliente completo ni demuestra reanudación. El veredicto posterior de la app
-se detalla abajo; falta devolver el USB al original y comprobar su checkpoint.
+se detalla abajo; el estado privado original no se ha migrado ni modificado.
 
 ## Apertura de C160 y veredicto real de la interfaz
 
@@ -119,6 +120,34 @@ ajustes del dispositivo.
 Evidencia externa: `personal-c160-ui/summary.json`,
 `personal-c160-startup-process-diagnosis/summary.json`,
 `personal-c160-ui-followup/summary.json` y `personal-c160-storage-details/summary.json`.
-La próxima comprobación ya acordada requiere expulsar y devolver físicamente el USB
-al original. Cambiar permisos amplios o selección del personal necesita otra decisión;
-no se han realizado para intentar forzar el reconocimiento.
+La devolución propuesta en ese punto no se realizó. La aclaración posterior del
+usuario sustituye ese próximo paso: el USB permanece en el segundo móvil para
+resolver su portabilidad, sin forzar reconocimiento ni cambiar permisos.
+
+## Alcance corregido y desajuste concreto de selección
+
+El usuario aclara: «pero tenemos que resolverlo en este móvil no? el objetivo es
+poder moverlo de un móvil a otro». Conservar los archivos es una condición necesaria,
+no la aceptación de ese objetivo; no se cierra la tarea por devolver el USB.
+
+Lectura dirigida 20:24:37 UTC, sin acciones UI, escritura de preferencias o cliente:
+el identificador de volumen guardado por la app **difiere del volumen USB actual**,
+también al comparar sin distinguir mayúsculas. El marcador de la raíz sí coincide
+con el volumen montado. Ambos identificadores son de tipo `volume`; no es el antiguo
+caso de identidad por hash de ruta. Cero servicios updater antes/después.
+Esto respalda investigar primero la selección persistida y la enumeración actual,
+no conceder permisos amplios ni atribuir el rechazo a pérdida de los CASC.
+Evidencia externa: `personal-storage-binding/summary.json`, `identity-shape.json`.
+Los valores concretos y el XML específico de almacenamiento quedan fuera de Git.
+
+Corrección de interpretación: el permiso de acceso a todos los archivos **no es
+un requisito que falte por conceder** en el diseño aprobado. US-007-NFR-002,
+US-009-NFR-002 y US-008-AC-05 exigen operar sin él. Su estado `default` no demuestra
+la causa del fallo observado; no se solicita ni se concede como solución rápida.
+
+El plan distingue dos cuestiones: resolver aquí el destino y reutilizar un cliente
+terminado; y, si el usuario lo incluye, continuar aquí una descarga a medias. El
+segundo caso necesita comportamiento y recuperación especificados, porque los
+822.658 objetos pertenecen a un staging cuyo checkpoint/recibo están en el original.
+No se ha implementado migración, copiado estado privado, reanudado ni modificado
+el cliente. La decisión sobre el parcial está pendiente antes de ampliar UC/AC.
