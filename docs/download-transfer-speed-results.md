@@ -1128,7 +1128,7 @@ compatibilidad por la versión de una guía. Fue en reposo, con cero updater/gue
 demuestra que el instrumento funciona, **no** el cuello de la descarga activa.
 Herramienta de análisis oficial, fijada por SHA, instalada solo en artifacts externos.
 
-Próximo control, antes de tuning: **misma C158 y checkpoint 503.039**, nueva
+Control prefijado entonces, antes de tuning: **misma C158 y checkpoint 503.039**, nueva
 reanudación, sin reinstalar. Tras diez segundos muestreados head+body+ready, una
 única captura propia de **20 s a 19 Hz**, con la configuración calibrada salvo la
 duración. Se conserva máximo de 1.200 s visibles/6 GiB de progreso nuevo y pausa;
@@ -1161,6 +1161,40 @@ que se publica más lentamente. Revisión independiente de snapshot, sin inspecc
 de archivos ni reruns. El check de ownership y la señal no constituyen un pidfd
 atómico; ese límite no se oculta como exclusión absoluta de carreras.
 
+### Captura mixta terminada sin trigger; selección temporal independiente
+
+La cadena anterior terminó 27-10 **08:31:42 UTC**, en pausa y sin trabajo activo:
+1.211,056 s visibles, **2,190826 MB/s** UI (redondeo solo 2,146452–2,235200).
+Checkpoint **503.039 → 564.690**, prefix/CRC y retención válidos; 61.651 durables,
+2.744.229.763 bytes encoded. Mezcla real, toda range: **53.329 pequeños, 8.011
+intermedios y 311 grandes**; direct/cola grande siguen sin validar. Misma APK y
+algoritmo: no es una mejora de código frente a los anteriores 1,50 MB/s.
+
+El predicado se evaluó correctamente: 121 muestras calificaban, pero su secuencia
+continua más larga duró **3,002 s**, no diez. Observer `NO_TRIGGER_BEFORE_MAIN_ENDED`,
+sin directorio de captura CPU: **no se inició profiling activo**. No es un fallo de
+permisos ni una traza vacía. El análisis de los datos ya cerrados no repitió acciones.
+Los subintervalos UI de dos minutos variaron 0,538–4,116 MB/s.
+
+En 1.210,008 s alineados: head wait 22,91 %, reservas al cap 96,03 %, cap **sin head
+wait 74,77 %**, cuerpo activo 20,76 %, headers 54,76 %, fuerza privada 16,05 %,
+autenticación 12,49 %. Estados solapados, no partición causal; esta mezcla no estaba
+dominada por el mismo atasco largo de cuerpo observado antes. Evidencia externa:
+`active-profile-trial/flow-analysis.json`, walls/recursos y `profile-observer/summary.json`.
+
+Siguiente control de observación: **misma C158 desde 564.690**, una captura de 20 s
+a 19 Hz en el primer sample fresco posterior a **60 s visibles**, independiente de
+tasa/head/body/ready. Se registra la fase real en lugar de seleccionar solo un
+atasco de red. Configuración y cleanup de sesión propia idénticos a los calibrados;
+los máximos 1.200 s/6 GiB y pausa a 120 s del intento, cualquiera que sea su resultado,
+se conservan. Un fin temprano no será un nuevo benchmark de veinte minutos.
+
+`fixed-profile-controller-calibration.json` verifica sintaxis, seis casos de la
+nueva selección temporal, consentimiento/checkpoint previo y AST idéntico de los
+guards de ownership; reutiliza las cinco pruebas anteriores sin repetirlas. Solo
+cambia duración respecto a la calibración de CPU, no fuentes ni permisos. Aún no
+hay una causa demostrada ni un cambio de estrategia seleccionado.
+
 ## Matriz de aceptación del objetivo
 
 El usuario autorizó «relancemos el goal otras 6 horas». La nueva planificación
@@ -1176,7 +1210,7 @@ ftrace no es legible desde shell: no se cambian permisos ni se asume que un prod
 registrado garantice una captura utilizable. Evidencia privada externa:
 `download-transport-diagnosis-20261027/profiler-capabilities/`. Se evaluará captura
 acotada del proceso real, sin heap dumps/payloads ni otro control de fuente ya medido;
-todavía no se ha ejecutado profiling ni hay otra APK o corrección de transporte.
+al corte de esa lectura todavía no había profiling ni otra APK/corrección de transporte.
 
 | Criterio | Evidencia y estado |
 |---|---|
@@ -1184,7 +1218,7 @@ todavía no se ha ejecutado profiling ni hay otra APK o corrección de transport
 | Diagnóstico sin sumar relojes concurrentes | C158 localiza espera de fuentes; veinte minutos mixtos y control del mismo objeto derivado acotan transporte/contexto y contrapresión. **[PENDING]** causa dominante específica y direct/cola restante; no afirmar causalidad del código. |
 | Mejora medida y evaluación por tamaño | C156/C157 medidas, pero solo 151/5 grandes y tamaños distintos. +16,90 % C155 y −47,57 % C157 observacionales no validan mejora general. **[PENDING]** comparación representativa. |
 | Garantías, pruebas, revisión sensible y APK autenticada | Diez regresiones y revisión del cambio sensible; cuatro checks iniciales, dos tras simplificar métricas y tres de versión. Ambas APK auditadas; ensayos con prefix/CRC/retención válidos. Comprobado para estos escenarios. |
-| Informe, pausa final, progreso y commits propios | Control final terminó 01:38:48 en pausa, checkpoint 503.039 válido, cero trabajo activo y raws retenidos. **[PENDING]** mejora demostrada y objetivo completo antes de archivar. Sin publicación/push. |
+| Informe, pausa final, progreso y commits propios | Captura del 27-10 terminó 08:31:42 en pausa, checkpoint 564.690 válido, cero trabajo activo y raws retenidos. **[PENDING]** mejora demostrada y objetivo completo antes de archivar. Sin publicación/push. |
 
 ## Pendiente
 

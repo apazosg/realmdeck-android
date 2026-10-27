@@ -236,12 +236,24 @@ completado; se ejecutan instrumentación y calibración antes del ensayo prolong
 
 ## Open Issues
 
+- Captura mixta de la misma C158 terminada 27-10 08:31:42, en pausa/cero trabajo:
+  1.211,056 s visibles, 2,190826 MB/s; checkpoint 503.039 → 564.690 válido, 61.651
+  objetos (53.329/8.011/311), todos range. No es una ganancia de código. El trigger
+  de diez segundos nunca se sostuvo (máximo 3,002 s); no se inició profiling activo.
+  Nuevo estado observado: cap sin head wait 74,77 %, head 22,91 %, cuerpo 20,76 %;
+  son estados solapados, no atribución causal ni cobertura de direct/cola grande.
+- Selección siguiente prefijada e independiente de síntomas: desde 564.690, una
+  captura propia de CPU/sched 20 s/19 Hz en el primer sample fresco tras 60 s visibles,
+  sin exigir head/body/ready ni tasa. Configuración probada, cleanup propio y guardas
+  intactos; máximo 20 min/6 GiB y pausa tras 120 s del intento sea exitoso o no.
+  Calibración estática nueva PASS, guards de ownership AST-idénticos a los cinco
+  casos ya probados; no repetirlos. Control diagnóstico, no benchmark ni tuning.
 - Diagnóstico del proceso real, antes de otro ajuste: Perfetto propio de cuatro
   segundos en reposo calibrado en SDK 34, 18 muestras CPU del PID objetivo con
   callsites/nombres Java y cero errores de unwind/pérdida en esa configuración.
   Es capacidad del instrumento, no causa del atasco. No usar AM profile global,
   debuggerd root ni repetir controles HTTP ya rápidos.
-- Contraste prefijado siguiente: misma C158, nuevo Resume desde el checkpoint
+- Contraste histórico ya terminado: misma C158, nuevo Resume desde el checkpoint
   503.039; primer estado head+body+ready persistente diez segundos muestreados
   dispara **una sesión propia de 20 s, 19 Hz**, CPU del proceso y scheduling.
   Configuración ya calibrada, solo cambia duración; buffer 8 MiB, pull ≤16 MiB,
