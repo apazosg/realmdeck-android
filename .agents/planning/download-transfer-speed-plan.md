@@ -29,6 +29,10 @@ El usuario aprobó después ampliar ese margen a seis horas. Es un límite de
 seguridad, no una razón para consumirlo ni para cerrar con evidencia insuficiente.
 El 2026-10-27 autorizó otro tramo de seis horas: «relancemos el goal otras 6 horas».
 Se trasladan los cinco criterios y las fases verificadas, no se reinician ensayos.
+El 27-10 a las 13:25 UTC autoriza «Continuar otras 6 h» y «venga pues continuemos».
+Se conserva el mismo goal y su historial; esta autorización de tiempo no aprueba
+por sí sola un nuevo punto de entrada diagnóstico, costes o cambios de garantías.
+Un límite técnico anterior tampoco se eludirá ni se modificará silenciosamente.
 
 ## Content
 
@@ -197,6 +201,112 @@ orden o contratos. El trabajo ya verificado permanece verificado. El usuario
 aprobó expresamente la revisión el 2026-10-26: **«adelante»**. El punto 1 está
 completado; se ejecutan instrumentación y calibración antes del ensayo prolongado.
 
+### Comparación equivalente propuesta: aislamiento previo, no otra instalación
+
+**Pendiente de autorización específica antes de implementar o ejecutar.** El
+resultado C159 respalda un coste local menor, pero sus objetos son distintos de
+los de C158. El siguiente paso no es otro tuning ni repetir el ensayo terminado.
+Es una comparación nueva de un corpus fijo, con el cliente real sin modificar.
+
+#### Entrada y garantías
+
+- La entrada pública `execute` exige el catálogo completo y después publica el
+  cliente. `ForeverClientArchiveOrder` y CASC también exigen cobertura completa de
+  su manifiesto. No usar un catálogo recortado, un checkpoint inventado ni una
+  cancelación presentada como instalación completa. Dos descargas completas de
+  ~91 GB encoded no son una alternativa proporcionada ni están autorizadas.
+- Preparar un adaptador **solo de diagnóstico**, versionado junto a la
+  instrumentación, y aplicarlo de manera idéntica a fuentes congeladas C158 y
+  C159 en workspaces externos. No añadir un benchmark a Home, opciones de usuario,
+  dependencias ni un segundo motor de descarga. C159 productiva permanece intacta.
+- El adaptador reutilizará el cuerpo real del pipeline paralelo, su presupuesto,
+  transferencias, autenticación, CASC y retiro. Su cambio mínimo separa los límites
+  de progreso/identidad de checkpoint y la fuente ordenada de objetos de los
+  datos del plan público; no construye un `ForeverClientUpdatePlan` ficticio.
+  La ruta productiva sigue pasando el catálogo completo y conserva sus checks.
+- El manifiesto **diagnóstico**, explícitamente no instalable, contiene solo EKeys.
+  Cada registro se resuelve y coteja contra el catálogo activo íntegro autenticado
+  `cf2da57c…125b032`. Rechazar duplicados, desconocidos y orden incorrecto. CASC
+  debe reconocer exactamente todos los miembros del manifiesto diagnóstico;
+  nunca omitir su comprobación de cobertura. Sin `.build.info`, loose files ni
+  publicación/activación. No copiar el scheduler ni simplificar su concurrencia.
+- Instrumentación en el UID de la app y APK de test separado, sin nuevo componente
+  productivo. Usar `ProcessGuard` y el **gate global real**: admitir normalmente
+  el storage ID del cliente pausado, obtenido del storage owner, sin borrar su
+  estado UPDATING ni inventar Quiescent. El lease puede renovar su token como una
+  operación normal; al cerrar conserva la actualización pendiente real. No se
+  pasa un ID falso para hacer pasar scratch por la raíz instalada.
+- Los dos builds diagnósticos usarán el **mismo versionCode 159** que la candidata
+  instalada, con versionName/provenance distintos y hashes exactos registrados.
+  Así se puede reponer la APK C159 original mediante reemplazo normal, sin `-d`,
+  downgrade, desinstalación ni clear-data. Versión numérica sola no identifica el
+  build; cada paso comprueba también nombre, firma y hash del artefacto auditado.
+- Scratch con nonce/owner propio bajo no-backup y en el mismo USB, **fuera** del
+  árbol del cliente y de su workspace/journal. Revalidar el target real con los
+  hooks full/light existentes y, además, identidad/ancestros no-follow del scratch.
+  No modificar selección, marcadores, catálogo, checkpoint, raws o journal reales.
+  Cotejar checkpoint y raws reales antes/después, solo cuando no hay trabajo activo.
+  Si no puede conservarse esta exclusión y aislamiento, parar sin ensayo; no usar
+  un lease de pruebas independiente ni limpiar la reserva del cliente.
+
+#### Carga prefijada por metadatos, antes de conocer resultados
+
+- Consulta offline nueva, solo lectura y SHA verificado, del catálogo activo:
+  96 bloques range de 256 registros, con inicios igualmente espaciados en el orden
+  físico completo; 120 registros direct igualmente espaciados. Añadir únicamente
+  la mediana inferior de un estrato direct ausente. Orden final: el físico canónico.
+  Se conserva contigüidad dentro de los bloques; los saltos siguen rompiendo batches
+  sin overfetch. Registrar esa diferencia respecto a una instalación continua.
+- Viabilidad calculada, **todavía sin guardar manifiesto ni descargar**: 24.697
+  objetos, 2.308.167.412 bytes encoded y 4.303.186.504 decoded. Pequeños 19.534,
+  intermedios 4.718, grandes 445; 121 direct, incluidos dos >8 MiB. Es una muestra
+  sistemática aproximada, no una reproducción exacta de las proporciones globales.
+  Congelar EKeys/orden, hashes, tamaños, origen, percentiles y reglas en un receipt
+  antes de la primera petición; no ajustar selección según las velocidades.
+- Control de límite separado: el mayor objeto real (direct, 141.273.036 encoded)
+  junto a un bloque range ya elegido, en el mismo orden, una vez por variante.
+  Etiquetarlo como frontera/cola, no estimación de throughput global ni prueba
+  estadística de todos los objetos grandes. No omitir EKey/BLTE/CKey o streaming.
+
+#### Comparación, límites y decisiones
+
+- A = C158, B = C159, instrumentación idéntica; cuatro ejecuciones nuevas **A/B/B/A**,
+  cada una en scratch vacío distinto con el mismo corpus. El control de límite
+  también usa el mismo manifiesto en ambas. Dos pasadas por variante, no una tasa
+  favorable elegida entre muchas. La única diferencia de estrategia será la
+  barrera privada agrupada ya revisada; no cambiar workers/cuotas/cadencia CASC.
+- Coste esperado de cuerpos principales ~9,23 GB, más dos controles de frontera
+  (~0,3 GB más el bloque). Antes de ejecutarse, mostrar suma exacta y cotas por
+  volumen. Señal global de parada a **12 GiB consumidos de cuerpo HTTP**, incluyendo
+  reintentos; no es un límite de wire ni un corte duro: se añade el drenaje acotado
+  existente. Cada pasada ≤1.800 s; controlador global ≤3 h y siempre dentro del
+  tiempo de goal disponible con margen de cleanup. Incompleta = censurada/fallida,
+  no se reduce el manifiesto ni se repite automáticamente para lograr un PASS.
+- Estado local frío = raws y CASC de scratch vacíos. No afirmar caché fría de
+  kernel/CDN; no root/drop-caches, ajustes o limpieza de conexiones globales.
+  Registrar red/temperatura/orden/tiempo y comprobar si el efecto aparece en ambas
+  parejas. ABBA reduce algunos efectos temporales, no elimina toda variabilidad.
+- Medir misma cantidad exacta de trabajo desde primer fetch hasta último ACK y
+  retorno: bytes útiles/cuerpo/reintentos/reuso, objetos/s, subventanas de 120 s,
+  writer y coste raw inclusivo. Separar finalización/preparación y reportar tamaño/
+  origen, colas y waits. Cohortes homogéneas y Mixed conservan relojes de servicio,
+  no se presentan como velocidades globales aisladas ni se reparten costes mixtos.
+- Antes de dispositivo: tests focales de selección/autoridad y aislamiento/gate,
+  cobertura completa y cancelación/joins, más revisión sensible independiente.
+  Construcción canónica, receipts y auditor intacto en ambas APK exactas; cotejar
+  el delta del adaptador entre variantes, Transfer/CASC sin cambios y APK de test
+  sin payloads. No ampliar allowlists ni dar por repetidos los checks ya verdes.
+- Terminar todo joined/idle, checkpoint real y raws preservados y gate pendiente
+  intacto; restaurar la APK C159 auditada si se reemplazó. Borrar solo scratch propio
+  por inventario/owner tras guardar evidencia, nunca un árbol desconocido. La
+  evidencia será física sobre USB pero acotada: no certificará cliente completo,
+  rendimiento de todos los dispositivos ni estabilidad de sesión de juego.
+
+La autorización solicitada incluye este nuevo aislamiento/entrada diagnóstica,
+reemplazos de APK preservadores y consumo adicional de red. **No está concedida
+por la ampliación temporal.** Si el diseño exige más cambios de los descritos,
+se registra antes de implementar; no se generaliza el adaptador por anticipación.
+
 ### Aceptación y validación
 
 - Línea base actual y comparación posterior con categorías pequeñas/grandes,
@@ -236,6 +346,11 @@ completado; se ejecutan instrumentación y calibración antes del ensayo prolong
 
 ## Open Issues
 
+- Pendiente autorización específica de la comparación equivalente propuesta arriba:
+  adaptador diagnóstico acotado/aislamiento real, cuatro corpus idénticos y control
+  de frontera; coste esperado ~9,5 GB y parada cooperativa por 12 GiB de cuerpo.
+  Solo se han hecho lecturas de fuente y viabilidad offline; sin nuevo código de
+  implementación, APK, instrumentación, lease, cambio de dispositivo ni GET.
 - C159 terminó una vez 27-10 11:44:23 UTC, en pausa/cero servicios: 1.216,275 s,
   3,152689 MB/s UI, sampler 3,132912 MB/s. Checkpoint 573.476 → 635.669 válido,
   62.193 nuevos (53.401/8.233/559), todos range; ninguna pérdida raw, callbacks/fases0.
