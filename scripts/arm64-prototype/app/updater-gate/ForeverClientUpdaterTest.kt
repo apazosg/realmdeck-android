@@ -300,6 +300,7 @@ class ForeverClientUpdaterTest {
             val paths = fixture.makePaths()
             val batches = java.util.Collections.synchronizedList(ArrayList<List<String>>())
             val retiredWithReservation = AtomicInteger()
+            val retirementForceGroups = ArrayList<Int>()
             val fetch: (ForeverClientUpdateCatalog.ObjectRecord, File, () -> Boolean, (Long) -> Unit) -> File =
                 { record, work, _, progress ->
                     val output = File(work, "${record.ekey}.blte")
@@ -311,6 +312,7 @@ class ForeverClientUpdaterTest {
                 // Three maximum-sized ranges fit. The larger contiguous run
                 // therefore exercises a pressure split and later regrouping.
                 prefetchMaxBytesForTests = fixture.rangeEncodedSize * 3
+                beforeRawRetirementForceForTests = { retirementForceGroups += it }
                 afterRawRetirementForTests = { _, reserved ->
                     assertTrue("retired raw keeps its reservation until the writer finishes the acknowledgement group", reserved)
                     retiredWithReservation.incrementAndGet()
@@ -332,10 +334,93 @@ class ForeverClientUpdaterTest {
 
             assertEquals(10L, result.reusedObjects + result.writtenObjects)
             assertEquals(result.writtenObjects.toInt(), retiredWithReservation.get())
+            assertEquals(result.writtenObjects.toInt(), retirementForceGroups.sum())
+            assertTrue(retirementForceGroups.all { it in 1..16 })
+            assertTrue("one directory barrier covers more than one retired raw", retirementForceGroups.any { it > 1 })
             assertTrue("the initial prefix and a later tail must both use batch fetch", batches.size >= 2)
             assertTrue("pressure regrouping must submit multi-object tail groups", batches.drop(1).all { it.size > 1 })
             assertTrue(batches.flatten().all { it in fixture.contiguousRangeEkeys })
             assertNoLiveFetchWorkers("pressure-split contiguous tail regrouping")
+        }
+    }
+
+    @Test(timeout = 30_000)
+    fun privateRawDirectoryForceFailureKeepsCapacityAndResumeReusesDurableProgress() {
+        val configAssets = configAssetsOrSkip()
+        Fixture(cascObjectCount = 4, contiguousRangeObjectCount = 3).use { fixture ->
+            val paths = fixture.makePaths()
+            val fetched = java.util.Collections.synchronizedList(ArrayList<String>())
+            val forceAttempts = AtomicInteger()
+            val fetch: (ForeverClientUpdateCatalog.ObjectRecord, File, () -> Boolean, (Long) -> Unit) -> File =
+                { record, work, _, progress ->
+                    fetched += record.ekey
+                    File(work, "${record.ekey}.blte").apply {
+                        writeBytes(fixture.rawFor(record))
+                        progress(length())
+                    }
+                }
+            val updater = fixture.updater(paths, configAssets, fetch).apply {
+                prefetchMaxBytesForTests = fixture.targetSpecs().maxOf { it.encodedSize }
+                beforeRawRetirementForceForTests = {
+                    forceAttempts.incrementAndGet()
+                    throw java.io.IOException("injected private directory barrier failure")
+                }
+            }
+            val destination = fixture.destination(paths)
+            val plan = updater.plan(destination)
+            val failure = assertThrows(java.io.IOException::class.java) {
+                updater.execute(destination, plan, consentFor(plan))
+            }
+            assertEquals("injected private directory barrier failure", failure.message)
+            assertEquals("a failed barrier is not retried implicitly", 1, forceAttempts.get())
+            assertEquals("no next raw is admitted before the failed barrier", 1, fetched.size)
+            val firstDurableKey = fetched.single()
+            assertFalse(File(paths.client, ".build.info").exists())
+            assertNoLiveFetchWorkers("failed private raw directory barrier")
+
+            val resumed = fixture.updater(paths, configAssets, fetch).apply {
+                prefetchMaxBytesForTests = fixture.targetSpecs().maxOf { it.encodedSize }
+            }
+            val resumedPlan = resumed.plan(destination)
+            val result = resumed.execute(destination, resumedPlan, consentFor(resumedPlan))
+            assertEquals(4L, result.reusedObjects + result.writtenObjects)
+            assertEquals("checkpointed source is not fetched again", 1, fetched.count { it == firstDurableKey })
+            assertEquals(4, fetched.toSet().size)
+            assertNoLiveFetchWorkers("resume after private raw directory barrier failure")
+        }
+    }
+
+    @Test(timeout = 30_000)
+    fun cancellationForcesPendingPrivateRawRetirementsAsOneGroup() {
+        val configAssets = configAssetsOrSkip()
+        Fixture(cascObjectCount = 4, contiguousRangeObjectCount = 3).use { fixture ->
+            val paths = fixture.makePaths()
+            val cancelled = AtomicBoolean(false)
+            val requestedSources = AtomicInteger()
+            val retirementForceGroups = ArrayList<Int>()
+            val fetch: (ForeverClientUpdateCatalog.ObjectRecord, File, () -> Boolean, (Long) -> Unit) -> File =
+                { record, work, _, progress ->
+                    File(work, "${record.ekey}.blte").apply {
+                        writeBytes(fixture.rawFor(record))
+                        progress(length())
+                    }
+                }
+            val updater = fixture.updater(paths, configAssets, fetch).apply {
+                sourceReadinessForTests = { afterRevalidate, _, _ ->
+                    if (!afterRevalidate && requestedSources.incrementAndGet() == 3) cancelled.set(true)
+                }
+                afterRawRetirementForTests = { _, reserved ->
+                    assertTrue("pending unlink keeps its reservation until the barrier", reserved)
+                }
+                beforeRawRetirementForceForTests = { retirementForceGroups += it }
+            }
+            val destination = fixture.destination(paths)
+            val plan = updater.plan(destination)
+            assertThrows(java.util.concurrent.CancellationException::class.java) {
+                updater.execute(destination, plan, consentFor(plan), cancelled = { cancelled.get() })
+            }
+            assertEquals("pause forces the final partial group once", listOf(2), retirementForceGroups)
+            assertNoLiveFetchWorkers("cancelled private raw partial retirement group")
         }
     }
 

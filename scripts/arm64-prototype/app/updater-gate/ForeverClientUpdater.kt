@@ -92,6 +92,8 @@ internal class FetchPipelineDiagnostics {
     val reserveWaitNanos = AtomicLong()
     val reserveRetireNanos = AtomicLong()
     val sourceConsumedRawNanos = AtomicLong()
+    val rawRetireDirectoryForceCalls = AtomicLong()
+    val rawRetireDirectoryForceNanos = AtomicLong()
     private val outstandingKeys = AtomicInteger()
     private val headWaitEncodedBytes = AtomicLong()
     private val headWaitNanos = AtomicLongArray(3)
@@ -262,6 +264,8 @@ internal class FetchPipelineDiagnostics {
                     "reserveTotalMs=${reserveNanos.get() / 1_000_000} reserveBudgetWaitMs=${reserveWaitNanos.get() / 1_000_000} " +
                     "reserveInheritedRetireMs=${reserveRetireNanos.get() / 1_000_000} " +
                     "sourceConsumedRawMs=${sourceConsumedRawNanos.get() / 1_000_000} " +
+                    "rawRetireDirectoryForceCalls=${rawRetireDirectoryForceCalls.get()} " +
+                    "rawRetireDirectoryForceNanos=${rawRetireDirectoryForceNanos.get()} " +
                     cohortNames.mapIndexed { index, name ->
                         "cohort${name}Callbacks=${cohortCallbacks.get(index)} " +
                             "cohort${name}Objects=${cohortObjects.get(index)} " +
@@ -422,6 +426,7 @@ class ForeverClientUpdater(
     internal var fetchReadyForTests: ((String) -> Unit)? = null
     internal var beforePostRevalidateSampleForTests: (() -> Unit)? = null
     internal var afterRawRetirementForTests: ((String, Boolean) -> Unit)? = null
+    internal var beforeRawRetirementForceForTests: ((Int) -> Unit)? = null
     private val targetSummary = validatedTargetSummary()
     private val targetCatalogSha256 = catalog.verifiedSha256.lowercase(Locale.ROOT).also {
         require(it.matches(HASH_PATTERN)) { "verified client catalog SHA-256 is malformed" }
@@ -2318,13 +2323,35 @@ class ForeverClientUpdater(
                     }
                 }
             }.apply { isDaemon = true; start() }
-            // Writer-owned, bounded by the acknowledgement group. Retire and
-            // force each raw as before, but expose the group's free capacity
-            // together, not one slot at a time while ACK callbacks are running.
+            // Writer-owned and bounded by the acknowledgement group. Keep every
+            // reservation until the group's private-cache unlinks are durable;
+            // Data and checkpoint barriers still precede each acknowledgement.
             val retiredRawKeys = ArrayList<String>(ForeverCasc.RESUMABLE_COMMIT_GROUP_OBJECTS)
             var retiredSources = 0
+            var pendingRawDirectoryUnlinks = 0
+            var rawDirectoryForceFailed = false
+            fun forceRetiredRawDirectory() {
+                if (pendingRawDirectoryUnlinks == 0) return
+                val started = System.nanoTime()
+                fetchPipelineDiagnostics.rawRetireDirectoryForceCalls.incrementAndGet()
+                try {
+                    beforeRawRetirementForceForTests?.invoke(pendingRawDirectoryUnlinks)
+                    forceDirectory(paths.objects.toPath())
+                    pendingRawDirectoryUnlinks = 0
+                } catch (failure: Throwable) {
+                    rawDirectoryForceFailed = true
+                    throw failure
+                } finally {
+                    val elapsed = System.nanoTime() - started
+                    fetchPipelineDiagnostics.rawRetireDirectoryForceNanos.addAndGet(elapsed)
+                    // Preserve the old inclusive raw-retirement clock even though
+                    // this child scope moved to the writer handoff/teardown.
+                    fetchPipelineDiagnostics.sourceConsumedRawNanos.addAndGet(elapsed)
+                }
+            }
             fun releaseRetiredBudget() {
                 if (retiredSources == 0) return
+                forceRetiredRawDirectory()
                 budget.releaseAll(retiredRawKeys)
                 // Keep drainPossible true until that capacity is actually free.
                 submittedUncommitted.addAndGet(-retiredSources)
@@ -2355,6 +2382,7 @@ class ForeverClientUpdater(
             var resolvedSources = 0L
             val sourceDiagnostics = Logger.getLogger("ForeverClientUpdate")
             var pipelineOutcome = "failed"
+            var pipelineFailure: Throwable? = null
             val stagedMembership = AtomicReference<StagedMembership?>()
             val stagedMembershipHits = AtomicLong()
             val stagedMembershipFallbacks = AtomicLong()
@@ -2543,12 +2571,10 @@ class ForeverClientUpdater(
                         val rawRetireStarted = System.nanoTime()
                         try {
                             Files.delete(raw.toPath())
-                            // Make the unlink durable before freeing its budget:
-                            // only this private cache directory is forced — Data,
-                            // checkpoint and journal cadence is unchanged. A
-                            // failed force propagates without releasing, so the
-                            // next resume re-inventories instead of undercounting.
-                            forceDirectory(paths.objects.toPath())
+                            // Record the unlink immediately, even if a later
+                            // probe fails. The handoff forces this directory
+                            // before releasing any of the retained reservations.
+                            pendingRawDirectoryUnlinks++
                             // The updater never deletes .part files outside the
                             // owned-leftover retirement: keep the reservation
                             // while a sibling raw of this key persists instead
@@ -2592,9 +2618,10 @@ class ForeverClientUpdater(
                 releaseRetiredBudget()
                 pipelineOutcome = "complete"
                 result
-            } catch (cancelledFailure: CancellationException) {
-                pipelineOutcome = "cancelled"
-                throw cancelledFailure
+            } catch (failure: Throwable) {
+                pipelineFailure = failure
+                if (failure is CancellationException) pipelineOutcome = "cancelled"
+                throw failure
             } finally {
                 try {
                     // Combined stop: no new submits or writes from here on, then join
@@ -2627,7 +2654,25 @@ class ForeverClientUpdater(
                             // reuses them without spending consent again.
                         }
                     }
-                    budget.reset()
+                    try {
+                        // Cancellation may ACK a final partial group and then
+                        // throw. Persist its unlinks only after all writers have
+                        // joined, without waking the producer to admit more work.
+                        // An already-failed barrier is not retried implicitly.
+                        if (!rawDirectoryForceFailed) forceRetiredRawDirectory()
+                    } catch (retirementFailure: Throwable) {
+                        pipelineOutcome = "failed"
+                        val prior = pipelineFailure
+                        if (prior == null || prior is CancellationException) {
+                            if (prior != null && prior !== retirementFailure) retirementFailure.addSuppressed(prior)
+                            throw retirementFailure
+                        }
+                        if (prior !== retirementFailure) prior.addSuppressed(retirementFailure)
+                    } finally {
+                        // No producer or worker remains; a later operation must
+                        // re-inventory disk state, including a failed unlink force.
+                        budget.reset()
+                    }
                 } finally {
                     samplerStopped.set(true)
                     sampler.interrupt()

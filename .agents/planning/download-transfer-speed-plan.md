@@ -223,7 +223,7 @@ completado; se ejecutan instrumentación y calibración antes del ensayo prolong
   mínimo que falta, sin repetir las investigaciones de inicio C151/C152.
 - [x] 4. Obtener línea base actual de payload pequeño/grande y seleccionar el
   cuello de botella con evidencia suficiente.
-- [ ] 5. Implementar la mejora mínima y regresiones focales; revisar garantías.
+- [x] 5. Implementar la mejora mínima y regresiones focales; revisar garantías.
 - [ ] 6. Validar candidata autenticada y medir antes/después bajo condiciones
   comparables, con pausa final y progreso preservado.
 - [ ] 6a. Completar la evaluación por tamaño: agregados acotados de callbacks
@@ -236,6 +236,15 @@ completado; se ejecutan instrumentación y calibración antes del ensayo prolong
 
 ## Open Issues
 
+- Barrera privada agrupada implementada y verificada localmente: RED real 1 fallo
+  esperado con el mismo test; GREEN nueve checks focales, cero fallos/errores/skips,
+  Gradle 1 min 19 s, JUnit 10:29:08/18 UTC. Fuente updater `722f3e7e…f2ad92f3`,
+  test `e2c4e8e1…43b2be4d`, iguales al repositorio. Cobertura de presión, reservas
+  hasta force, cancelación parcial (un force para dos unlinks), fallo sin admisión
+  ni retry implícito y reanudación sin redescargar lo checkpointed; joins/orden y
+  barrera CASC16 preservados. Revisión independiente del snapshot de código y esa
+  evidencia, sin FS/reruns, sin defectos accionables. Falta nueva APK auditada y
+  evidencia física; no se declara aún mejora de transferencia ni de todos los tamaños.
 - Perfil de tiempo fijo terminado y traza original recuperada, sin repetir captura:
   main final 09:26:11 en pausa, checkpoint 564.690 → 573.476, prefix/CRC/retención
   válidos, 8.786 nuevos (7.275 pequeños/1.498 intermedios/13 grandes, todos range).

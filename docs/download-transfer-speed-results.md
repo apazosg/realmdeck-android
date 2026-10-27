@@ -1245,6 +1245,36 @@ Evidencia externa `download-transport-diagnosis-20261027/`: `fixed-profile-trial
 y SQL/CSV/logs. No se repiten capturas o consultas ya verdes; direct y cola grande
 siguen pendientes de validación.
 
+### Barrera privada: reproducción y verificación local
+
+Se conserva cada unlink tras ACK y sus reservas; el force del directorio privado
+se realiza una vez en el handoff del grupo y solo después se libera capacidad.
+En cancelación se fuerza el parcial tras unir workers. Un force fallido no se
+reintenta ocultamente; errores de limpieza se conservan y un error de almacenamiento
+no se presenta como una pausa normal. El contador raw incluye la barrera movida;
+dos agregados nuevos miden sus intentos y nanosegundos como subcoste, no adicional
+al total raw. No se modifica ForeverCasc, BLTE, Data/checkpoint ni cuotas.
+
+**RED:** una prueba, un fallo esperado «one directory barrier covers more than one
+retired raw», sin errores/skips; Gradle 4 min 13 s, JUnit 10:21:32 UTC. Hook nulo en
+producción de referencia, sin cambiar todavía su force por objeto.
+**GREEN:** mismo archivo de tests, nueve checks focales PASS, cero fallos/errores/skips;
+Gradle 1 min 19 s, JUnit updater 10:29:08 y CASC 10:29:18 UTC.
+Presión/regrouping, fallo de barrera sin admitir el siguiente raw ni retry,
+reanudación sin volver a descargar la primera fuente durable, cancelación de un
+parcial de dos objetos con una barrera, joins/cancelación, orden físico concurrente,
+dieciséis parciales/reanudación, sampler y barrera durable CASC de dieciséis.
+
+Hashes probados idénticos al repositorio:
+updater `722f3e7ec1e41aa75c97c4eda2d89b5a8e55cb7cce510d9021676aa2f2ad92f3`;
+test `e2c4e8e1f790f28cb58a87b3771213a575363e37c059958b6977c7d143b2be4d`.
+La revisión independiente recibió el snapshot real del flujo y después los nueve
+GREEN/hashes; sin defectos accionables, **sin acceso a archivos ni reruns**.
+Evidencia `download-transport-diagnosis-20261027/private-retirement-focused-tests/`
+(inputs, XML nuevos, logs y resúmenes). No se repite la suite ni los verdes previos.
+Estas pruebas validan el protocolo local, **no** velocidad física: build/auditoría
+de candidata y comparación mixta con sus límites siguen pendientes.
+
 ## Matriz de aceptación del objetivo
 
 El usuario autorizó «relancemos el goal otras 6 horas». La nueva planificación
