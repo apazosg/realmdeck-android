@@ -334,7 +334,8 @@ descarga». Se vuelve al recorrido productivo ya aprobado, no a un corpus aislad
   mismos objetos. Costes locales y tasas secuenciales se distinguen. Si el mix
   cambia o falta direct/cola grande, declararlo sin convertir esa carencia en
   razón para detener el avance real ni afirmar causalidad que no se ha medido.
-- Tras el cierre C160 del 27-10 16:00:21 (checkpoint 709.577), continuar esa misma
+- Protocolo histórico, ya terminado: tras el cierre C160 del 27-10 16:00:21
+  (checkpoint 709.577), continuar esa misma
   APK sin reinstalar ni confirmar costes nuevos. Próxima ventana prefijada:
   **2.700 s visibles o la misma señal de 6 GiB lógicos nuevos**, máximo general
   4.500 s más pausa/cleanup acotados. No aumentar la cota de datos ni declarar
@@ -345,6 +346,13 @@ descarga». Se vuelve al recorrido productivo ya aprobado, no a un corpus aislad
   Preflight y checkpoint byte-idéntico frescos, una intención Resume persistida,
   controlador nuevo y final en pausa/cero trabajo. Sin profiling/GET auxiliar,
   corpus aislado, reset, otro ajuste ni atribuir cambios de mezcla al código.
+- Siguiente avance real desde 792.758, misma C160 y consentimiento, sin otra APK:
+  máximo **900 s visibles o 1.500 s generales**, la misma señal de 6 GiB nuevos y
+  pausa cooperativa. Es una continuación limitada por el tiempo restante, **no un
+  benchmark de quince minutos**: la activación puede consumir parte del máximo
+  general. Se conserva el rechazo previo a Resume si esos 1.500 s no caben antes
+  de 17:56:59 UTC, con quince minutos para cleanup antes de 18:11:59. Preflight y
+  checkpoint frescos/idénticos; controlador nuevo, nunca relanzar los terminados.
 
 ### Aceptación y validación
 
@@ -385,6 +393,17 @@ descarga». Se vuelve al recorrido productivo ya aprobado, no a un corpus aislad
 
 ## Open Issues
 
+- C160 larga terminó 17:17:52 UTC, en pausa/cero servicios, tras 2.714,067 s
+  visibles: UI 1,938490 MB/s; sampler distinto 2.713,251 s a 1,950471 MB/s.
+  Checkpoint 709.577 → 792.758, 83.181 nuevos (67.507/15.119/555), todos range;
+  prefix/CRC/retención/ACKs válidos, 18.282 callbacks terminados/HTTP y fases0.
+  5.202 barreras privadas/~15,990 objetos por intento, 0,868011 ms raw/objeto.
+  Prefijo anterior completo a las 16:54:43; persisten esperas después. No prueba
+  efecto causal de buffers sobre heap/GC o throughput ni cobertura direct/cola.
+- Preparada continuación real acotada por presupuesto desde 792.758: 900 s visibles
+  o 1.500 generales, señal de datos/cadencias/guardas intactas y deadline 17:56:59.
+  Calibración host 17:23:47, nueve helpers AST-idénticos y consentimiento heredado
+  cotejado con el original; sin acción de dispositivo en esa calibración.
 - Análisis nuevo de la **primera C160 ya cerrada** (670.605 → 709.577), sin tocar
   la continuación larga: pausa lógica de 35,027 s, cero bytes cuerpo/ACKs, 34 claves
   reservadas y 18–33 ready; HTTP/callbacks cero en todas las muestras. El primer
@@ -396,7 +415,7 @@ descarga». Se vuelve al recorrido productivo ya aprobado, no a un corpus aislad
   4,741712 MB/s solo 19,08 ACKs/s/media 245.837. Separar tamaño de bloqueo.
   Reportes nuevos exact-subwindow/subwindow-consumer/context-verification en el
   workspace C160 original, no replay del análisis completo ni del dispositivo.
-  La continuación larga desde 709.577 se lanzó una vez; se espera su resultado.
+  La continuación larga desde 709.577 terminó y se analizó una sola vez.
 - En datos C159 ya cerrados, la subventana UI cero fue 0,296355 MB/s exactos y
   35,25 ACKs/s (4.287 pequeños/17 intermedios, media 8.438 encoded bytes), frente
   a 3,230361 MB/s y 24,79 ACKs/s en un scope de media 129.913 bytes. Separar mezcla
@@ -436,7 +455,7 @@ descarga». Se vuelve al recorrido productivo ya aprobado, no a un corpus aislad
   hallazgos, sin acceso a FS ni rerun. Postimage BLTE revisado actualizado a
   `6afe01aa…3456f794`; una prueba Python de staging/pins PASS y tres de retag PASS.
   Reconstrucción/auditoría y primera cadena física C160 completadas, hasta 709.577;
-  la nueva continuación larga está lanzada, sin resultado incorporado todavía.
+  la continuación larga terminó hasta 792.758, resultado incorporado arriba.
   No reejecutar controladores ni análisis completos ya terminados.
   Ahorro de capacidad asignada no se presenta por sí solo como mejora global de
   descarga ni como GC medido.

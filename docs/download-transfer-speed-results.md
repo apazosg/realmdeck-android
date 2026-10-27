@@ -1601,7 +1601,7 @@ coexisten; no se elige otro ajuste sin aislar su coste. Recursos visibles
 Evidencia externa `download-bounded-blte-c160-20261027/trial/flow-analysis.json`,
 checkpoint/raw, logs y recursos; analizador calibrado `79be473d…b280a31`.
 
-### Siguiente continuidad C160, sin reemplazo ni experimento aislado
+### Continuidad C160 de 45 minutos: protocolo histórico
 
 Desde 709.577, misma APK auditada y consentimiento, con preflight fresco y
 checkpoint byte-idéntico. Nueva ventana prefijada de **2.700 s visibles o la misma
@@ -1619,10 +1619,10 @@ No se repiten sus casos de guardas ni se importa el controlador para comprobarlo
 Evidencia `download-real-pipeline-c160-20261027/controller-calibration.json`;
 fuente `e2942263…1056a937`, wrapper `6bda6648…7be00740`. A este corte todavía no
 se había ejecutado la nueva continuación; posteriormente se lanzó una sola vez.
-Se espera el resultado original, sin reproducir Resume ni consultar repetidamente
-su estado. Analizador offline preparado: 28 guardas equivalentes salvo los 2.700 s,
-seis referencias cerradas, checkpoint previo 709.577; todavía no ejecutado sobre
-la continuación. Calibración `analyzer-calibration.json`, 16:17:46 UTC, fuente
+La continuación terminó y se analizó una sola vez, como se registra más abajo;
+no reproducir Resume. Analizador preparado antes de conocer el resultado:
+28 guardas equivalentes salvo los 2.700 s, seis referencias cerradas y checkpoint
+previo 709.577. Calibración `analyzer-calibration.json`, 16:17:46 UTC, fuente
 `2e3a133e…2c363aa`; ningún nuevo test, perfil o GET en esa preparación.
 
 ### C160 cerrada: pausa de consumidor y mezcla por subventana
@@ -1661,6 +1661,68 @@ sumas de clases ACK, hashes de fuentes/reportes, relojes APP para duraciones y
 receipt-host solo para selección UI. Sin alterar código C160, cadencia durable,
 cuotas o estrategia; sin repetir controles anteriores ni afirmar efecto GC.
 
+### C160 larga: 83.181 objetos reales adicionales, sin ajuste de estrategia
+
+Resume único 16:15:20, Pause único 17:17:24 UTC; cierre **17:17:52, En pausa/
+Reanudar y cero servicios**, sin errores de cleanup. Ventana visible
+**2.714,067 s (45,23 min), 1,938490 MB/s UI**; límites solo de redondeo
+1,918709–1,958271, no confianza ni latencia UI. Sampler exacto en intervalo distinto:
+**2.713,251 s, 1,950471 MB/s**. No se alcanzó la señal de 6 GiB, sin profiling/GET
+auxiliar ni reinstalación. Las subventanas UI varían 0,176–4,602 MB/s; el redondeo
+GiB impide interpretar sus deltas finos como paradas reales.
+
+Checkpoint **709.577 → 792.758**, prefix/CRC válidos: **83.181 nuevos**,
+5.352.890.685 bytes encoded, cero append sin checkpoint. Raw 13 claves/80.530 bytes
+→ una clave/0 bytes; ninguna clave inicial perdida sin commit o retención. Balance
+de entrada completo 5.352.810.155 bytes, no wire ni numerador de la ventana UI.
+18.282 callbacks finalizados y todos los gauges HTTP/fases en cero.
+
+| Tamaño durable, todos range | Objetos | Encoded bytes | Mediana encoded | Máximo encoded |
+|---|---:|---:|---:|---:|
+| Pequeño | 67.507 | 1.196.427.802 | 10.535 | 65.535 |
+| Intermedio | 15.119 | 3.409.607.203 | 124.746 | 1.048.506 |
+| Grande | 555 | 746.855.680 | 1.234.961 | 2.095.203 |
+
+Retiro privado: **5.202 intentos**, ~15,990 objetos/barrera y **0,868011 ms raw por
+objeto**; hijo 34,360 s incluido en 72,202 s raw. Se mantiene el ahorro local, no
+se suman los tiempos hijos otra vez. Writer: sourceResolve 1.635,079 s, verificación
+privada 279,067 s, appendAndForce 465,299 s (groupForce hijo 443,387 s), checkpoint
+68,610 s. Son scopes distintos/nested/concurrentes, no una partición de pared.
+
+Estados 1 Hz solapados: head 60,01 %, head con ready-ahead 46,77 %, cap sin head
+37,15 %, headers 54,67 %, cuerpo 59,94 %. La verificación del prefijo de 709.577
+objetos terminó **16:54:43 UTC**, elapsed 1.564,201 s. Antes/después, scopes visibles
+distintos de 1.380,229/1.332,019 s: 1,670179/2,240800 MB/s lógicos. Persisten esperas
+después; tamaños/red/tiempo distintos impiden atribuir el cambio al fin del prefijo.
+Temperatura muestreada: 34,8 → máximo 37,3 → 36,2 °C; IO `/proc` denegado, no IO cero. No hay aquí
+un perfil de métodos o medición directa de asignaciones/GC.
+
+También se cotejó estáticamente el timer `segmentTransition` con la fuente exacta
+auditada: incluye cierre previo, revalidación **full** del destino cuando procede,
+comprobaciones, apertura, header/flush/force e índice. Los 43,324 s acumulados de la
+primera C160 no eran un timer exclusivo de fsync ni de su pausa de 35 s. No se
+modifica ninguna guarda/cadencia por esa correlación.
+
+Evidencia nueva `download-real-pipeline-c160-20261027/trial/flow-analysis.json`
+(`b6adc283…7876dee`), analizador `2e3a133e…2c363aa` ejecutado una vez tras el cierre;
+se preservan seis referencias anteriores y `casc-timer-static-scope.json`. **No se
+demuestra todavía ganancia causal heap/GC/throughput de los buffers ni cobertura
+direct/cola grande.** Sí hay avance real íntegro y ahorro privado mantenido.
+
+### Continuación final de este margen temporal, no un nuevo benchmark
+
+Desde 792.758, misma APK/consentimiento y checkpoint fresco byte-idéntico. Controlador
+nuevo con **máximo 900 s visibles o 1.500 s generales**, misma señal de 6 GiB y pausa
+cooperativa. El límite general incluye activación y puede acortar el payload: no se
+presentará como prueba completa de quince minutos. Rechazar Resume si 1.500 s no
+caben antes de **17:56:59 UTC**, reservando quince minutos para cleanup antes del
+límite técnico 18:11:59. No instalar, reset, profiling, GET auxiliar ni harness.
+Calibración host 17:23:47: sintaxis, nueve helpers AST-idénticos, consentimiento
+heredado cotejado con el original y último informe validado; sin acción de dispositivo.
+Evidencia `download-real-pipeline-c160-budget-tail-20261027/controller-calibration.json`;
+controlador `6f7004c6…b453a7fb`, wrapper `bdfbe3fe…d636a67fa`. A este corte preparado,
+no ejecutado; no reanudar ningún controlador ya terminado.
+
 ## Matriz de aceptación del objetivo
 
 El usuario autorizó «relancemos el goal otras 6 horas». La nueva planificación
@@ -1682,13 +1744,13 @@ al corte de esa lectura todavía no había profiling ni otra APK/corrección de 
 |---|---|
 | Línea base con unidades, ambos tamaños y preparación separada | C152: 609,206 s; UI, frames y raw balance distinguidos. Comprobado. |
 | Diagnóstico sin sumar relojes concurrentes | C158 distingue espera de fuentes y consumidor; perfil real correlacionado cuantifica retiro raw como coste secuencial relevante. Seleccionada barrera privada agrupada, sin causa única general de red demostrada. |
-| Mejora medida y evaluación por tamaño | Ahorro local del retiro privado conservado. C159 3,153/1,414 y C160 2,404 MB/s, con cargas distintas; C160 incluye 33.254 pequeños y 611 grandes range. **[PENDING]** mejora global sustentada, efecto heap/GC y direct/cola grande al avanzar realmente; no se atribuye una tasa agregada al código. |
+| Mejora medida y evaluación por tamaño | Ahorro local del retiro privado conservado. C159 3,153/1,414 y C160 2,404/1,938 MB/s con cargas distintas; última C160 larga añade 67.507 pequeños y 555 grandes range. **[PENDING]** mejora global sustentada, efecto heap/GC y direct/cola grande al avanzar realmente; no se atribuye una tasa agregada al código. |
 | Garantías, pruebas, revisión sensible y APK autenticada | BLTE RED/11GREEN, staging/pin y tres checks de retag, revisión snapshot y APK C160 auditada; captura real con prefix/CRC/retención/ACKs válidos y cero fases activas. Verificado en estos escenarios, no estabilidad universal. |
-| Informe, pausa final, progreso y commits propios | C160 terminó 16:00:21 en pausa, checkpoint 709.577 válido, cero servicios y callbacks activos; raws retenidos. **[PENDING]** objetivo completo antes de archivar. Sin publicación/push. |
+| Informe, pausa final, progreso y commits propios | C160 terminó 17:17:52 en pausa, checkpoint 792.758 válido, cero servicios y callbacks activos; raws retenidos. **[PENDING]** objetivo completo antes de archivar. Sin publicación/push. |
 
 ## Pendiente
 
-Continuar la descarga real desde los 709.577 objetos durables, observar bloqueos y
+Continuar la descarga real desde los 792.758 objetos durables, observar bloqueos y
 seleccionar el siguiente cambio mínimo sustentado. Sin harness aislado ni repeticiones
 de controles terminados; las métricas deben declarar tamaño/origen y scopes para
 evaluar mejora y regresiones sin confundir la mezcla con una ganancia causal.
