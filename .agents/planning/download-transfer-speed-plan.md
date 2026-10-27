@@ -352,7 +352,8 @@ descarga». Se vuelve al recorrido productivo ya aprobado, no a un corpus aislad
   Preflight y checkpoint byte-idéntico frescos, una intención Resume persistida,
   controlador nuevo y final en pausa/cero trabajo. Sin profiling/GET auxiliar,
   corpus aislado, reset, otro ajuste ni atribuir cambios de mezcla al código.
-- Siguiente avance real desde 792.758, misma C160 y consentimiento, sin otra APK:
+- Protocolo histórico, ya terminado: avance real desde 792.758, misma C160 y
+  consentimiento, sin otra APK:
   máximo **900 s visibles o 1.500 s generales**, la misma señal de 6 GiB nuevos y
   pausa cooperativa. Es una continuación limitada por el tiempo restante, **no un
   benchmark de quince minutos**: la activación puede consumir parte del máximo
@@ -400,16 +401,23 @@ descarga». Se vuelve al recorrido productivo ya aprobado, no a un corpus aislad
 ## Open Issues
 
 - Continuación autorizada tras cancelación: nuevo goal `7722a995…7e81`, mismos cinco
-  criterios y tareas verificadas. Se espera únicamente el controlador ya lanzado
-  de `download-real-pipeline-c160-budget-tail-20261027/`, sin otro Resume. El último
-  cierre íntegramente validado sigue siendo 792.758; el resultado nuevo no se anticipa.
-- Analizador offline del tramo final preparado, todavía sin ejecutar: checksum del
-  checkpoint anterior, prefix/CRC/retención/ACKs/joins y fases finales, catálogo real,
-  tamaños y scopes; siete referencias previas conservadas. Un límite general deja
-  ventana censurada; sin dos muestras visibles no se inventa una tasa cero.
-  Calibración host 17:42:37 PASS (sintaxis, 25 asserts preservados, tres cambios
-  explícitos y dos casos sin ventana). Fuente `0e261a45…08874c1`; sin acción de
-  dispositivo, consulta de la captura activa ni replay de análisis/pruebas.
+  criterios y tareas verificadas. El único controlador pendiente terminó una vez
+  17:55:15 UTC; no se reanuda ni se lanza otra ronda en este margen. Checkpoint
+  792.758 → **803.964**, 11.206 nuevos, prefix/CRC/retención/ACKs válidos, cero
+  servicios/HTTP/fases y 2.642 callbacks finalizados. Cliente incompleto; plan no archivado.
+- El límite general de 1.500 s, no la señal de 6 GiB, acortó la ventana visible a
+  406,391 s: UI 1,740871 MB/s; sampler distinto 405,369 s a 1,748466 MB/s.
+  **Censurada: no prueba de quince minutos ni ganancia causal.** Nuevos objetos
+  8.341 pequeños/2.808 intermedios/57 grandes, todos range; direct/cola pendientes.
+  Retiro privado 701 intentos/~15,986 objetos por barrera y 0,886579 ms raw/objeto,
+  ahorro local mantenido. Espera de cabeza 54,32 %, cap sin cabeza 43,46 %,
+  headers 50,62 % y cuerpo 60,00 % son estados 1 Hz solapados, no partición causal.
+- El analizador calibrado `0e261a45…08874c1` se ejecutó una vez tras el cierre:
+  `download-real-pipeline-c160-budget-tail-20261027/trial/flow-analysis.json`,
+  SHA `3f54db3b…eacb0a0`. Conserva siete referencias previas; no repite análisis,
+  pruebas, builds ni dispositivo. Quedan la mejora global sustentada por tamaño y
+  la observación de direct/cola al avanzar realmente, sin harness aislado. No se
+  declara complete/unmet por llegar al final del tiempo; tampoco se elude su límite.
 - C160 larga terminó 17:17:52 UTC, en pausa/cero servicios, tras 2.714,067 s
   visibles: UI 1,938490 MB/s; sampler distinto 2.713,251 s a 1,950471 MB/s.
   Checkpoint 709.577 → 792.758, 83.181 nuevos (67.507/15.119/555), todos range;
@@ -417,7 +425,7 @@ descarga». Se vuelve al recorrido productivo ya aprobado, no a un corpus aislad
   5.202 barreras privadas/~15,990 objetos por intento, 0,868011 ms raw/objeto.
   Prefijo anterior completo a las 16:54:43; persisten esperas después. No prueba
   efecto causal de buffers sobre heap/GC o throughput ni cobertura direct/cola.
-- Preparada continuación real acotada por presupuesto desde 792.758: 900 s visibles
+- Continuación histórica acotada por presupuesto desde 792.758: 900 s visibles
   o 1.500 generales, señal de datos/cadencias/guardas intactas y deadline 17:56:59.
   Calibración host 17:23:47, nueve helpers AST-idénticos y consentimiento heredado
   cotejado con el original; sin acción de dispositivo en esa calibración.

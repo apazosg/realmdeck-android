@@ -7,6 +7,12 @@ continuaciones autorizadas `fd7baae8-8a14-47b0-8452-6d8f7434217e` y
 `7722a995-d31c-4ec3-b8b9-0795f62a7e81`, expresamente autorizada sin ampliar plazo.
 **Resultados exploratorios; mejora general no validada. Diagnóstico reabierto.**
 
+Último cierre validado: **2026-10-27 17:55:15 UTC, C160, 803.964 objetos durables**,
+En pausa/Reanudar y cero servicios/HTTP/fases activos. Dos cambios locales conservados:
+barrera privada agrupada con ahorro medido y buffers encoded proporcionados, sin
+ganancia causal global/GC demostrada. El cliente sigue incompleto; no se publica
+ni se archiva este trabajo como objetivo cumplido.
+
 El [plan aprobado](../.agents/planning/download-transfer-speed-plan.md) se centra
 en payload. No repite ni atribuye a throughput el trabajo de
 [inicio C151/C152](download-startup-followup-results.md). «5mb»/«0.1» son las
@@ -1740,8 +1746,54 @@ dos casos sin ventana visible verificados a las 17:42:37. El resultado censurado
 no se presenta como quince minutos; ausencia de muestras es no disponible, no
 velocidad cero. Conserva siete referencias, scopes y todos los checks de integridad.
 Evidencia externa nueva: `analyzer-calibration.json` y `analyze_real_progress.py`
-(`0e261a45…08874c1`) del workspace budget-tail. No se ha ejecutado todavía sobre
-el tramo activo ni repetido dispositivo, builds, tests, perfiles o análisis cerrados.
+(`0e261a45…08874c1`) del workspace budget-tail. Este corte era previo al análisis
+del tramo terminado; no se repitieron dispositivo, builds, tests, perfiles o análisis cerrados.
+
+### Cierre del tramo presupuestado: 11.206 objetos más y pausa verificada
+
+Resume único **17:29:02**, Pause único **17:54:37**, cierre **17:55:15 UTC**,
+En pausa/Reanudar y cero servicios, sin error/cleanup. Resultado
+`OBSERVATION_LIMIT_NO_RETRY`: se alcanzó el máximo general que incluye activación,
+no el objetivo de 900 s visibles ni la señal de 6 GiB. No se presenta como prueba
+de quince minutos. Sin instalación, profiling, GET auxiliar o nuevo ajuste.
+
+Ventana visible **406,391 s a 1,740871 MB/s UI**, límites solo de redondeo
+1,740613–1,741129, no confianza ni latencia UI. Subventanas de 123,137 / 123,269 /
+123,992 / 35,993 s: 2,128027 / 1,630678 / 1,392837 / 1,992681 MB/s. Sampler distinto:
+**405,369 s, 708.773.185 bytes lógicos/cuerpo, 1,748466 MB/s**; son bytes devueltos
+al transfer, no wire. La ventana queda **censurada por el límite general**.
+
+Checkpoint **792.758 → 803.964**, prefix/CRC válidos: **11.206 objetos nuevos**,
+829.117.140 encoded bytes, cero append sin checkpoint. Raw una clave/0 bytes →
+ocho/501.165; ninguna clave inicial perdida sin commit o retención. Balance completo
+829.618.305 bytes, no numerador de la ventana UI. Los 2.642 callbacks terminaron,
+HTTP y siete gauges de fases en cero; ready/outstanding remanentes son contabilidad
+de trabajo abandonado, no workers activos.
+
+| Tamaño durable, todos range | Objetos | Encoded bytes | Mediana encoded | Máximo encoded |
+|---|---:|---:|---:|---:|
+| Pequeño | 8.341 | 139.888.197 | 11.924 | 65.533 |
+| Intermedio | 2.808 | 617.572.425 | 129.253 | 1.045.889 |
+| Grande | 57 | 71.656.518 | 1.164.571 | 2.066.120 |
+
+Retiro privado: **701 intentos/~15,986 objetos por barrera, 0,886579 ms raw por
+objeto**. Hijo 4,691 s incluido en 9,935 s raw: no sumarlo de nuevo. Writer:
+sourceResolve 248,427 s, verificación privada 45,321 s, appendAndForce 120,840 s
+(groupForce hijo 116,981 s), checkpoint 9,365 s. El timer groupForce incluye
+comprobaciones/apertura/force/cierre, no un syscall aislado ni una partición de pared.
+
+Estados 1 Hz solapados: cabeza esperando 54,32 %, con ready-ahead 45,43 %, cap sin
+cabeza 43,46 %, headers 50,62 %, cuerpo 60,00 %; HTTP medio muestreado 2,869.
+Persisten esperas de fuentes y backpressure del consumidor. Sin marker de prefijo
+completo en este scope, no se supone que terminó ni que esa ausencia sea un fallo.
+Temperaturas muestreadas 35,2 → 36,1 °C; `/proc` IO denegado, no IO cero. Los top-H
+son snapshots, no perfiles de métodos/heap/GC. La mezcla sigue sin direct/cola grande.
+
+El analizador calibrado se ejecutó **una sola vez después del cierre**, sin replay
+de otras capturas: `download-real-pipeline-c160-budget-tail-20261027/trial/flow-analysis.json`,
+SHA `3f54db3b…eacb0a0`. Siete referencias anteriores conservadas. **Avance real e
+integridad verificados; ahorro privado mantenido, mejora global por tamaño aún
+pendiente.** No se inicia otra descarga dentro del margen de esta continuación.
 
 ## Matriz de aceptación del objetivo
 
@@ -1764,14 +1816,15 @@ al corte de esa lectura todavía no había profiling ni otra APK/corrección de 
 |---|---|
 | Línea base con unidades, ambos tamaños y preparación separada | C152: 609,206 s; UI, frames y raw balance distinguidos. Comprobado. |
 | Diagnóstico sin sumar relojes concurrentes | C158 distingue espera de fuentes y consumidor; perfil real correlacionado cuantifica retiro raw como coste secuencial relevante. Seleccionada barrera privada agrupada, sin causa única general de red demostrada. |
-| Mejora medida y evaluación por tamaño | Ahorro local del retiro privado conservado. C159 3,153/1,414 y C160 2,404/1,938 MB/s con cargas distintas; última C160 larga añade 67.507 pequeños y 555 grandes range. **[PENDING]** mejora global sustentada, efecto heap/GC y direct/cola grande al avanzar realmente; no se atribuye una tasa agregada al código. |
+| Mejora medida y evaluación por tamaño | Ahorro local del retiro privado conservado. C159 3,153/1,414 y C160 2,404/1,938 MB/s con cargas distintas; último tramo censurado 1,741 MB/s añade 8.341 pequeños y 57 grandes range. **[PENDING]** mejora global sustentada, efecto heap/GC y direct/cola grande al avanzar realmente; no se atribuye una tasa agregada al código. |
 | Garantías, pruebas, revisión sensible y APK autenticada | BLTE RED/11GREEN, staging/pin y tres checks de retag, revisión snapshot y APK C160 auditada; captura real con prefix/CRC/retención/ACKs válidos y cero fases activas. Verificado en estos escenarios, no estabilidad universal. |
-| Informe, pausa final, progreso y commits propios | C160 terminó 17:17:52 en pausa, checkpoint 792.758 válido, cero servicios y callbacks activos; raws retenidos. **[PENDING]** objetivo completo antes de archivar. Sin publicación/push. |
+| Informe, pausa final, progreso y commits propios | C160 terminó 17:55:15 en pausa, checkpoint 803.964 válido, cero servicios/HTTP/fases y callbacks activos; raws retenidos. **[PENDING]** objetivo completo antes de archivar. Sin publicación/push. |
 
 ## Pendiente
 
-Continuar la descarga real desde los 792.758 objetos durables, observar bloqueos y
-seleccionar el siguiente cambio mínimo sustentado. Sin harness aislado ni repeticiones
+Con margen autorizado y técnico para otra observación, continuar la descarga real
+desde los 803.964 objetos durables, observar bloqueos y seleccionar el siguiente
+cambio mínimo sustentado. Sin harness aislado ni repeticiones
 de controles terminados; las métricas deben declarar tamaño/origen y scopes para
 evaluar mejora y regresiones sin confundir la mezcla con una ganancia causal.
 El goal **no** cumple todavía la mejora exigida.
