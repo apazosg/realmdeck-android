@@ -15,8 +15,9 @@ móvil: devolverlo al original no constituye una solución de portabilidad.
 La inspección y C160 ya están verificadas. El usuario eligió **«Ambos»**:
 reutilizar el cliente terminado y continuar el parcial en el segundo móvil.
 La selección está resuelta y después aprobó **«Aprobar criterios»** para
-US-009-UC-05 / AC-06–09. Se desarrollan requisitos y diseño para revisión;
-la adopción sigue sin implementar ni ejecutar. No se ha reiniciado el goal
+US-009-UC-05 / AC-06–09. Después aprobó FR-009–013/NFR-004 y el protocolo para
+preparar las pruebas. TC-007–013 se presentan para revisión; la adopción sigue
+sin implementar ni ejecutar. No se ha reiniciado el goal
 de rendimiento.
 
 ## Content
@@ -31,7 +32,8 @@ de rendimiento.
 - No copiar recibos/checkpoints, falsear `.build.info`, publicar staging, saltarse
   guardas ni anunciar cliente completo. Aplican [US-007](../specs/US-007.md),
   [US-008](../specs/US-008.md) y [US-009](../specs/US-009.md); se conservan las
-  guardas normales y la nueva entrada tiene requisitos en revisión.
+  guardas normales; la nueva entrada tiene requisitos y diseño aprobados, con
+  casos de prueba pendientes de aprobación.
 - El usuario realiza el traslado físico y la expulsión de Android. La ausencia
   de escritores de la app no garantiza ausencia de escrituras del sistema.
 - En el teléfono personal, conectar solo al endpoint facilitado. No heredar la
@@ -116,8 +118,8 @@ de rendimiento.
 4. **Decisión del usuario: «Ambos»**, incluyendo continuar una descarga parcial.
    El USB actual no contiene una instalación publicada y el checkpoint/
    recibo siguen en el original. Ese traspaso no existe en el updater actual.
-   Los nuevos UC/AC de US-009 están aprobados; revisar los FR/NFR y el diseño
-   antes de derivar sus pruebas e implementar la adopción verificada.
+   Los UC/AC, FR/NFR y el diseño de US-009 están aprobados; revisar los nuevos
+   TC-007–013 antes de implementar la adopción verificada.
    No copiar estado privado, falsear recibos/checkpoints o publicar un parcial
    como solución provisional; no empezar otra descarga completa automáticamente.
 5. Antes de cualquier cambio de cliente: plan/coste/consentimiento explícitos,
@@ -125,9 +127,10 @@ de rendimiento.
    APK, identificar y auditar esa candidata antes de acordar su instalación.
    El código vigente y la C160 no se modifican en esta fase de definición.
 
-La respuesta «Ambos» confirmó el alcance y después «Aprobar criterios» confirmó
-los UC/AC. No constituye aprobación del protocolo de recuperación ni evidencia
-de reutilización: FR/NFR, diseño, pruebas e implementación siguen sus puertas.
+La respuesta «Ambos» confirmó el alcance y «Aprobar criterios» confirmó los UC/AC.
+La aprobación posterior de FR/NFR y del protocolo autoriza derivar sus casos de
+prueba, no ejecutar una adopción ni otra instalación de APK. Tampoco es evidencia
+de reutilización: pruebas e implementación conservan sus puertas.
 
 ### Selección corregida y puerta de adopción pendiente
 
@@ -154,9 +157,9 @@ de reutilización: FR/NFR, diseño, pruebas e implementación siguen sus puertas
 - El usuario aprobó [US-009-UC-05 y AC-06–09](../specs/US-009.md):
   distinguir completo/parcial, reutilizar solo objetos autenticados, establecer
   estado nuevo sin copiar el privado del original y recuperar fallos sin pérdida
-  ni sobrescritura por estado antiguo. FR-009–013 y NFR-004 son borradores para
-  revisión; no se altera todavía la guarda actual. El
-  [diseño propuesto](../../docs/usb-portability-recovery-design.md) separa revisión,
+  ni sobrescritura por estado antiguo. FR-009–013, NFR-004 y el diseño han sido
+  aprobados para derivar TC-007–013; no se altera todavía la guarda actual. El
+  [diseño aprobado](../../docs/usb-portability-recovery-design.md) separa revisión,
   verificación, plan y adopción con generación nueva de propiedad sin mover CASC.
 - Evidencia externa: `personal-storage-options*/summary.json`,
   `personal-current-usb-selection/summary.json`, sus metadatos antes/después y
@@ -174,15 +177,17 @@ de reutilización: FR/NFR, diseño, pruebas e implementación siguen sus puertas
   conservación de metadatos comprobada, reutilización/reanudación no demostrada.
 - [x] 5. Acordar la portabilidad requerida: usuario confirma «Ambos», manteniendo el
   USB en el segundo móvil. Identificado el impacto US-007/008/009; UC/AC del nuevo
-  tratamiento parcial pendientes antes de implementarlo. La devolución queda
+  tratamiento parcial aprobados, implementación pendiente. La devolución queda
   retirada como próximo paso, pues no resolvería el objetivo aclarado.
 - [x] 5a. Selección del volumen real resuelta por preflight normal: identidad/ruta
   correctas, sin permiso amplio, 81 metadatos CASC y marcadores preservados.
 - [x] 5a.1. Usuario aprueba los criterios de portabilidad UC-05 / AC-06–09.
-- [ ] 5a.2. Aprobar FR-009–013/NFR-004 y el diseño de recuperación; derivar después
-  pruebas focales antes de implementar o mutar el staging.
-- [ ] 5b. Validar reutilización del cliente terminado y, si se aprueba, continuidad
-  del parcial con un protocolo especificado y verificado; no asumir que ya existe.
+- [x] 5a.2. Usuario aprueba FR-009–013/NFR-004 y el diseño para preparar las pruebas.
+- [ ] 5a.3. Revisar/aprobar TC-007–013 propuestos; no son tests implementados ni ejecutados.
+- [ ] 5a.4. Implementar y verificar el protocolo aprobado tras la puerta de tests,
+  con revisión sensible y APK exacta auditada antes de acordar su instalación.
+- [ ] 5b. Validar reutilización del cliente terminado y continuidad del parcial
+  mediante el protocolo verificado y consentimiento del plan real; no asumirla.
 - [ ] 6. Documentar conservación, reutilización observada o bloqueo seguro y pendientes.
 
 ## Open Issues
@@ -195,13 +200,15 @@ de reutilización: FR/NFR, diseño, pruebas e implementación siguen sus puertas
   todavía a mutar/adoptar el staging con un protocolo sin especificar/aprobar.
 - El desajuste de selección está resuelto. Falta adopción/reutilización del parcial;
   el estado privado del original no es transferible por copiarlo o saltarse guardas.
-- UC/AC aprobados explícitamente. Los nuevos FR/NFR y el diseño están redactados
-  para revisión, no aprobados todavía. No se han añadido tests ni código de adopción.
+- UC/AC, FR-009–013/NFR-004 y diseño aprobados explícitamente. TC-007–013 derivados
+  para revisión: cliente completo, revisión sin efectos, verificación acotada,
+  preservación ante errores/interrupción, consentimiento, cortes durables y rechazo
+  obsoleto antes/después de publicación. No hay tests ejecutados ni código de adopción.
 - Mantener la ruta es relevante: las cabeceras de segmento CASC incorporan su ruta
   absoluta. El diseño propone una nueva generación del marcador, enlazada por el
   `markerHash` del recibo, para invalidar estado obsoleto sin renombrar los segmentos.
   No se ejecuta esa transición ni se confía en el marcador como prueba de objetos.
-- El diseño para revisión concreta exclusión en host único, intent antes de cambiar
+- El diseño aprobado concreta exclusión en host único, intent antes de cambiar
   propiedad, reserva del workspace antiguo y recuperación por bindings exactos.
   La representabilidad sin truncar datos extranjeros y el bloqueo de estado obsoleto
   en todas las rutas mutantes requieren pruebas; no se dan por demostrados por la

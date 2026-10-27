@@ -191,15 +191,27 @@ acotada con catálogo oficial y autenticación por objeto, no falsear un checkpo
 El usuario aprobó después [US-009-UC-05 / AC-06–09](../.agents/specs/US-009.md),
 incluyendo recuperación ante fallos y rechazo del estado privado obsoleto. Los
 nuevos FR-009–013/NFR-004 y el [diseño de recuperación](usb-portability-recovery-design.md)
-son propuestas para revisión, no una adopción ejecutada. Cliente completo y parcial
-son el alcance confirmado; la portabilidad completa no está implementada ni aceptada.
+se aprobaron después explícitamente para preparar las pruebas. TC-007–013 se han
+derivado y esperan revisión; no son tests implementados ni ejecutados. Cliente completo
+y parcial son el alcance confirmado, pero la portabilidad completa no está
+implementada ni aceptada físicamente.
 
 La inspección posterior del código añade una restricción al diseño: la cabecera
 de cada segmento depende de la ruta absoluta de `Data/data`. Renombrar el staging
 no permite entregar sin más sus bytes al writer existente. Se propone mantener
 la ruta y cambiar una generación de propiedad ligada al recibo nuevo, con intent
 durable y consentimiento del plan; no copiar el checkpoint original ni omitir la
-autenticación de objetos. Es un diseño pendiente, no una modificación del USB.
+autenticación de objetos. El diseño está aprobado, no ejecutado: el USB no se ha
+modificado para esta recuperación.
+
+Los casos propuestos en US-009 trazan los nuevos FR/NFR: cliente completo sin estado
+privado original; descubrimiento sin adopción; autenticación acotada; preservación
+ante corrupción, colas no representables, cancelación y desconexión; plan/consentimiento;
+recuperación de los cortes durables; y rechazo de estado obsoleto incluso tras
+publicación. Las condiciones de la tabla de recuperación son estados distintos del
+protocolo, no una matriz de dispositivos o una nueva infraestructura de benchmark.
+La próxima puerta es aprobar esos casos antes de escribir código; esta fase solo
+cambia documentación, no instala otra APK ni inicia descarga/adopción.
 
 Evidencia externa: `personal-storage-options/summary.json`,
 `personal-storage-options-after-foreground/summary.json`,

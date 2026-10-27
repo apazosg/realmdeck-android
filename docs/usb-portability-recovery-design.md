@@ -1,13 +1,15 @@
-# Recuperación de un parcial USB en otro móvil — propuesta
+# Recuperación de un parcial USB en otro móvil — diseño aprobado
 
-Estado: **diseño para revisión, no implementado ni autorizado para mutar datos**.
-Los UC/AC de [US-009](../.agents/specs/US-009.md) están aprobados; FR-009–013 y
-NFR-004 son borradores. Este documento concreta la opción recomendada y sus
-puertas de seguridad; no declara recuperados los datos del teléfono personal.
+Estado: **diseño y requisitos aprobados, no implementado ni ejecutado**.
+El usuario aprobó FR-009–013/NFR-004 de [US-009](../.agents/specs/US-009.md) y este
+protocolo para preparar las pruebas. TC-007–013 están propuestos para revisión:
+no son pruebas ejecutadas ni autorización para adoptar el USB o instalar otra APK.
+Este documento conserva sus puertas de seguridad y no declara recuperados los
+datos del teléfono personal.
 Operación y evidencia en [el plan](../.agents/planning/usb-cross-phone-plan.md) y
 [el informe USB](usb-cross-phone-results.md).
 
-## Punto de partida y decisión propuesta
+## Punto de partida y decisión aprobada
 
 - La selección normal del USB ya está corregida, sin permiso amplio. Hay 81
   `Data/data/data.*` bajo un staging, no una instalación publicada. El checkpoint
@@ -85,9 +87,9 @@ Tras la petición de verificar/continuar y el consentimiento de metadatos existe
 5. Elaborar el plan de reutilización, delta y pico de espacio, incluyendo el estado
    privado anterior y los temporales. Nada de payload ni cambios de propiedad aquí.
 
-Primera admisión propuesta: staging generado por este updater, cuya estructura,
-cabeceras, posiciones y objetos puedan representarse sin pérdida en el checkpoint
-existente y en el target admitido. La revisión no convierte un registro desconocido,
+Primera admisión del diseño aprobado: staging generado por este updater, cuya
+estructura, cabeceras, posiciones y objetos puedan representarse sin pérdida en el
+checkpoint existente y en el target admitido. La revisión no convierte un registro desconocido,
 un hueco, una cola rota o un objeto no autenticado en un frame válido. Si esa
 representación no es segura, preservar el origen y explicar el bloqueo; no truncar,
 compactar ni descargar todo como fallback. La reparación de un layout no representable
@@ -118,8 +120,9 @@ concurrente fuera del modelo de exclusión admitido.
 
 ## 3. Cambio de propiedad sin mover los segmentos
 
-**Opción recomendada, pendiente de aprobación:** mantener stage ID/ruta y cuerpos
-CASC; introducir una generación fresca de propiedad en un marcador versionado.
+**Opción aprobada, pendiente de implementación verificada:** mantener stage ID/ruta
+y cuerpos CASC; introducir una generación fresca de propiedad en un marcador
+versionado.
 El recibo privado ya contiene `markerHash`, y la identidad del checkpoint incluye
 ese digest: enlazar el estado nuevo a los nuevos bytes sin copiar el estado antiguo.
 
@@ -219,12 +222,14 @@ por sí solo en un Resume vigente: el plan ordinario debe revalidarse tras la
 transición. Si cambian su revisión, costes o condiciones, se muestran y confirman
 de nuevo antes del payload conforme a US-008; no se fuerza un consentimiento viejo.
 
-## Puertas pendientes antes de escribir código o tocar el USB
+## Aprobaciones y puertas pendientes antes de escribir código o tocar el USB
 
-- Aprobar FR/NFR y este diseño, especialmente la generación de propiedad y la
-  admisión inicial sin cambio de ruta; no basta la aprobación de los UC/AC.
-- Derivar después casos focales de recuperación, datos corruptos/colas truncadas,
-  estado obsoleto y cancelación; sin matrices redundantes ni nuevo harness genérico.
+- **Cumplido:** aprobación explícita de FR-009–013/NFR-004 y de este diseño,
+  incluida la generación de propiedad y la admisión inicial sin cambio de ruta.
+- **Pendiente:** revisar/aprobar TC-007–013, ya derivados en US-009 para cliente
+  completo, descubrimiento, autenticación, datos no admisibles, consentimiento,
+  cortes durables y estado obsoleto. No se han implementado ni ejecutado; sin
+  matrices redundantes ni nuevo harness genérico.
 - Revisar las transiciones anteriores y su integración con journals previos y
   admisión de catálogo antes de implementar; ante ambigüedad, bloquear conservando
   datos, no introducir una ruta de borrado.
@@ -236,7 +241,7 @@ de nuevo antes del payload conforme a US-008; no se fuerza un consentimiento vie
 
 Revisión preliminar del diseño: snapshot suministrado, sin acceso del revisor al
 repositorio ni ejecución. Señaló exclusión entre takeovers, publicación privada
-durable y representabilidad del checkpoint. Este borrador explicita el modelo de
+durable y representabilidad del checkpoint. Este diseño explicita el modelo de
 host único, la secuencia/recuperación y las comprobaciones. El revisor confirmó
 resueltas esas omisiones de diseño bajo ese modelo, manteniendo como obligaciones
 de prueba todas las rutas de mutación/recuperación, cortes y rechazo legado.
