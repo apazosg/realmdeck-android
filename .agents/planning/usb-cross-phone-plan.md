@@ -203,6 +203,13 @@ consentimiento del plan real antes de adoptar o descargar.
 
 ## Open Issues
 
+- Integración local del recibo generacional: tres controles del updater reutilizan
+  el lector canónico acotado de Transaction y su hash privado, sin admitir un stage
+  extranjero ni un checkpoint nuevo. Tres tests focales pasan (JUnit 18:21:51 UTC),
+  incluido rechazo del hash antiguo y del workspace extranjero; fuentes exactas
+  verificadas. Notificación perdida recuperada sin repetir Gradle. Revisión sensible
+  solicitada pero no obtenida por fallo de disponibilidad del modelo; sigue pendiente
+  para esta integración, sin atribuirle la revisión anterior del marcador.
 - Prerrequisito local de generaciones: creación v1 preservada, marcador v2 ligado
   a stage/identidad/UUID y hash privado exacto, lectura acotada y longitud autenticada
   en publicación. Cinco tests focales/legacy pasan; revisión sensible de snapshot

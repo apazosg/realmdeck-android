@@ -3303,7 +3303,7 @@ class ForeverClientUpdater(
                 }
                 val marker = child.resolve(TRANSACTION_STAGE_OWNER_NAME)
                 if (Files.exists(marker, LinkOption.NOFOLLOW_LINKS)) {
-                    requireExactFile(marker, transactionStageMarkerBytes(destination, receipt.stageId), "receipt-bound transaction-stage marker")
+                    transaction(destination).verifyStagingMarker(receipt.stageId, receipt.markerHash)
                 } else {
                     Files.newDirectoryStream(child).use { contents ->
                         if (contents.iterator().hasNext()) throw IllegalStateException("unmarked transaction stage contains unknown data")
@@ -3499,7 +3499,7 @@ class ForeverClientUpdater(
         if (receipt == null) return 0L
         val stage = transactionStageDirectory(destination, receipt)
         if (!Files.exists(stage.toPath(), LinkOption.NOFOLLOW_LINKS)) return 0L
-        requireExactFile(File(stage, TRANSACTION_STAGE_OWNER_NAME).toPath(), transactionStageMarkerBytes(destination, receipt.stageId), "receipt-bound transaction-stage marker")
+        transaction(destination).verifyStagingMarker(receipt.stageId, receipt.markerHash)
         val expectedFiles = expectedTargets.map { transactionStageFileName(it) }.toSet()
         var occupied = 0L
         Files.newDirectoryStream(stage.toPath()).use { children ->
@@ -3888,9 +3888,7 @@ class ForeverClientUpdater(
                     if (children.iterator().hasNext()) throw IllegalStateException("unmarked receipt-bound stage contains unknown data")
                 }
             } else {
-                requireExactFile(stageMarker, transactionStageMarkerBytes(destination, receipt.stageId), "receipt-bound transaction-stage marker")
-                val actualMarkerHash = sha256(transactionStageMarkerBytes(destination, receipt.stageId))
-                if (actualMarkerHash != receipt.markerHash) throw IllegalStateException("receipt and transaction-stage marker hashes disagree")
+                transaction(destination).verifyStagingMarker(receipt.stageId, receipt.markerHash)
             }
         }
         return receipt
@@ -3938,12 +3936,6 @@ class ForeverClientUpdater(
             throw IllegalStateException("private transaction-stage receipt cannot be atomically published", failure)
         }
         forceDirectory(destination.parent)
-    }
-
-    private fun transactionStageMarkerBytes(destination: ForeverClientUpdateDestination, stageId: String): ByteArray {
-        val identity = "$targetBinding|${destination.storageId}|${destination.root.toPath().toAbsolutePath().normalize()}"
-        val identityHash = sha256(identity.toByteArray(Charsets.UTF_8))
-        return "forever-client-update-staging-v1\n$stageId\n$identityHash\n".toByteArray(Charsets.UTF_8)
     }
 
     private fun transactionStageDirectory(destination: ForeverClientUpdateDestination, receipt: UpdateStageReceipt): File =

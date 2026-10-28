@@ -1591,7 +1591,7 @@ class ForeverClientUpdateTransaction(
     private fun stagingMarkerBytes(id: String): ByteArray =
         "forever-client-update-staging-v1\n$id\n$identityHash\n".toByteArray(Charsets.UTF_8)
 
-    private fun verifyStagingMarker(id: String, expectedMarkerHash: String): ByteArray {
+    internal fun verifyStagingMarker(id: String, expectedMarkerHash: String): ByteArray {
         val directory = stagingDirectory(id)
         val marker = stagingMarkerPath(id)
         rejectSymlinkComponents(directory)

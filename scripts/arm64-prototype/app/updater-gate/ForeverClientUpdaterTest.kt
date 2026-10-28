@@ -1534,6 +1534,64 @@ class ForeverClientUpdaterTest {
     }
 
     @Test
+    fun generationReceiptGuardRequiresItsExactPrivateHashAndNeverAdoptsForeignStage() {
+        val configAssets = configAssetsOrSkip()
+        Fixture().use { fixture ->
+            val paths = fixture.makePaths()
+            val destination = fixture.destination(paths)
+            val fetch: (ForeverClientUpdateCatalog.ObjectRecord, File, () -> Boolean, (Long) -> Unit) -> File =
+                { record, workDir, _, progress ->
+                    File(workDir, "${record.ekey}.blte").also {
+                        Files.write(it.toPath(), fixture.rawFor(record))
+                        progress(it.length())
+                    }
+                }
+            val updater = fixture.updater(paths, configAssets, fetch)
+            val plan = updater.plan(destination)
+            val privateBase = File(paths.work, ".forever-client-update-work")
+            val cancelled = {
+                privateBase.listFiles().orEmpty().any {
+                    File(it, ".forever-casc-resume-checkpoint").length() > 40L
+                }
+            }
+            assertThrows(java.util.concurrent.CancellationException::class.java) {
+                updater.execute(destination, plan, consentFor(plan), cancelled)
+            }
+            assertNoLiveFetchWorkers("generation receipt fixture")
+            val workspace = privateBase.listFiles().orEmpty().single { File(it, ".owner").isFile }
+            val receiptFile = File(workspace, ".transaction-stage-receipt.json")
+            val envelope = JSONObject(receiptFile.readText())
+            val receipt = JSONObject(envelope.getString("payload"))
+            val marker = File(paths.client, ".forever-update-staging/${receipt.getString("stageId")}/.owner")
+            val legacy = marker.readText().split('\n')
+            val generation = "forever-client-update-staging-v2\n${legacy[1]}\n${legacy[2]}\n${UUID.randomUUID()}\n".toByteArray()
+            marker.writeBytes(generation)
+            val blockedSnapshot = workspaceSnapshot(paths)
+            assertEquals(ForeverClientUpdater.ResumeGuardState.BLOCKED, updater.resumeGuardState(destination))
+            assertEquals(blockedSnapshot, workspaceSnapshot(paths))
+            assertTrue(generation.contentEquals(marker.readBytes()))
+
+            // Synthetic private receipt only: no checkpoint adoption is exercised here.
+            receipt.put("markerHash", sha256(generation))
+            val payload = receipt.toString()
+            envelope.put("payload", payload).put("sha256", sha256(payload.toByteArray()))
+            receiptFile.writeText(envelope.toString())
+            val ownedSnapshot = workspaceSnapshot(paths)
+            assertEquals(ForeverClientUpdater.ResumeGuardState.OWN_PENDING, updater.resumeGuardState(destination))
+            assertEquals(ownedSnapshot, workspaceSnapshot(paths))
+            assertEquals(ForeverClientRecoveryResult.RESUMABLE_STAGE_AVAILABLE, updater.recover(destination).result)
+            assertTrue(generation.contentEquals(marker.readBytes()))
+
+            val foreignPaths = fixture.makePaths("foreign-generation").copy(client = paths.client)
+            assertEquals(
+                ForeverClientUpdater.ResumeGuardState.BLOCKED,
+                fixture.updater(foreignPaths, configAssets, fetch).resumeGuardState(fixture.destination(foreignPaths)),
+            )
+            assertTrue(generation.contentEquals(marker.readBytes()))
+        }
+    }
+
+    @Test
     fun otherWorkspaceResumeEvidenceBlocksAnOtherwiseIdleSelectedDestination() {
         val configAssets = configAssetsOrSkip()
         Fixture().use { fixture ->
