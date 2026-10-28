@@ -7,6 +7,7 @@ import java.nio.ByteBuffer
 import java.nio.channels.FileChannel
 import java.nio.file.Files
 import java.nio.file.LinkOption
+import java.nio.file.Path
 import java.nio.file.StandardCopyOption
 import java.nio.file.StandardOpenOption
 import java.security.MessageDigest
@@ -3293,6 +3294,64 @@ class ForeverClientUpdater(
     private fun hasPendingUpdateState(destination: ForeverClientUpdateDestination): Boolean =
         portabilityIntentPresent() || hasPendingTransaction(destination) ||
             Files.exists(resumableWorkspacePath(destination).toPath(), LinkOption.NOFOLLOW_LINKS)
+
+    internal enum class PortabilitySourceKind {
+        EMPTY, PUBLISHED_CANDIDATE, PARTIAL_CANDIDATE, UNREADABLE_OR_AMBIGUOUS,
+    }
+
+    /** Metadata only: neither candidate verdict authenticates objects or permits adoption. */
+    internal fun discoverPortabilitySource(
+        destination: ForeverClientUpdateDestination,
+    ): PortabilitySourceKind = withLease(destination, allowRootPending = true) {
+        verifyStorageMarker(destination)
+        val root = destination.root.toPath()
+        fun directory(path: Path): Boolean = !Files.isSymbolicLink(path) &&
+            Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS)
+        fun regular(path: Path): Boolean = !Files.isSymbolicLink(path) &&
+            Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)
+        if (!directory(root)) return@withLease PortabilitySourceKind.UNREADABLE_OR_AMBIGUOUS
+        val published = root.resolve(".build.info")
+        val stages = root.resolve(TRANSACTION_STAGING_NAME)
+        var stage: Path? = null
+        if (Files.exists(stages, LinkOption.NOFOLLOW_LINKS)) {
+            if (!directory(stages)) return@withLease PortabilitySourceKind.UNREADABLE_OR_AMBIGUOUS
+            Files.newDirectoryStream(stages).use { children ->
+                for (child in children) {
+                    if (stage != null || !TRANSACTION_STAGE_ID.matches(child.fileName.toString()) || !directory(child)) {
+                        return@withLease PortabilitySourceKind.UNREADABLE_OR_AMBIGUOUS
+                    }
+                    stage = child
+                }
+            }
+        }
+        val candidate = stage
+        val verdict = if (candidate != null) {
+            val marker = candidate.resolve(TRANSACTION_STAGE_OWNER_NAME)
+            val data = candidate.resolve("Data")
+            if (Files.exists(published, LinkOption.NOFOLLOW_LINKS) || !regular(marker) ||
+                Files.size(marker) !in 1L..4096L || !directory(data) || !directory(data.resolve("data"))
+            ) PortabilitySourceKind.UNREADABLE_OR_AMBIGUOUS else PortabilitySourceKind.PARTIAL_CANDIDATE
+        } else if (Files.exists(published, LinkOption.NOFOLLOW_LINKS)) {
+            val data = root.resolve("Data")
+            if (regular(published) && directory(data) && directory(data.resolve("data"))) {
+                PortabilitySourceKind.PUBLISHED_CANDIDATE
+            } else PortabilitySourceKind.UNREADABLE_OR_AMBIGUOUS
+        } else {
+            var empty = true
+            Files.newDirectoryStream(root).use { children ->
+                for (child in children) {
+                    if (child.fileName.toString() !in setOf(".forever-client-storage", TRANSACTION_STAGING_NAME)) {
+                        empty = false
+                        break
+                    }
+                }
+            }
+            if (empty) PortabilitySourceKind.EMPTY else PortabilitySourceKind.UNREADABLE_OR_AMBIGUOUS
+        }
+        destination.revalidate()
+        verifyStorageMarker(destination)
+        verdict
+    }
 
     /** Global private fence survives replacement of the canonical workspace. */
     private fun portabilityIntentPresent(): Boolean = Files.exists(

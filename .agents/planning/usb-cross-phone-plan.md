@@ -203,6 +203,19 @@ consentimiento del plan real antes de adoptar o descargar.
 
 ## Open Issues
 
+- Descubrimiento ligero local añadido, aún sin UI ni autenticación: distingue vacío,
+  publicación candidata, parcial candidato y disposición ambigua con lecturas de
+  metadatos acotadas, bajo lease real. Un candidato no declara objetos verificados
+  ni autoriza adopción. Mantiene la barrera privada de intención pendiente.
+  El primer resultado ejecutado detectó que la guarda ordinaria de staging pendiente
+  impedía también inspeccionarlo; se permite esa inspección solo en esta entrada
+  de lectura, sin cambiar las entradas mutantes. GREEN posterior: un test focal,
+  cero fallos/errores/skips, JUnit 28-10 19:32:14, Gradle 3 min 27 s, fuentes idénticas.
+  Evidencia externa `usb-portability-local-20261028/discovery-green-tests/summary.json`;
+  fallo previo preservado, sin repetir checks verdes ni tocar el USB real.
+  Revisión sensible solicitada pero no obtenida por variante no disponible; no
+  se considera suplida por estas pruebas ni por inspección del padre. Integración,
+  verificación de cuerpos, recuperación durable y auditoría APK siguen pendientes.
 - Guarda privada de intención pendiente implementada localmente: su presencia,
   incluso con bytes malformados, bloquea plan, execute, recover y Resume ordinarios;
   la lease conserva la operación pendiente. Un test focal pasa (JUnit 19:10:01 UTC),

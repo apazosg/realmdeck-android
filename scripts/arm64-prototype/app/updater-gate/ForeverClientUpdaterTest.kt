@@ -42,6 +42,39 @@ class ForeverClientUpdaterTest {
         .joinToString("") { "%02x".format(it) }
 
     @Test
+    fun portabilityDiscoveryReadsOnlyBoundedMetadataAndNeverAdoptsCandidates() {
+        val configAssets = configAssetsOrSkip()
+        Fixture().use { fixture ->
+            val paths = fixture.makePaths()
+            val updater = fixture.updater(paths, configAssets) { _, _, _, _ ->
+                error("metadata discovery must not fetch objects")
+            }
+            val destination = fixture.destination(paths)
+            assertEquals(ForeverClientUpdater.PortabilitySourceKind.EMPTY, updater.discoverPortabilitySource(destination))
+            val stage = File(paths.client, ".forever-update-staging/${UUID.randomUUID()}")
+            val data = File(stage, "Data/data").apply { mkdirs() }
+            val owner = File(stage, ".owner").apply { writeText("untrusted marker") }
+            val body = File(data, "data.000").apply { writeBytes(byteArrayOf(1, 2, 3)) }
+            assertEquals(ForeverClientUpdater.PortabilitySourceKind.PARTIAL_CANDIDATE, updater.discoverPortabilitySource(destination))
+            assertArrayEquals(byteArrayOf(1, 2, 3), body.readBytes())
+            assertEquals("untrusted marker", owner.readText())
+            val ambiguous = File(stage.parentFile, UUID.randomUUID().toString()).apply { mkdir() }
+            assertEquals(ForeverClientUpdater.PortabilitySourceKind.UNREADABLE_OR_AMBIGUOUS, updater.discoverPortabilitySource(destination))
+            ambiguous.delete()
+            stage.deleteRecursively()
+            val publishedData = File(paths.client, "Data/data").apply { mkdirs() }
+            File(publishedData, "data.000").writeBytes(byteArrayOf(4, 5))
+            File(paths.client, ".build.info").writeText("unverified publication candidate")
+            assertEquals(ForeverClientUpdater.PortabilitySourceKind.PUBLISHED_CANDIDATE, updater.discoverPortabilitySource(destination))
+            assertTrue(File(paths.client, ".forever-update-staging").listFiles().orEmpty().isEmpty())
+            val intent = File(paths.work, ".forever-portability-intent.json").apply { writeBytes(byteArrayOf(1)) }
+            assertThrows(IllegalStateException::class.java) { updater.discoverPortabilitySource(destination) }
+            assertArrayEquals(byteArrayOf(1), intent.readBytes())
+            assertArrayEquals(byteArrayOf(4, 5), File(publishedData, "data.000").readBytes())
+        }
+    }
+
+    @Test
     fun planIsReadOnlyReportsBoundCostAndRejectsMismatchedConsentBeforeTransfer() {
         val configAssets = configAssetsOrSkip()
         Fixture().use { fixture ->
