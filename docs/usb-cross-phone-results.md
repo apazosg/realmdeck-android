@@ -192,7 +192,7 @@ El usuario aprobó después [US-009-UC-05 / AC-06–09](../.agents/specs/US-009.
 incluyendo recuperación ante fallos y rechazo del estado privado obsoleto. Los
 nuevos FR-009–013/NFR-004 y el [diseño de recuperación](usb-portability-recovery-design.md)
 se aprobaron después explícitamente para preparar las pruebas. TC-007–013 se han
-derivado y esperan revisión; no son tests implementados ni ejecutados. Cliente completo
+derivado y fueron aprobados el 28-10; no son todavía cobertura implementada o ejecutada. Cliente completo
 y parcial son el alcance confirmado, pero la portabilidad completa no está
 implementada ni aceptada físicamente.
 
@@ -204,14 +204,15 @@ durable y consentimiento del plan; no copiar el checkpoint original ni omitir la
 autenticación de objetos. El diseño está aprobado, no ejecutado: el USB no se ha
 modificado para esta recuperación.
 
-Los casos propuestos en US-009 trazan los nuevos FR/NFR: cliente completo sin estado
+Los casos aprobados en US-009 trazan los nuevos FR/NFR: cliente completo sin estado
 privado original; descubrimiento sin adopción; autenticación acotada; preservación
 ante corrupción, colas no representables, cancelación y desconexión; plan/consentimiento;
 recuperación de los cortes durables; y rechazo de estado obsoleto incluso tras
 publicación. Las condiciones de la tabla de recuperación son estados distintos del
 protocolo, no una matriz de dispositivos o una nueva infraestructura de benchmark.
-La próxima puerta es aprobar esos casos antes de escribir código; esta fase solo
-cambia documentación, no instala otra APK ni inicia descarga/adopción.
+Tras esa aprobación comienza el desarrollo local. El usuario autoriza también crear,
+instalar y probar APKs en el dispositivo conectado por ADB WiFi, manteniendo auditoría
+exacta y preflight. Todavía no se ha ejecutado una adopción ni su plan de descarga.
 
 Evidencia externa: `personal-storage-options/summary.json`,
 `personal-storage-options-after-foreground/summary.json`,
@@ -244,7 +245,7 @@ pretraslado, no un recuento reconocido en este estado nuevo. El recibo históric
 se usa solo para localizar/comparar metadatos, no para reintroducirlo como autoridad.
 
 La ausencia de estado local no reproduce todas las diferencias de otro Android o
-teléfono. La implementación de adopción y la revisión de TC-007–013 siguen pendientes;
+teléfono. TC-007–013 ya están aprobados; implementación y validación siguen pendientes;
 no se usará Descargar como atajo. Evidencia externa:
 `usb-cross-phone-20261028/pairing-attempt-01/summary.json` y
 `usb-cross-phone-20261028/reset-original-readonly/summary.json`, atributos/listado CASC

@@ -16,8 +16,8 @@ La inspección y C160 ya están verificadas. El usuario eligió **«Ambos»**:
 reutilizar el cliente terminado y continuar el parcial en el segundo móvil.
 La selección está resuelta y después aprobó **«Aprobar criterios»** para
 US-009-UC-05 / AC-06–09. Después aprobó FR-009–013/NFR-004 y el protocolo para
-preparar las pruebas. TC-007–013 se presentan para revisión; la adopción sigue
-sin implementar ni ejecutar. No se ha reiniciado el goal
+preparar las pruebas. El 28-10 aprobó también TC-007–013 para implementación local;
+no se declara todavía adopción implementada ni ejecutada. No se ha reiniciado el goal
 de rendimiento.
 
 El 28-10 el usuario pide «haz el goal o continua el que habíamos hecho».
@@ -25,9 +25,9 @@ Se crea el goal de portabilidad `c51e88cc-70df-4253-9ab3-147edad83c37`, con marg
 máximo de seis horas y planificación persistida para ambos casos. El antiguo goal
 de rendimiento conserva su cierre no logrado; no se sustituye su aceptación por
 esta tarea. Se continúa desde la fixture original sin historial privado verificada
-el 28-10, sin repetir emparejamiento ni inspecciones. La aprobación de TC-007–013
-sigue pendiente: crear el goal no equivale a aprobar los casos ni autoriza una
-instalación nueva o una adopción sobre el USB.
+el 28-10, sin repetir emparejamiento ni inspecciones. Al crearlo faltaba la aprobación
+de TC-007–013, recibida después, seguida de la autorización de crear, instalar y
+probar APKs auditadas en el dispositivo conectado. La adopción conserva su plan real.
 
 ## Content
 
@@ -42,7 +42,7 @@ instalación nueva o una adopción sobre el USB.
   guardas ni anunciar cliente completo. Aplican [US-007](../specs/US-007.md),
   [US-008](../specs/US-008.md) y [US-009](../specs/US-009.md); se conservan las
   guardas normales; la nueva entrada tiene requisitos y diseño aprobados, con
-  casos de prueba pendientes de aprobación.
+  casos de prueba aprobados pendientes de implementación y ejecución.
 - El usuario realiza el traslado físico y la expulsión de Android. La ausencia
   de escritores de la app no garantiza ausencia de escrituras del sistema.
 - En el teléfono personal, conectar solo al endpoint facilitado. No heredar la
@@ -128,18 +128,19 @@ instalación nueva o una adopción sobre el USB.
    El USB actual no contiene una instalación publicada y el checkpoint/
    recibo siguen en el original. Ese traspaso no existe en el updater actual.
    Los UC/AC, FR/NFR y el diseño de US-009 están aprobados; revisar los nuevos
-   TC-007–013 antes de implementar la adopción verificada.
+   TC-007–013 aprobados el 28-10 para implementar la adopción verificada.
    No copiar estado privado, falsear recibos/checkpoints o publicar un parcial
    como solución provisional; no empezar otra descarga completa automáticamente.
 5. Antes de cualquier cambio de cliente: plan/coste/consentimiento explícitos,
    integridad, límites, quiescencia y recuperación preservados. Si hace falta otra
-   APK, identificar y auditar esa candidata antes de acordar su instalación.
-   El código vigente y la C160 no se modifican en esta fase de definición.
+   APK, identificar y auditar esa candidata antes de su instalación ya autorizada.
+   El desarrollo local no modifica la C160 instalada ni adopta por sí solo el USB.
 
 La respuesta «Ambos» confirmó el alcance y «Aprobar criterios» confirmó los UC/AC.
 La aprobación posterior de FR/NFR y del protocolo autoriza derivar sus casos de
-prueba, no ejecutar una adopción ni otra instalación de APK. Tampoco es evidencia
-de reutilización: pruebas e implementación conservan sus puertas.
+prueba. Después autorizó implementar esos casos y crear, instalar y probar APKs.
+Nada de ello es evidencia de reutilización: se conservan auditoría, pruebas y el
+consentimiento del plan real antes de adoptar o descargar.
 
 ### Selección corregida y puerta de adopción pendiente
 
@@ -167,7 +168,7 @@ de reutilización: pruebas e implementación conservan sus puertas.
   distinguir completo/parcial, reutilizar solo objetos autenticados, establecer
   estado nuevo sin copiar el privado del original y recuperar fallos sin pérdida
   ni sobrescritura por estado antiguo. FR-009–013, NFR-004 y el diseño han sido
-  aprobados para derivar TC-007–013; no se altera todavía la guarda actual. El
+  aprobados, y TC-007–013 aprobados el 28-10; no se omite la guarda actual. El
   [diseño aprobado](../../docs/usb-portability-recovery-design.md) separa revisión,
   verificación, plan y adopción con generación nueva de propiedad sin mover CASC.
 - Evidencia externa: `personal-storage-options*/summary.json`,
@@ -192,15 +193,21 @@ de reutilización: pruebas e implementación conservan sus puertas.
   correctas, sin permiso amplio, 81 metadatos CASC y marcadores preservados.
 - [x] 5a.1. Usuario aprueba los criterios de portabilidad UC-05 / AC-06–09.
 - [x] 5a.2. Usuario aprueba FR-009–013/NFR-004 y el diseño para preparar las pruebas.
-- [ ] 5a.3. Revisar/aprobar TC-007–013 propuestos; no son tests implementados ni ejecutados.
+- [x] 5a.3. Usuario aprueba TC-007–013 el 28-10 para implementación y pruebas locales;
+  no se declaran todavía cobertura ejecutada.
 - [ ] 5a.4. Implementar y verificar el protocolo aprobado tras la puerta de tests,
-  con revisión sensible y APK exacta auditada antes de acordar su instalación.
+  con revisión sensible y APK exacta auditada antes de la instalación autorizada.
 - [ ] 5b. Validar reutilización del cliente terminado y continuidad del parcial
   mediante el protocolo verificado y consentimiento del plan real; no asumirla.
 - [ ] 6. Documentar conservación, reutilización observada o bloqueo seguro y pendientes.
 
 ## Open Issues
 
+- TC-007–013 aprobados el 28-10. El usuario también autoriza «crear apks, instalarias
+  y probarlas en el dispositivo conectado por el adb wifi». No repetir preguntas de
+  permiso por esa clase de acción; conservar auditoría de candidata exacta, preflight
+  y datos. Esta autorización no elimina el plan y consentimiento reales antes de
+  adoptar el parcial o descargar su delta, ni autoriza borrados o cambios de seguridad.
 - Nuevo escenario solicitado el 28-10: el usuario borró los datos de la app y devolvió
   el USB al móvil original. Lectura 17:22:09 UTC: la app informa C160, sin workspace
   privado previo, admisión dinámica ni preferencias de almacenamiento en las rutas
@@ -217,10 +224,11 @@ de reutilización: pruebas e implementación conservan sus puertas.
   todavía a mutar/adoptar el staging con un protocolo sin especificar/aprobar.
 - El desajuste de selección está resuelto. Falta adopción/reutilización del parcial;
   el estado privado del original no es transferible por copiarlo o saltarse guardas.
-- UC/AC, FR-009–013/NFR-004 y diseño aprobados explícitamente. TC-007–013 derivados
-  para revisión: cliente completo, revisión sin efectos, verificación acotada,
+- UC/AC, FR-009–013/NFR-004, diseño y TC-007–013 aprobados explícitamente:
+  cliente completo, revisión sin efectos, verificación acotada,
   preservación ante errores/interrupción, consentimiento, cortes durables y rechazo
-  obsoleto antes/después de publicación. No hay tests ejecutados ni código de adopción.
+  obsoleto antes/después de publicación. Su implementación y cobertura ejecutada
+  siguen pendientes; la aprobación no acredita código ni recuperación física.
 - Mantener la ruta es relevante: las cabeceras de segmento CASC incorporan su ruta
   absoluta. El diseño propone una nueva generación del marcador, enlazada por el
   `markerHash` del recibo, para invalidar estado obsoleto sin renombrar los segmentos.

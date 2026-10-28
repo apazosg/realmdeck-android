@@ -2,8 +2,10 @@
 
 Estado: **diseño y requisitos aprobados, no implementado ni ejecutado**.
 El usuario aprobó FR-009–013/NFR-004 de [US-009](../.agents/specs/US-009.md) y este
-protocolo para preparar las pruebas. TC-007–013 están propuestos para revisión:
-no son pruebas ejecutadas ni autorización para adoptar el USB o instalar otra APK.
+protocolo para preparar las pruebas. TC-007–013 fueron aprobados el 28-10 para
+implementación y pruebas locales; no son cobertura ejecutada. La creación, instalación
+y prueba de candidatas auditadas en el dispositivo conectado también están autorizadas;
+la adopción del USB conserva su plan y consentimiento frescos.
 Este documento conserva sus puertas de seguridad y no declara recuperados los
 datos del teléfono personal.
 Operación y evidencia en [el plan](../.agents/planning/usb-cross-phone-plan.md) y
@@ -226,7 +228,7 @@ de nuevo antes del payload conforme a US-008; no se fuerza un consentimiento vie
 
 - **Cumplido:** aprobación explícita de FR-009–013/NFR-004 y de este diseño,
   incluida la generación de propiedad y la admisión inicial sin cambio de ruta.
-- **Pendiente:** revisar/aprobar TC-007–013, ya derivados en US-009 para cliente
+- **Cumplido:** aprobación el 28-10 de TC-007–013, derivados en US-009 para cliente
   completo, descubrimiento, autenticación, datos no admisibles, consentimiento,
   cortes durables y estado obsoleto. No se han implementado ni ejecutado; sin
   matrices redundantes ni nuevo harness genérico.
@@ -234,7 +236,7 @@ de nuevo antes del payload conforme a US-008; no se fuerza un consentimiento vie
   admisión de catálogo antes de implementar; ante ambigüedad, bloquear conservando
   datos, no introducir una ruta de borrado.
 - Revisión independiente sensible, pruebas locales, postimages explícitas y
-  reconstrucción/auditoría de la APK exacta antes de acordar otro reemplazo.
+  reconstrucción/auditoría de la APK exacta antes del reemplazo ya autorizado.
 - Prueba física en el móvil actual con plan/costes/consentimiento nuevos, pausa y
   comprobación del progreso preservado; portabilidad completa y parcial son pruebas
   distintas, y ninguna equivale a compatibilidad del runtime o Play.
