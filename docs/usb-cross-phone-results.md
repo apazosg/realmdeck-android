@@ -251,3 +251,26 @@ no se usará Descargar como atajo. Evidencia externa:
 `usb-cross-phone-20261028/reset-original-readonly/summary.json`, atributos/listado CASC
 y verificación de comparación con el inventario previo. El código de producto no
 se ha cambiado para esta inspección.
+
+## Desarrollo local: primer soporte de generación de propiedad
+
+Se añade un productor de bytes de marcador v2 y su validación estricta por ID de
+stage, identidad congelada, UUID canónico y hash esperado del recibo privado. La
+creación normal sigue produciendo el marcador v1 sin cambios. La lectura limita
+su tamaño y rechaza enlaces; la publicación usa la longitud del formato autenticado,
+no una longitud v1 asumida. El productor no cambia propiedad ni escribe un marcador.
+
+Cinco tests JVM focales pasan: generación correcta permite reabrir/publicar en
+fixture; hash v1 obsoleto y formatos/identidades inválidos se rechazan; tres pruebas
+legacy conservan reapertura, publicación y recuperación por cortes. JUnit 28-10
+18:04:55 UTC, cero fallos/errores/skips, fuentes probadas idénticas al repositorio.
+La notificación del comando se perdió al reiniciar el servidor; se recuperó su
+resultado terminado mediante lock, **sin volver a ejecutar Gradle**.
+
+Revisión sensible limitada al snapshot suministrado, sin filesystem ni comandos:
+sin hallazgos accionables. No es una revisión de adopción completa ni demuestra
+TC-012/013: faltan integración C/P/S, cortes específicos v2 y protección completa
+antes/después de publicar. No se ha cambiado la app instalada ni tocado el USB.
+
+Evidencia externa: `usb-portability-local-20261028/generation-tests/summary.json`,
+XML y log. Fuente Transaction `da3166a9…d3b04355`; test `df30f1e0…885327b`.

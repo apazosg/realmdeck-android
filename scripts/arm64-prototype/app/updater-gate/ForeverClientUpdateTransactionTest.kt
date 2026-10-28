@@ -11,6 +11,51 @@ import java.security.MessageDigest
 
 class ForeverClientUpdateTransactionTest {
     @Test
+    fun generationMarkerResumesAndPublishesOnlyWithItsExactPrivateHash() {
+        Fixture().use { fixture ->
+            val transaction = fixture.transaction()
+            val stage = transaction.createStaging()
+            val generation = "01234567-89ab-cdef-0123-456789abcdef"
+            val marker = transaction.generationStagingMarkerBytes(stage.id, generation)
+            File(stage.directory, ".owner").writeBytes(marker)
+            org.junit.Assert.assertThrows(IllegalStateException::class.java) {
+                fixture.transaction().resumeStaging(stage.id, stage.markerHash)
+            }
+            val resumedTransaction = fixture.transaction()
+            val resumed = resumedTransaction.resumeStaging(stage.id, hash(marker))
+            val data = bytes("generation-owned-build")
+            val input = fixture.input(resumed, ".build.info", "build-info", data)
+            resumedTransaction.commit(resumedTransaction.plan(listOf(input), emptySet(), resumed))
+            assertArrayEquals(data, File(fixture.root, ".build.info").readBytes())
+            assertFalse(stage.directory.exists())
+        }
+    }
+
+    @Test
+    fun generationMarkerRejectsMalformedAndWrongIdentityWithoutChangingSource() {
+        Fixture().use { fixture ->
+            val transaction = fixture.transaction()
+            val stage = transaction.createStaging()
+            val markerFile = File(stage.directory, ".owner")
+            val good = transaction.generationStagingMarkerBytes(stage.id, "01234567-89ab-cdef-0123-456789abcdef")
+            val foreignIdentity = good.toString(Charsets.UTF_8).split('\n').toMutableList()
+            foreignIdentity[2] = (if (foreignIdentity[2][0] == '0') "1" else "0") + foreignIdentity[2].substring(1)
+            val variants = listOf(good + byteArrayOf(10), good.copyOf(good.size - 1),
+                foreignIdentity.joinToString("\n").toByteArray(),
+                good.toString(Charsets.UTF_8).replace("staging-v2", "staging-v3").toByteArray(),
+                good.toString(Charsets.UTF_8).replace("01234567-89ab-cdef-0123-456789abcdef", "not-a-generation").toByteArray(),
+                ByteArray(4096) { 65 })
+            variants.forEach { invalid ->
+                markerFile.writeBytes(invalid)
+                org.junit.Assert.assertThrows(IllegalStateException::class.java) {
+                    fixture.transaction().resumeStaging(stage.id, hash(invalid))
+                }
+                assertArrayEquals(invalid, markerFile.readBytes())
+            }
+        }
+    }
+
+    @Test
     fun publishesOnlyAdmittedDeltaAndPublishesBuildMarkerLast() {
         Fixture().use { fixture ->
             val oldSegment = fixture.write("Data/data/data.000", bytes("old-large-segment"))

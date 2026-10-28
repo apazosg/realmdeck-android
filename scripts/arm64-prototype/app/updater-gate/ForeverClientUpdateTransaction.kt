@@ -116,6 +116,32 @@ class ForeverClientUpdateTransaction(
         return sha256(stagingMarkerBytes(stageId))
     }
 
+    /** Candidate bytes only: the recovery protocol, not this helper, publishes ownership. */
+    internal fun generationStagingMarkerBytes(stageId: String, generation: String): ByteArray {
+        require(UUID_PATTERN.matches(stageId)) { "staging ID is invalid" }
+        require(UUID_PATTERN.matches(generation) && UUID.fromString(generation).toString() == generation) {
+            "staging generation must be a canonical UUID"
+        }
+        return "forever-client-update-staging-v2\n$stageId\n$identityHash\n$generation\n".toByteArray(Charsets.UTF_8)
+    }
+
+    internal fun validateStagingMarkerContent(id: String, expectedMarkerHash: String, bytes: ByteArray) {
+        require(UUID_PATTERN.matches(id)) { "staging ID is invalid" }
+        val expectedHash = normalizeHash(expectedMarkerHash, "staging marker hash")
+        if (bytes.size > stagingMarkerBytes(id).size + 37 || sha256(bytes) != expectedHash) {
+            throw IllegalStateException("staging ownership marker does not match private receipt")
+        }
+        if (bytes.contentEquals(stagingMarkerBytes(id))) return
+        val fields = bytes.toString(Charsets.UTF_8).split('\n')
+        if (fields.size != 5 || fields[0] != "forever-client-update-staging-v2" ||
+            fields[1] != id || fields[2] != identityHash || fields[4].isNotEmpty() ||
+            !UUID_PATTERN.matches(fields[3])
+        ) throw IllegalStateException("staging ownership marker has unsupported or foreign fields")
+        if (!bytes.contentEquals(generationStagingMarkerBytes(id, fields[3]))) {
+            throw IllegalStateException("staging ownership marker is not canonical")
+        }
+    }
+
     /** Create a fresh stage at an ID already recorded in the caller's private intent receipt. */
     fun createStaging(stageId: String, expectedMarkerHash: String): UpdateStagingArea = withExclusiveLock {
         validateDirectories()
@@ -457,7 +483,7 @@ class ForeverClientUpdateTransaction(
             validateMoveFileStores(staged, resolveTarget(op, journal), backupPath(op, journal))
         }
         val marker = stagingMarkerPath(plan.stageId)
-        requireFingerprint(marker, FileFingerprint(stagingMarkerBytes(plan.stageId).size.toLong(), plan.stageMarkerHash), "staging ownership marker")
+        requireFingerprint(marker, FileFingerprint(verifyStagingMarker(plan.stageId, plan.stageMarkerHash).size.toLong(), plan.stageMarkerHash), "staging ownership marker")
         forceFile(marker)
         forceDirectory(marker.parent)
         checkMutationAllowed()
@@ -509,7 +535,7 @@ class ForeverClientUpdateTransaction(
             forceDirectory(staged.parent)
         }
         val marker = stagingMarkerPath(plan.stageId)
-        requireFingerprint(marker, FileFingerprint(stagingMarkerBytes(plan.stageId).size.toLong(), plan.stageMarkerHash), "staging ownership marker")
+        requireFingerprint(marker, FileFingerprint(verifyStagingMarker(plan.stageId, plan.stageMarkerHash).size.toLong(), plan.stageMarkerHash), "staging ownership marker")
         forceFile(marker)
         forceDirectory(marker.parent)
         checkMutationAllowed()
@@ -1565,7 +1591,7 @@ class ForeverClientUpdateTransaction(
     private fun stagingMarkerBytes(id: String): ByteArray =
         "forever-client-update-staging-v1\n$id\n$identityHash\n".toByteArray(Charsets.UTF_8)
 
-    private fun verifyStagingMarker(id: String, expectedMarkerHash: String) {
+    private fun verifyStagingMarker(id: String, expectedMarkerHash: String): ByteArray {
         val directory = stagingDirectory(id)
         val marker = stagingMarkerPath(id)
         rejectSymlinkComponents(directory)
@@ -1573,10 +1599,23 @@ class ForeverClientUpdateTransaction(
         if (!Files.isDirectory(directory, LinkOption.NOFOLLOW_LINKS)) {
             throw IllegalStateException("updater-owned staging namespace is missing")
         }
-        val expectedBytes = stagingMarkerBytes(id)
-        val calculatedHash = sha256(expectedBytes)
-        if (calculatedHash != expectedMarkerHash) throw IllegalStateException("staging ownership marker does not match destination identity")
-        requireFingerprint(marker, FileFingerprint(expectedBytes.size.toLong(), expectedMarkerHash), "staging ownership marker")
+        requireRegularFile(marker, "staging ownership marker")
+        // Read at most one byte beyond the largest canonical format, even if it grows.
+        val buffer = ByteArray(stagingMarkerBytes(id).size + 38)
+        var count = 0
+        Files.newInputStream(marker, StandardOpenOption.READ, LinkOption.NOFOLLOW_LINKS).use { input ->
+            while (count < buffer.size) {
+                val n = input.read(buffer, count, buffer.size - count)
+                if (n < 0) break
+                if (n == 0) throw IllegalStateException("staging ownership marker read made no progress")
+                count += n
+            }
+        }
+        if (count == buffer.size) throw IllegalStateException("staging ownership marker exceeds its bound")
+        val actual = buffer.copyOf(count)
+        validateStagingMarkerContent(id, expectedMarkerHash, actual)
+        requireFingerprint(marker, FileFingerprint(actual.size.toLong(), expectedMarkerHash), "staging ownership marker")
+        return actual
     }
 
     private fun validateStagedFile(file: File, staging: UpdateStagingArea): java.nio.file.Path {

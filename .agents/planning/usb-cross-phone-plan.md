@@ -203,6 +203,13 @@ consentimiento del plan real antes de adoptar o descargar.
 
 ## Open Issues
 
+- Prerrequisito local de generaciones: creación v1 preservada, marcador v2 ligado
+  a stage/identidad/UUID y hash privado exacto, lectura acotada y longitud autenticada
+  en publicación. Cinco tests focales/legacy pasan; revisión sensible de snapshot
+  sin hallazgos, sin acceso del revisor al filesystem ni comandos. No acredita
+  todavía intención C/P/S, cortes v2 específicos ni bloqueo obsoleto tras publicación.
+  Sin nueva APK, adopción o escritura en el USB real. Verificador CASC en desarrollo
+  separado; ningún recuento del USB ha sido autenticado por esta implementación.
 - TC-007–013 aprobados el 28-10. El usuario también autoriza «crear apks, instalarias
   y probarlas en el dispositivo conectado por el adb wifi». No repetir preguntas de
   permiso por esa clase de acción; conservar auditoría de candidata exacta, preflight
