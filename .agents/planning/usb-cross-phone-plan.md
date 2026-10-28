@@ -20,6 +20,15 @@ preparar las pruebas. TC-007–013 se presentan para revisión; la adopción sig
 sin implementar ni ejecutar. No se ha reiniciado el goal
 de rendimiento.
 
+El 28-10 el usuario pide «haz el goal o continua el que habíamos hecho».
+Se crea el goal de portabilidad `c51e88cc-70df-4253-9ab3-147edad83c37`, con margen
+máximo de seis horas y planificación persistida para ambos casos. El antiguo goal
+de rendimiento conserva su cierre no logrado; no se sustituye su aceptación por
+esta tarea. Se continúa desde la fixture original sin historial privado verificada
+el 28-10, sin repetir emparejamiento ni inspecciones. La aprobación de TC-007–013
+sigue pendiente: crear el goal no equivale a aprobar los casos ni autoriza una
+instalación nueva o una adopción sobre el USB.
+
 ## Content
 
 - Original: C160 cerró 19:14:11 UTC con **822.658 objetos durables**, prefix/CRC y
