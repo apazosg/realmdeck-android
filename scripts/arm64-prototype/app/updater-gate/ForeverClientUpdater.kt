@@ -603,6 +603,88 @@ class ForeverClientUpdater(
     /** Bounded catalog-pinning guard outcome: idle, valid own resume, or fail-closed. */
     internal enum class ResumeGuardState { IDLE, OWN_PENDING, BLOCKED }
 
+    /** Private transition metadata, not an admission token or a list of objects. */
+    internal data class PortabilityIntentBinding(
+        val operationId: String,
+        val generation: String,
+        val stageId: String,
+        val catalogDigest: String,
+        val planDigest: String,
+        val inventoryDigest: String,
+        val checkpointDigest: String,
+        val checkpointIdentityDigest: String,
+        val oldMarkerDigest: String,
+        val newMarkerDigest: String,
+        val oldWorkspaceDigest: String?,
+        val oldCatalogReceiptDigest: String?,
+        val newCatalogReceiptDigest: String,
+    )
+
+    // These codecs perform no filesystem I/O. Publication/recovery must hold the
+    // real lease, authenticate the prepared files and revalidate the bound source.
+    internal fun encodePortabilityIntent(
+        destination: ForeverClientUpdateDestination,
+        binding: PortabilityIntentBinding,
+    ): ByteArray {
+        listOf(binding.operationId, binding.generation, binding.stageId).forEach {
+            require(UUID.fromString(it).toString() == it) { "noncanonical portability identifier" }
+        }
+        listOf(binding.catalogDigest, binding.planDigest, binding.inventoryDigest,
+            binding.checkpointDigest, binding.checkpointIdentityDigest,
+            binding.oldMarkerDigest, binding.newMarkerDigest,
+            binding.newCatalogReceiptDigest).forEach {
+            require(it.matches(Regex("[0-9a-f]{64}"))) { "invalid portability digest" }
+        }
+        listOfNotNull(binding.oldWorkspaceDigest, binding.oldCatalogReceiptDigest).forEach {
+            require(it.matches(Regex("[0-9a-f]{64}"))) { "invalid prior portability digest" }
+        }
+        require(binding.oldMarkerDigest != binding.newMarkerDigest) { "portability generation must change ownership" }
+        val payload = JSONObject()
+            .put("version", 1)
+            .put("targetDigest", sha256(targetBinding.toByteArray(Charsets.UTF_8)))
+            .put("storageId", destination.storageId)
+            .put("destinationPath", destination.root.toPath().toAbsolutePath().normalize().toString())
+            .put("operationId", binding.operationId).put("generation", binding.generation)
+            .put("stageId", binding.stageId).put("catalogDigest", binding.catalogDigest)
+            .put("planDigest", binding.planDigest).put("inventoryDigest", binding.inventoryDigest)
+            .put("checkpointDigest", binding.checkpointDigest)
+            .put("checkpointIdentityDigest", binding.checkpointIdentityDigest)
+            .put("oldMarkerDigest", binding.oldMarkerDigest).put("newMarkerDigest", binding.newMarkerDigest)
+            .put("oldWorkspaceDigest", binding.oldWorkspaceDigest ?: "absent")
+            .put("oldCatalogReceiptDigest", binding.oldCatalogReceiptDigest ?: "absent")
+            .put("newCatalogReceiptDigest", binding.newCatalogReceiptDigest).toString()
+        val bytes = JSONObject().put("payload", payload)
+            .put("sha256", sha256(payload.toByteArray(Charsets.UTF_8)))
+            .toString().toByteArray(Charsets.UTF_8)
+        require(bytes.size <= MAX_STAGE_RECEIPT_BYTES) { "portability intent exceeds its metadata bound" }
+        return bytes
+    }
+
+    internal fun decodePortabilityIntent(
+        destination: ForeverClientUpdateDestination,
+        expectedCatalogDigest: String,
+        bytes: ByteArray,
+    ): PortabilityIntentBinding {
+        require(bytes.size in 1..MAX_STAGE_RECEIPT_BYTES) { "portability intent exceeds its metadata bound" }
+        val envelope = JSONObject(String(bytes, Charsets.UTF_8))
+        val text = envelope.get("payload") as? String ?: error("invalid portability payload")
+        require(envelope.get("sha256") == sha256(text.toByteArray(Charsets.UTF_8))) { "portability intent checksum mismatch" }
+        val payload = JSONObject(text)
+        fun field(name: String) = payload.get(name) as? String ?: error("invalid portability field: $name")
+        fun prior(name: String) = field(name).let { if (it == "absent") null else it }
+        val binding = PortabilityIntentBinding(
+            field("operationId"), field("generation"), field("stageId"), field("catalogDigest"),
+            field("planDigest"), field("inventoryDigest"), field("checkpointDigest"),
+            field("checkpointIdentityDigest"), field("oldMarkerDigest"), field("newMarkerDigest"),
+            prior("oldWorkspaceDigest"), prior("oldCatalogReceiptDigest"), field("newCatalogReceiptDigest"),
+        )
+        require(binding.catalogDigest == expectedCatalogDigest) { "portability catalog binding changed" }
+        // Reconstruct the exact canonical envelope: rejects unknown/duplicate keys,
+        // wrong scalar types, alternate identities, trailing bytes and malformed UTF8.
+        require(bytes.contentEquals(encodePortabilityIntent(destination, binding))) { "portability intent is not canonical or belongs to another destination" }
+        return binding
+    }
+
     /**
      * Read-only catalog-pinning guard. A validated own stage receipt counts as
      * pending even when the transaction journal reports no pending transaction

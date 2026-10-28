@@ -203,6 +203,17 @@ consentimiento del plan real antes de adoptar o descargar.
 
 ## Open Issues
 
+- Codec local de intent privado implementado: metadatos acotados a 16 KiB,
+  checksum y representación canónica ligados a target/destino/storage, catálogo,
+  plan, inventario, checkpoint y generaciones anterior/nueva. Solo produce/valida
+  bytes: no publica intent, sustituye workspaces ni adopta el USB.
+  Un check focal pasó (JUnit 28-10 20:13:06, cero fallos/errores/skips), fuentes
+  `de770353…11a00` / `ee007331…1c60f`, copias de test iguales al repositorio.
+  Notificaciones perdidas recuperadas del proceso original, sin repetir Gradle.
+  Revisión sensible inconclusa por falta de acceso del revisor al diff, no aprobada;
+  faltan publicación/recuperación C/P/S, checkpoint candidato, integración de
+  catálogo, UI y pruebas físicas. No desplegar por este check aislado.
+
 - Kernel local `ForeverCasc.inspectForeignStage` implementado: autenticación por
   objeto/EOF, catálogo suministrado, identidad de segmentos y digest de inventario;
   callbacks y resumen siempre provisionales, nunca autoridad para adoptar. Exige

@@ -42,6 +42,51 @@ class ForeverClientUpdaterTest {
         .joinToString("") { "%02x".format(it) }
 
     @Test
+    fun portabilityIntentCodecBindsItsDestinationCatalogAndExactSchemaWithoutWriting() {
+        val assets = configAssetsOrSkip()
+        Fixture().use { fixture ->
+            val paths = fixture.makePaths()
+            val updater = fixture.updater(paths, assets) { _, _, _, _ -> error("intent codec must not fetch") }
+            val destination = fixture.destination(paths)
+            val binding = ForeverClientUpdater.PortabilityIntentBinding(
+                UUID.randomUUID().toString(), UUID.randomUUID().toString(), UUID.randomUUID().toString(),
+                "01".repeat(32), "02".repeat(32), "03".repeat(32), "04".repeat(32),
+                "05".repeat(32), "06".repeat(32), "07".repeat(32), null, null, "08".repeat(32),
+            )
+            val before = paths.client.list()!!.toSet()
+            val bytes = updater.encodePortabilityIntent(destination, binding)
+            assertEquals(binding, updater.decodePortabilityIntent(destination, binding.catalogDigest, bytes))
+            val previous = binding.copy(oldWorkspaceDigest = "09".repeat(32), oldCatalogReceiptDigest = "0a".repeat(32))
+            assertEquals(previous, updater.decodePortabilityIntent(destination, binding.catalogDigest,
+                updater.encodePortabilityIntent(destination, previous)))
+            assertThrows(IllegalArgumentException::class.java) {
+                updater.decodePortabilityIntent(destination, "ff".repeat(32), bytes)
+            }
+            fun changedPayload(change: (JSONObject) -> Unit): ByteArray {
+                val envelope = JSONObject(String(bytes, Charsets.UTF_8))
+                val payload = JSONObject(envelope.getString("payload"))
+                change(payload)
+                val text = payload.toString()
+                return envelope.put("payload", text).put("sha256", sha256(text.toByteArray(Charsets.UTF_8)))
+                    .toString().toByteArray(Charsets.UTF_8)
+            }
+            for (malformed in listOf(
+                changedPayload { it.put("destinationPath", File(paths.client, "other").absolutePath) },
+                changedPayload { it.put("unexpectedPath", "/not-an-authorized-workspace") },
+                changedPayload { it.put("checkpointDigest", 42) },
+                bytes + byteArrayOf(10),
+                ByteArray(16 * 1024 + 1),
+            )) {
+                assertThrows(Exception::class.java) {
+                    updater.decodePortabilityIntent(destination, binding.catalogDigest, malformed)
+                }
+            }
+            assertEquals(before, paths.client.list()!!.toSet())
+            assertFalse(File(paths.work, ".forever-portability-intent.json").exists())
+        }
+    }
+
+    @Test
     fun portabilityDiscoveryReadsOnlyBoundedMetadataAndNeverAdoptsCandidates() {
         val configAssets = configAssetsOrSkip()
         Fixture().use { fixture ->
