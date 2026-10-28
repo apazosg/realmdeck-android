@@ -433,6 +433,79 @@ object ForeverCasc {
         val finalizing: Boolean,
     )
 
+    /**
+     * Prepare a NEW private checkpoint from a complete authenticated scan, never
+     * from another device's checkpoint. Caller must hold the real operation lease
+     * and have confirmed the current adoption/space plan before calling: this
+     * method forces source data, but never changes its bytes or ownership marker.
+     * The fresh checkpoint directory is only a prepared candidate, not normal
+     * Resume authority until the caller durably publishes the bound transition.
+     */
+    internal fun prepareForeignStageCheckpoint(
+        dataFiles: File,
+        checkpointDirectory: File,
+        checkpointIdentity: String,
+        targetCatalogDigest: String,
+        targetObjectCount: Int,
+        targetMembership: (String) -> IndexedValue<IncrementalObjectSpec>,
+        cancelled: () -> Boolean,
+        revalidateBinding: () -> Unit,
+    ): ForeignStageVerification {
+        require(checkpointIdentity.isNotBlank() && checkpointIdentity.length <= 4096)
+        validateTargetInspectionPaths(dataFiles, checkpointDirectory)
+        checkCancelled(cancelled)
+        revalidateBinding()
+        check(checkpointDirectory.mkdir()) { "prepared checkpoint directory must be fresh" }
+        var completed = false
+        try {
+            val identity = RESUME_MAGIC + MessageDigest.getInstance("SHA-256")
+                .digest(checkpointIdentity.toByteArray(Charsets.UTF_8))
+            val checkpoint = File(checkpointDirectory, RESUME_CHECKPOINT_NAME).toPath()
+            val result = FileChannel.open(checkpoint, StandardOpenOption.CREATE_NEW,
+                StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS).use { channel ->
+                writeSequential(channel, ByteBuffer.wrap(identity))
+                val verified = inspectForeignStage(
+                    dataFiles, File(checkpointDirectory, "scan"), targetCatalogDigest,
+                    targetObjectCount, targetMembership, cancelled, revalidateBinding,
+                ) { spec, archive, offset ->
+                    writeSequential(channel, ByteBuffer.wrap(encodeResumeObject(spec, archive, offset)))
+                }
+                // Frames remain provisional until ALL records/EOF have passed.
+                // Persist authenticated data before declaring any checkpoint durable.
+                val pathHash = MessageDigest.getInstance("MD5")
+                    .digest(dataFiles.absolutePath.toByteArray(Charsets.UTF_8))
+                val snapshots = verified.segments.map { segment ->
+                    SegmentSnapshot(segment.archiveId, File(dataFiles, segment.name), segment.fileKey,
+                        segment.size, segment.modifiedTime, segmentHeader(segment.archiveId, pathHash))
+                }
+                snapshots.forEach { segment ->
+                    checkCancelled(cancelled)
+                    revalidateBinding()
+                    checkForeignSegmentSnapshot(segment)
+                    forceFile(segment.file)
+                    checkForeignSegmentSnapshot(segment)
+                }
+                checkForeignStageNames(dataFiles.toPath(), snapshots)
+                revalidateBinding()
+                checkCancelled(cancelled)
+                channel.force(true)
+                verified
+            }
+            FileChannel.open(File(checkpointDirectory, RESUME_OWNER_NAME).toPath(),
+                StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS).use {
+                writeSequential(it, ByteBuffer.wrap(identity))
+                it.force(true)
+            }
+            forceDirectory(checkpointDirectory.toPath())
+            revalidateBinding()
+            checkCancelled(cancelled)
+            completed = true
+            return result
+        } finally {
+            if (!completed) deleteOwnedScratch(checkpointDirectory)
+        }
+    }
+
     /** One no-follow snapshot of an admitted physical segment in its original route. */
     internal data class ForeignSegmentBinding(
         val archiveId: Int,
@@ -2891,16 +2964,7 @@ object ForeverCasc {
         }
         val frames = ByteArray(Math.multiplyExact(commits.size, RESUME_FRAME_SIZE))
         commits.forEachIndexed { index, commit ->
-            val frame = ByteArray(RESUME_FRAME_SIZE)
-            val buffer = ByteBuffer.wrap(frame).order(ByteOrder.BIG_ENDIAN)
-            frame[0] = RESUME_OBJECT_FRAME.toByte()
-            commit.spec.ekey.hexBytes().copyInto(frame, 8)
-            commit.spec.contentKey.hexBytes().copyInto(frame, 24)
-            buffer.putLong(40, commit.spec.encodedSize)
-            buffer.putLong(48, commit.spec.decodedSize)
-            buffer.putInt(56, commit.archiveId)
-            buffer.putLong(60, commit.offset)
-            putResumeCrc(frame)
+            val frame = encodeResumeObject(commit.spec, commit.archiveId, commit.offset)
             frame.copyInto(frames, index * RESUME_FRAME_SIZE)
         }
         FileChannel.open(
@@ -2913,6 +2977,20 @@ object ForeverCasc {
             channel.force(true)
         }
         forceDirectory(requireNotNull(checkpoint.file.parentFile).toPath())
+    }
+
+    private fun encodeResumeObject(spec: IncrementalObjectSpec, archiveId: Int, offset: Long): ByteArray {
+        val frame = ByteArray(RESUME_FRAME_SIZE)
+        val buffer = ByteBuffer.wrap(frame).order(ByteOrder.BIG_ENDIAN)
+        frame[0] = RESUME_OBJECT_FRAME.toByte()
+        spec.ekey.hexBytes().copyInto(frame, 8)
+        spec.contentKey.hexBytes().copyInto(frame, 24)
+        buffer.putLong(40, spec.encodedSize)
+        buffer.putLong(48, spec.decodedSize)
+        buffer.putInt(56, archiveId)
+        buffer.putLong(60, offset)
+        putResumeCrc(frame)
+        return frame
     }
 
     private fun appendResumeFinalizing(checkpoint: ResumableCheckpoint) {

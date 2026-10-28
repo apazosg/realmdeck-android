@@ -964,6 +964,49 @@ class ForeverCascTest {
         rejected("cancellation", { _, _ -> }, cancel = true)
     }
 
+    @Test
+    fun foreignCheckpointPreparationAuthenticatesAndResumesWithoutFetchingOrChangingSegments() {
+        val root = tempDir()
+        try {
+            val (stage, specs) = foreignStageFixture(root)
+            val before = directFileHashes(stage)
+            val membership = specs.mapIndexed { i, spec -> spec.ekey to IndexedValue(i, spec) }.toMap()
+            val prepared = File(root, "private/prepared")
+            val result = ForeverCasc.prepareForeignStageCheckpoint(stage, prepared, "new-generation",
+                "ab".repeat(32), specs.size, { membership.getValue(it) }, { false }, {})
+            assertEquals(specs.size.toLong(), result.objectCount)
+            assertEquals(before, directFileHashes(stage))
+            ForeverCasc.withResumableCheckpointObjects(stage, prepared, "new-generation", { false }) {
+                assertEquals(specs, it.toList())
+            }
+            ForeverCasc.writeTargetIncrementalResumable(null, stage, prepared, specs.asSequence(),
+                { error("authenticated retained objects must not be fetched") }, { false }, "new-generation")
+            before.forEach { (name, hash) -> assertEquals(hash, directFileHashes(stage)[name]) }
+        } finally {
+            delete(root)
+        }
+    }
+
+    @Test
+    fun cancelledForeignCheckpointPreparationDiscardsOnlyItsPrivateCandidate() {
+        val root = tempDir()
+        try {
+            val (stage, specs) = foreignStageFixture(root)
+            val before = directFileHashes(stage)
+            val membership = specs.mapIndexed { i, spec -> spec.ekey to IndexedValue(i, spec) }.toMap()
+            val prepared = File(root, "private/cancelled-prepared")
+            var cancel = false
+            org.junit.Assert.assertThrows(java.util.concurrent.CancellationException::class.java) {
+                ForeverCasc.prepareForeignStageCheckpoint(stage, prepared, "cancelled-generation",
+                    "ab".repeat(32), specs.size, { cancel = true; membership.getValue(it) }, { cancel }, {})
+            }
+            assertFalse(prepared.exists())
+            assertEquals(before, directFileHashes(stage))
+        } finally {
+            delete(root)
+        }
+    }
+
     private fun foreignStageFixture(root: File): Pair<File, List<ForeverCasc.IncrementalObjectSpec>> {
         val payloads = listOf(
             "foreign-stage-small".toByteArray(),

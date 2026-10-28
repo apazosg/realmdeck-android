@@ -203,6 +203,19 @@ consentimiento del plan real antes de adoptar o descargar.
 
 ## Open Issues
 
+- Preparación de checkpoint extranjero implementada localmente: escaneo completo
+  autenticado produce frames nuevos en un candidato privado fresco, sin copiar el
+  checkpoint anterior. Fuerza los segmentos antes del checkpoint/owner; no cambia
+  ruta, cuerpos CASC ni propiedad USB y no publica el workspace canónico. El caller
+  todavía debe mantener la lease real, plan consentido y transición C/P/S.
+  Tres checks focales PASS (JUnit 28-10 20:40:23): preparación seguida de Resume
+  sintético sin fetch ni cambio de segmentos, cancelación que retira solo el
+  candidato privado, y barrera durable de 16 objetos. Fuentes `6a7b27ed…b3be1e` /
+  test `8b232008…14e32` coinciden con las copias probadas; no se repitió Gradle tras
+  perder sus notificaciones. Evidencia externa: `usb-portability-local-20261028/
+  foreign-checkpoint-tests/`. Revisión del código suministrado sin hallazgo accionable,
+  condicional al contrato; sin inspección independiente del repositorio ni prueba
+  de adopción física. Integración global, cortes de transición y auditoría pendientes.
 - Integración local de verificación parcial: lease real, catálogo admitido y orden
   físico enlazan el scanner con el destino/marcador revalidados. Resultado y callbacks
   siguen provisionales; no se crea checkpoint/recibo ni se adopta el USB. El primer
