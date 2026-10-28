@@ -83,6 +83,15 @@ class ForeverClientUpdateService private constructor(
         val cdnConfigFile: File,
     )
 
+    /** Official metadata only, not an active admission or authority to adopt USB data. */
+    internal data class PortabilityCatalogCandidate(
+        val admission: ActiveCatalogAdmission,
+        val storageId: String,
+        val destinationPath: String,
+        val previousAdmissionDigest: String?,
+        val admissionDigest: String,
+    )
+
     constructor(context: Context) : this(
         context,
         null,
@@ -330,6 +339,91 @@ class ForeverClientUpdateService private constructor(
             lease.close()
         }
         return inspect()
+    }
+
+    /**
+     * Explicit metadata-consent path for a foreign partial client. Unlike ordinary
+     * preparation, this NEVER publishes active-admission.json or changes the client.
+     * Adoption must later bind this candidate and its old/new receipt digests to
+     * the durable intent, revalidate the source and obtain the actual plan consent.
+     */
+    internal fun preparePortabilityCatalog(
+        consent: MetadataConsent,
+        cancelled: () -> Boolean,
+        progress: (String, Long, Long) -> Unit,
+    ): PortabilityCatalogCandidate {
+        checkOpen()
+        require(consent.maximumNetworkBytes == MAX_METADATA_NETWORK_BYTES) {
+            "portability metadata requires the fixed transport budget"
+        }
+        checkCancelled(cancelled)
+        val published = publishedBuildFetcher(cancelled)
+        checkCancelled(cancelled)
+        require(sameFingerprint(consent.fingerprint, published.fingerprint)) {
+            "published identity changed before portability metadata preparation"
+        }
+        require(published.metadataSha256.matches(HEX64))
+        // Validate existing admission before resolving anything; malformed state
+        // must not silently fall back to the APK or a newer pointer.
+        val frozen = activeAdmission()
+        val receipt = File(dynamicCatalogRoot(), ACTIVE_RECEIPT_NAME)
+        val previousBytes = if (Files.exists(receipt.toPath(), LinkOption.NOFOLLOW_LINKS)) {
+            readSmallRegularFile(receipt, MAX_ACTIVE_RECEIPT_BYTES)
+                ?: throw IllegalStateException("existing active admission is unreadable")
+        } else null
+        val observed = previousBytes?.let { parseActiveCatalogReceipt(it, dynamicCatalogRoot()) }
+        require((frozen == null && observed == null) ||
+            (frozen != null && observed != null &&
+                encodeActiveCatalogReceipt(frozen).contentEquals(encodeActiveCatalogReceipt(observed)))) {
+            "active admission changed before portability metadata preparation"
+        }
+        return withStorageIo(cancelled) { target ->
+            val engine = updater(catalog(), includeConfigAssets = false)
+            val destination = recoveryDestination(target)
+            require(engine.discoverPortabilitySource(destination) ==
+                ForeverClientUpdater.PortabilitySourceKind.PARTIAL_CANDIDATE) {
+                "explicit portability metadata requires one partial client candidate"
+            }
+            val operation = runtimeGate.operations.acquireUpdate(
+                storage.operationStorageId(target),
+                hasPendingTransaction = { engine.resumeGuardState(destination) != ForeverClientUpdater.ResumeGuardState.IDLE },
+            )
+            try {
+                storage.revalidateForUpdate(target)
+                val root = dynamicCatalogRoot()
+                ensurePrivateDirectory(root)
+                require(ForeverClientUpdateCatalog.availableBytes(root.toPath()) >= MIN_METADATA_WORKSPACE_BYTES) {
+                    "insufficient private storage for portability metadata"
+                }
+                val result = resolverFactory(root).resolve(
+                    published = published.fingerprint,
+                    serverVersionConfirmed = consent.serverVersionConfirmed,
+                    cancelled = cancelled,
+                    officialVersionsSha256 = published.metadataSha256,
+                    progress = progress,
+                )
+                checkCancelled(cancelled)
+                val candidate = validateResolverResult(result, root, published, cancelled)
+                storage.revalidateForUpdate(target)
+                // A concurrent/changed active receipt is not ours to replace.
+                val currentBytes = if (Files.exists(receipt.toPath(), LinkOption.NOFOLLOW_LINKS)) {
+                    readSmallRegularFile(receipt, MAX_ACTIVE_RECEIPT_BYTES)
+                        ?: throw IllegalStateException("active admission became unreadable")
+                } else null
+                require((previousBytes == null && currentBytes == null) ||
+                    (previousBytes != null && currentBytes != null && previousBytes.contentEquals(currentBytes))) {
+                    "active catalog changed during portability metadata preparation"
+                }
+                checkCancelled(cancelled)
+                PortabilityCatalogCandidate(
+                    candidate, storage.operationStorageId(target),
+                    target.root.toPath().toAbsolutePath().normalize().toString(),
+                    previousBytes?.let { sha256(it) }, sha256(encodeActiveCatalogReceipt(candidate)),
+                )
+            } finally {
+                operation.close()
+            }
+        }
     }
 
     /** Read-only planning; private scratch may be used by the engine, the selected client is not changed. */

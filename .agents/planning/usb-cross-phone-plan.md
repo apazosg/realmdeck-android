@@ -203,6 +203,13 @@ consentimiento del plan real antes de adoptar o descargar.
 
 ## Open Issues
 
+- Preparación explícita de catálogo candidato añadida al servicio: conserva la
+  guarda ordinaria de catálogo activo ante staging extranjero, resuelve únicamente
+  metadatos oficiales consentidos y devuelve sus bindings sin publicar la admisión.
+  Dos checks focales de consentimiento pasan (JUnit 28-10 20:53:39, Gradle 4 min 4 s),
+  con fuentes idénticas a las probadas. Esto no verifica todavía la resolución
+  completa ni su publicación ligada al intent; revisión sensible e integración
+  con la adopción siguen pendientes. Sin dispositivo, USB ni nueva APK.
 - Preparación de checkpoint extranjero implementada localmente: escaneo completo
   autenticado produce frames nuevos en un candidato privado fresco, sin copiar el
   checkpoint anterior. Fuerza los segmentos antes del checkpoint/owner; no cambia

@@ -540,6 +540,38 @@ class ForeverClientUpdateServiceTest {
     }
 
     @Test
+    fun portabilityMetadataRejectsStaleConsentWithoutPublishingOrResolving() {
+        val app = RuntimeEnvironment.getApplication()
+        val target = ForeverClientTargetBuild.parse(admissionTarget(70_500, "a1".repeat(16), "b2".repeat(16)))
+        var queries = 0
+        var resolverCreated = false
+        ForeverClientUpdateService(
+            app, target,
+            { _ ->
+                queries++
+                ForeverClientUpdateCheck.PublishedBuild(
+                    target.fingerprint.copy(buildId = 70_700L), "ab".repeat(32),
+                )
+            },
+            { root -> resolverCreated = true; ForeverClientCatalogResolver(root) }, Unit,
+        ).use { service ->
+            assertThrows(IllegalArgumentException::class.java) {
+                service.preparePortabilityCatalog(
+                    ForeverClientUpdateService.MetadataConsent(target.fingerprint, 1, true), { false },
+                ) { _, _, _ -> }
+            }
+            assertEquals(0, queries)
+            assertThrows(IllegalArgumentException::class.java) {
+                service.preparePortabilityCatalog(
+                    ForeverClientUpdateService.MetadataConsent(target.fingerprint, 1L shl 30, true), { false },
+                ) { _, _, _ -> }
+            }
+            assertEquals(1, queries)
+            assertFalse(resolverCreated)
+        }
+    }
+
+    @Test
     fun dynamicPendingNativeEvidenceIsNotPresentedAsValidated() {
         Fixture().use { fixture ->
             val pending = syntheticAdmission(fixture.root, 70_901).target
