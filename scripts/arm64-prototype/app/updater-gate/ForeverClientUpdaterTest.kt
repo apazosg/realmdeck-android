@@ -42,6 +42,73 @@ class ForeverClientUpdaterTest {
         .joinToString("") { "%02x".format(it) }
 
     @Test
+    fun staleRollbackResetCannotRecreateAStageAfterTheClientWasPublished() {
+        val assets = configAssetsOrSkip()
+        Fixture(cascObjectCount = 4, contiguousRangeObjectCount = 3).use { fixture ->
+            val paths = fixture.makePaths()
+            val destination = fixture.destination(paths)
+            val updater = fixture.updater(paths, assets) { record, work, _, progress ->
+                File(work, "${record.ekey}.blte").also { it.writeBytes(fixture.rawFor(record)); progress(it.length()) }
+            }
+            val initial = updater.plan(destination)
+            assertThrows(java.util.concurrent.CancellationException::class.java) {
+                updater.execute(destination, initial, consentFor(initial), {
+                    workspaceRoot(paths)?.let { File(it, ".forever-casc-resume-checkpoint").length() > 40L } ?: false
+                })
+            }
+            val oldWorkspace = requireNotNull(workspaceRoot(paths))
+            val staleFiles = oldWorkspace.walkTopDown().filter { it.isFile }
+                .associate { it.relativeTo(oldWorkspace).path to it.readBytes() }
+            val resumed = updater.plan(destination)
+            updater.execute(destination, resumed, consentFor(resumed))
+            assertFalse(oldWorkspace.exists())
+            assertTrue(File(paths.client, ".build.info").isFile)
+            // Restore only this synthetic fixture's stale PRIVATE state, not a USB checkpoint.
+            staleFiles.forEach { (name, bytes) ->
+                File(oldWorkspace, name).also { it.parentFile!!.mkdirs(); it.writeBytes(bytes) }
+            }
+            val receiptFile = File(oldWorkspace, ".transaction-stage-receipt.json")
+            val receipt = JSONObject(receiptFile.readText())
+            val payload = JSONObject(receipt.getString("payload")).put("resetCasc", true).toString()
+            receiptFile.writeText(JSONObject().put("payload", payload).put("sha256", sha256(payload.toByteArray())).toString())
+            fun clientBytes() = paths.client.walkTopDown().filter { it.isFile }
+                .associate { it.relativeTo(paths.client).path to sha256(it.readBytes()) }
+            val published = clientBytes()
+            assertThrows(IllegalStateException::class.java) { updater.recover(destination) }
+            assertEquals("stale rollback state must not mutate the published client", published, clientBytes())
+            assertNoLiveFetchWorkers("stale rollback reset")
+        }
+    }
+
+    @Test
+    fun ownedRollbackResetBeforePublicationStillAllowsTheDownloadToFinish() {
+        val assets = configAssetsOrSkip()
+        Fixture(cascObjectCount = 4, contiguousRangeObjectCount = 3).use { fixture ->
+            val paths = fixture.makePaths()
+            val destination = fixture.destination(paths)
+            val updater = fixture.updater(paths, assets) { record, work, _, progress ->
+                File(work, "${record.ekey}.blte").also { it.writeBytes(fixture.rawFor(record)); progress(it.length()) }
+            }
+            val plan = updater.plan(destination)
+            assertThrows(java.util.concurrent.CancellationException::class.java) {
+                updater.execute(destination, plan, consentFor(plan), {
+                    workspaceRoot(paths)?.let { File(it, ".forever-casc-resume-checkpoint").length() > 40L } ?: false
+                })
+            }
+            val receiptFile = File(requireNotNull(workspaceRoot(paths)), ".transaction-stage-receipt.json")
+            val receipt = JSONObject(receiptFile.readText())
+            val payload = JSONObject(receipt.getString("payload")).put("resetCasc", true).toString()
+            receiptFile.writeText(JSONObject().put("payload", payload).put("sha256", sha256(payload.toByteArray())).toString())
+            updater.recover(destination)
+            assertFalse(JSONObject(JSONObject(receiptFile.readText()).getString("payload")).getBoolean("resetCasc"))
+            val resumed = updater.plan(destination)
+            updater.execute(destination, resumed, consentFor(resumed))
+            assertTrue(File(paths.client, ".build.info").isFile)
+            assertNoLiveFetchWorkers("owned rollback reset")
+        }
+    }
+
+    @Test
     fun portabilityTransitionRecoversDurableCutsWithFreshAuthenticatedCheckpoints() {
         val assets = configAssetsOrSkip()
         val cuts = listOf("intent-durable", "old-workspace-reserved", "new-marker-durable",

@@ -3870,6 +3870,13 @@ class ForeverClientUpdater(
         if (receipt.stageId != original.stageId || receipt.markerHash != original.markerHash) {
             throw IllegalStateException("rollback reset receipt no longer identifies the same transaction stage")
         }
+        if (receipt.sourceRevision == EMPTY_SOURCE_REVISION) {
+            val publishedData = File(destination.root, "Data/data").toPath()
+            rejectSymlinkPath(publishedData)
+            check(!Files.exists(publishedData, LinkOption.NOFOLLOW_LINKS)) {
+                "stale empty-source rollback reset cannot recreate a stage after client Data publication"
+            }
+        }
         if (!receipt.resetCasc) {
             receipt = receipt.copy(resetCasc = true)
             persistStageReceipt(destination, resumableWorkspacePath(destination), receipt)

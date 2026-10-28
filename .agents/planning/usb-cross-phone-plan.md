@@ -203,6 +203,20 @@ consentimiento del plan real antes de adoptar o descargar.
 
 ## Open Issues
 
+- Reset obsoleto tras publicación: reproducido que un recibo privado de fuente
+  vacía con `resetCasc` podía recrear su staging después de aparecer `Data/data`.
+  Se rechaza ahora antes de crear staging o resetear checkpoint, mediante checks
+  de ruta no-follow/existencia, solo en esa ruta de rollback; no se añade un
+  escaneo a Home o Resume ordinario. RED real: 1 fallo esperado; GREEN: 2 casos
+  sin fallos/errores/skips (2026-10-28T22:25:29), incluida recuperación propia antes
+  de publicación que todavía completa el cliente sintético. Evidencia externa:
+  `usb-portability-local-20261028/stale-reset-{red-retry,green}-tests/`.
+  Un intento previo sufrió SIGSEGV del compilador C1 de la JVM antes de JUnit:
+  no cuenta como prueba del producto; la repetición aislada excluye únicamente
+  ese método del JIT de Gradle en el host, sin cambiar el runtime Android.
+  Revisión limitada al snapshot suministrado, no a repositorio/USB/binarios antiguos;
+  no se declara resuelto todo TC-013 ni el caso de fuente previa no vacía.
+
 - Rendimiento preservado por petición explícita: no añadir escaneos completos al abrir,
   seleccionar almacenamiento o a cada Resume ordinario. La autenticación adicional se
   limita a la adopción explícita de datos ajenos. La integración debe evitar recorridos
