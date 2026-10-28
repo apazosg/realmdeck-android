@@ -9,13 +9,15 @@ date: 2026-10-28
 Goal: añadir a la app Android funcional de WoW Forever una gestión de addons
 sencilla e intuitiva: ver los instalados, desinstalar o desactivar y añadir otros
 buscando en CurseForge. El usuario aprobó continuar el 2026-10-28 y reutilizar
-nuestro proyecto Vercel existente para la integración. Esa aprobación del plan
-no sustituye las revisiones de US/UC/AC, FR/NFR y TC ni resuelve la autorización
-de CurseForge.
+nuestro proyecto Vercel existente para la integración. Posteriormente eligió
+expresamente la API oficial e indicó «voy a solicitarla ya. vete implementando».
+Esta instrucción autoriza implementar localmente el alcance presentado de US-010
+mientras solicita acceso; no resuelve la autorización externa ni autoriza desplegar.
 
-Solo se ha realizado inspección de fuentes y documentación pública. No se ha
-modificado la app, consultado la API autenticada, solicitado claves ni operado el
-dispositivo. El goal no estará completo por terminar este plan o la gestión local:
+La implementación local y sus pruebas sin credenciales están verificadas; la evidencia
+se conserva en [el estado operativo](../../docs/addon-management-status.md).
+No se ha consultado la API autenticada ni operado
+el dispositivo. El goal no estará completo por terminar este plan o la gestión local:
 la búsqueda e instalación desde CurseForge forman parte del resultado solicitado.
 
 ## Content
@@ -26,10 +28,10 @@ la búsqueda e instalación desde CurseForge forman parte del resultado solicita
   (Kotlin/Compose), no el proyecto diagnóstico `android/`.
 - El almacenamiento seleccionado y sus guardas viven en
   `overlay/ForeverFunctionalClientStorage.kt`; hay exclusión compartida con el
-  cliente/runtime y el actualizador. No se ha verificado todavía la ruta efectiva
-  de addons en un dispositivo ni cómo se publican carpetas multiparte.
-- Se ha creado [US-010](../specs/US-010.md) en draft con US/UC/AC, pendiente de
-  revisión del usuario antes de derivar FR/NFR y TC.
+  cliente/runtime y el actualizador. La publicación multifolder se ha probado en
+  host; la ruta efectiva y la carga de addons siguen sin comprobarse en dispositivo.
+- Se ha creado [US-010](../specs/US-010.md) y se registra la instrucción posterior
+  de implementación del alcance presentado, con derivación trazable FR/NFR/TC.
 - Aplican `SYSTEM.md` (draft), US-004 (UX, ready), US-007 (almacenamiento, dirty)
   y US-008 (actualizador/exclusión, dirty). No se reinterpretarán sus estados como
   aprobación nueva ni se modificarán sus contratos sin decisión explícita.
@@ -37,7 +39,7 @@ la búsqueda e instalación desde CurseForge forman parte del resultado solicita
   demuestra compatibilidad. Debe verificarse el etiquetado Forever y la versión
   del archivo, sin prometer funcionamiento en el juego solo por sus metadatos.
 
-### Alcance del plan aprobado; concreción UC/AC pendiente
+### Alcance autorizado para implementación local
 
 1. Entrada visible **Addons** desde la pantalla principal, manteniendo el estilo
    oscuro/dorado existente. Dos vistas: **Instalados** y **Buscar**; sin controles
@@ -107,8 +109,9 @@ Fuentes oficiales consultadas el 2026-10-28:
 No incrustar secretos en APK/repositorio, hacer scraping ni usar claves ajenas.
 No contratar servicios ni aceptar términos en nombre del usuario. Confirmar si el
 proyecto dispone de acceso autorizado y si CurseForge permite este modelo de
-integración; reutilizar Vercel no elimina esa comprobación. Antes de implementar
-el transporte, verificar streaming, límites de tamaño/duración y consumo de
+integración; reutilizar Vercel no elimina esa comprobación. El transporte se
+implementa localmente con dobles según la orden posterior del usuario; antes de
+habilitarlo, verificar streaming, límites de tamaño/duración y consumo de
 transferencia del proyecto existente ([límites](https://vercel.com/docs/functions/limitations),
 [streaming](https://vercel.com/docs/functions/streaming-functions)). La documentación
 general no acredita la configuración o cuota restante de nuestro despliegue.
@@ -145,33 +148,45 @@ launcher. Reactivar sí forma parte de una desactivación reversible.
 - [x] 1. Crear el goal y revisar specs, puntos de integración y fuentes oficiales.
 - [x] 2. Obtener aprobación del plan y decidir arquitectura: backend Vercel
   existente con rutas de addons separadas, confirmado por el usuario el 2026-10-28.
-- [ ] 3. Crear US-010 en draft con US/UC/AC; obtener aprobación antes de derivar
-  FR/NFR. Borrador creado; después aprobar FR/NFR y TC conforme al flujo spec-as-source.
+- [x] 3. Crear US-010 con US/UC/AC y registrar autorización posterior de implementar
+  ese alcance; derivar FR/NFR/TC sin introducir nuevas decisiones de producto.
 - [ ] 4. Confirmar autorización y arquitectura permitida de CurseForge, incluidos
-  secretos, descargas y persistencia mínima; no implementar contra supuestos.
-- [ ] 5. Implementar inventario y acciones locales en el launcher funcional,
+  secretos, descargas y persistencia mínima; implementar con dobles sin afirmar
+  aceptación externa mientras el usuario solicita acceso.
+- [x] 5. Implementar inventario y acciones locales en el launcher funcional,
   reutilizando las guardas existentes y cambios mínimos de reconstrucción.
-- [ ] 6. Implementar búsqueda e instalación CurseForge admitidas, compatibilidad,
+- [x] 6. Implementar búsqueda e instalación CurseForge admitidas, compatibilidad,
   errores y extracción/publicación segura, con rutas independientes en
   `services/diagnostics/`; pruebas solo del comportamiento tocado y no regresión
-  del contrato de diagnósticos.
+  del contrato de diagnósticos. Código y pruebas locales; la aceptación real sigue
+  bloqueada en 4 y 7, no sustituida por dobles.
 - [ ] 7. Revisar independientemente archivos no confiables, secretos y concurrencia;
   ejecutar verificaciones focales, build/auditoría y aceptación física posible.
+  Implementación revisada y build/auditoría locales correctos; 17 pruebas Android,
+  54 backend y 17 del auditor. Aceptación física/externa pendiente: no hay dispositivo
+  conectado ni acceso autorizado configurado. Un fallo host preexistente se documenta
+  en [la evidencia operativa](../../docs/addon-management-status.md).
 - [ ] 8. Actualizar trazabilidad/evidencias, hacer commits atómicos, auditar el
   resultado completo del goal y archivar este plan como done solo al terminar.
+  Código backend en `4005100` y Android en `c26ca47`; documentación/evidencias
+  separadas del código. No archivar como terminado mientras la aceptación externa
+  y física siga bloqueada.
 
 ## Open Issues
 
-1. **Bloqueante para derivar FR/NFR:** revisar y aprobar US/UC/AC de US-010.
-   El plan y la arquitectura ya están aprobados; la historia concreta propone
-   rechazar sobrescrituras y dependencias ausentes, y no agrupar instalaciones
-   manuales por conjeturas. Después se mantienen las puertas FR/NFR y TC.
+1. **Resuelto para implementación local:** el usuario eligió la API oficial y ordenó
+   implementar el alcance presentado. Se conservan no sobrescritura, bloqueo de
+   dependencias ausentes y agrupación manual solo comprobada. No se considera esa
+   orden prueba de acceso externo ni autorización de despliegue.
 2. **Bloqueante para integración real:** ¿dispone el proyecto de clave/acuerdo
    autorizado de CurseForge? ¿Permite servir búsquedas y descargas mediante este
    backend sin exponer la clave? No enviar claves por chat ni incorporarlas a este
-   documento. Falta verificar transporte y cuotas Vercel sin afectar diagnósticos.
-3. **Resolver con inspección/prueba antes de implementar:** ruta real de addons,
-   clasificación Blizzard/terceros, mecanismo reversible de desactivación,
-   agrupación de paquetes, selección Forever/versiones y dependencias obligatorias.
-   Si implican decisiones de producto, presentarlas para aprobación en lugar de
-   inventar comportamientos o ampliar el alcance.
+   documento. Falta verificar transporte y cuotas Vercel sin afectar diagnósticos;
+   tampoco se ha autorizado un despliegue.
+3. **Implementado localmente, pendiente de contraste físico/externo:** convención
+   `Interface/AddOns`, exclusión `Blizzard_`, desactivación fuera de la raíz cargable,
+   manifiesto de paquetes propios y dependencias con identidad comprobada. Véanse
+   [evidencias y límites](../../docs/addon-management-status.md). El esquema Forever
+   y los límites del transporte real no se consideran demostrados por los dobles.
+   Si el contraste implica cambios de producto, presentarlos en lugar de inventar
+   comportamientos o ampliar el alcance.

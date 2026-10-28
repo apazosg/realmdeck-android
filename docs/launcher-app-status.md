@@ -1,5 +1,19 @@
 # Launcher ARM64 — estado de producto
 
+## Desarrollo local —2026-10-28: C161, gestor de addons
+
+Implementados Home → Addons, Instalados/Buscar, desactivación reversible,
+desinstalación confirmada y cliente de la API oficial mediante rutas Vercel aisladas.
+No se ha desplegado el backend ni instalado este candidato. Faltan acceso autorizado
+CurseForge, contraste real de catálogo/CDN y prueba física; el dispositivo no estaba
+conectado. No es una entrega aceptada ni evidencia de carga de addons en el juego.
+
+Build Android y 17 pruebas focales correctos; auditoría
+`PASS_SOURCE_BUILD_AND_PAYLOAD_AUDIT`. Los 54 tests backend pasan. Un fallo estático
+host preexistente y los límites de estas comprobaciones están registrados en
+[la evidencia del gestor de addons](addon-management-status.md), junto con el recibo
+y hash del APK. El estado instalado anterior no se modifica por este build local.
+
 ## Estado consolidado —2026-10-23
 
 ### C141 — primer Login positivo comunicado; tiempos pendientes
