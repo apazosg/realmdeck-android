@@ -73,10 +73,32 @@ class ForeverClientOperationLease(
                 }
                 Status.GUEST_RESERVED, Status.GUEST_STARTED ->
                     throw IllegalStateException("recover the unfinished guest operation before updating")
+                Status.ADDONS -> throw IllegalStateException("recover the unfinished addon operation before updating")
             }
             val token = UUID.randomUUID().toString()
             writeRecord(Record(Status.UPDATING, storageId, token))
             return Lease(this, held, storageId, token, hasPendingTransaction)
+        } catch (failure: Throwable) {
+            held.close()
+            throw failure
+        }
+    }
+
+    /** Addons have their own durable owner; updater recovery must never clear their journal. */
+    fun acquireAddons(storageId: String, hasPendingTransaction: () -> Boolean): Lease {
+        validateStorageId(storageId)
+        val held = acquireFileLock(create = true)
+            ?: throw IllegalStateException("another client operation currently holds the global gate")
+        try {
+            val previous = readRecord()
+            requireQuiescent("addon admission")
+            require(previous == null || previous.status == Status.IDLE ||
+                previous.status == Status.ADDONS && previous.storageId == storageId) {
+                "recover the previous client operation before managing addons"
+            }
+            val token = UUID.randomUUID().toString()
+            writeRecord(Record(Status.ADDONS, storageId, token))
+            return Lease(this, held, storageId, token, hasPendingTransaction, addonOperation = true)
         } catch (failure: Throwable) {
             held.close()
             throw failure
@@ -206,9 +228,10 @@ class ForeverClientOperationLease(
         }
     }
 
-    private fun closeUpdate(storageId: String, token: String, hasPendingTransaction: () -> Boolean) {
+    private fun closeUpdate(storageId: String, token: String, hasPendingTransaction: () -> Boolean, addonOperation: Boolean) {
         val record = readRecord()
-        require(record?.status == Status.UPDATING && record.storageId == storageId && record.token == token) {
+        val expected = if (addonOperation) Status.ADDONS else Status.UPDATING
+        require(record?.status == expected && record.storageId == storageId && record.token == token) {
             "updater lease no longer owns the durable operation record; it was retained"
         }
         if (hasPendingTransaction()) return
@@ -263,6 +286,7 @@ class ForeverClientOperationLease(
             Status.GUEST_RESERVED -> "guest_start_reserved"
             Status.GUEST_STARTED -> "guest_completion_unconfirmed"
             Status.UPDATING -> "update_recovery_required"
+            Status.ADDONS -> "addons_recovery_required"
         }
     }
 
@@ -441,12 +465,12 @@ class ForeverClientOperationLease(
         }
         when (status) {
             Status.IDLE -> require(storageId.isEmpty() && token == null)
-            Status.GUEST_RESERVED, Status.GUEST_STARTED, Status.UPDATING -> {
+            Status.GUEST_RESERVED, Status.GUEST_STARTED, Status.UPDATING, Status.ADDONS -> {
                 validateStorageId(storageId)
                 require(token != null && isUuid(token))
             }
         }
-        if (status == Status.GUEST_RESERVED || status == Status.UPDATING) require(observation.kind == "QUIESCENT")
+        if (status == Status.GUEST_RESERVED || status == Status.UPDATING || status == Status.ADDONS) require(observation.kind == "QUIESCENT")
         return Record(status, storageId, token, observation)
     }
 
@@ -556,6 +580,7 @@ class ForeverClientOperationLease(
         private val storageId: String,
         private val token: String,
         private val hasPendingTransaction: () -> Boolean,
+        private val addonOperation: Boolean = false,
     ) : AutoCloseable {
         private val closed = AtomicBoolean(false)
 
@@ -563,7 +588,7 @@ class ForeverClientOperationLease(
             if (!closed.compareAndSet(false, true)) return
             var failure: Throwable? = null
             try {
-                owner.closeUpdate(storageId, token, hasPendingTransaction)
+                owner.closeUpdate(storageId, token, hasPendingTransaction, addonOperation)
             } catch (caught: Throwable) {
                 failure = caught
             } finally {
@@ -630,7 +655,7 @@ class ForeverClientOperationLease(
         }
     }
 
-    private enum class Status { IDLE, GUEST_RESERVED, GUEST_STARTED, UPDATING }
+    private enum class Status { IDLE, GUEST_RESERVED, GUEST_STARTED, UPDATING, ADDONS }
 
     companion object {
         private const val SCHEMA = 1

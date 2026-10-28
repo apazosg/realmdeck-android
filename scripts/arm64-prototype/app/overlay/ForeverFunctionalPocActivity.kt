@@ -661,6 +661,7 @@ private fun ForeverFunctionalPocScreen(
     val scope = rememberCoroutineScope()
     var settings by remember { mutableStateOf(ForeverFunctionalServerProfiles.load(context)) }
     val storageService = remember(context) { ForeverFunctionalClientStorage.service(context) }
+    val addonsService = remember(context) { ForeverAddonsService(context) }
     var storageSnapshot by remember { mutableStateOf<ForeverFunctionalClientStorage.Snapshot?>(null) }
     var showStorageSettings by remember { mutableStateOf(false) }
     var storagePendingId by remember { mutableStateOf<String?>(null) }
@@ -710,6 +711,8 @@ private fun ForeverFunctionalPocScreen(
     var busy by remember { mutableStateOf(false) }
     var consent by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
+    var showAddons by remember { mutableStateOf(false) }
+    var addonsBusy by remember { mutableStateOf(false) }
     var showClientManagement by remember { mutableStateOf(false) }
     var managerReturnToSettings by remember { mutableStateOf(true) }
     val inlineClientManagement = showClientManagement && !managerReturnToSettings
@@ -725,8 +728,8 @@ private fun ForeverFunctionalPocScreen(
     var status by remember { mutableStateOf("Comprobando almacenamiento…") }
     var error by remember { mutableStateOf<String?>(null) }
     var backAction by remember { mutableStateOf<() -> Unit>({}) }
-    val controlsLocked = busy || prepared != null || running || launchRequested || pendingDisplayIo || storageBusy || graphicsResetBusy
-    val sessionOrIoLocked = busy || running || launchRequested || pendingDisplayIo || storageBusy || graphicsResetBusy
+    val controlsLocked = busy || prepared != null || running || launchRequested || pendingDisplayIo || storageBusy || graphicsResetBusy || showAddons || addonsBusy
+    val sessionOrIoLocked = busy || running || launchRequested || pendingDisplayIo || storageBusy || graphicsResetBusy || showAddons || addonsBusy
     val homeState = ForeverFunctionalLauncherUx.deriveHomeState(
         checking = !clientChecked,
         storageKnown = storageKnown,
@@ -2211,6 +2214,15 @@ private fun ForeverFunctionalPocScreen(
             }
             TextButton(
                 colors = ButtonDefaults.textButtonColors(contentColor = ForeverGold),
+                enabled = !sessionOrIoLocked,
+                onClick = { showAddons = true },
+                modifier = Modifier.heightIn(min = 48.dp),
+            ) {
+                Text("Addons")
+            }
+            TextButton(
+                colors = ButtonDefaults.textButtonColors(contentColor = ForeverGold),
+                enabled = !sessionOrIoLocked,
                 onClick = { showRemoteDiagnostics = true },
                 modifier = Modifier.heightIn(min = 48.dp),
             ) {
@@ -2391,6 +2403,14 @@ private fun ForeverFunctionalPocScreen(
                     modifier = Modifier.heightIn(min = 48.dp),
                 ) { Text("Cerrar") }
             },
+        )
+    }
+
+    if (showAddons) {
+        ForeverAddonsScreen(
+            service = addonsService,
+            onDismiss = { if (!addonsBusy) showAddons = false },
+            onBusyChanged = { addonsBusy = it },
         )
     }
 

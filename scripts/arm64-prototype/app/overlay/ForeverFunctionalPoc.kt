@@ -181,6 +181,9 @@ object ForeverFunctionalPoc {
         val storage = ForeverFunctionalClientStorage.service(context)
         val ioLease = storage.acquireIoLease() ?: throw IllegalStateException("storage_busy")
         try {
+            require(ForeverClientRuntimeGate.forContext(context).blockingReason() != "addons_recovery_required") {
+                "recover the unfinished addon operation before preparing the client"
+            }
             val prepareStart = System.nanoTime()
             val resolved = resolveClientForLaunch(context, storage)
             val resolveMs = elapsedMs(prepareStart)

@@ -113,6 +113,17 @@ def test_descriptor_delta_accepts_ui_but_rejects_unrelated_classes():
         module.check_descriptor_delta({'Lapp/gamenative/ForeverRemoteDiagnosticsUploadUnexpected;'}, set())
 
 
+def test_addon_descriptors_are_bounded_to_reviewed_source_roots():
+    for name in ('ForeverAddons', 'ForeverAddonsApi', 'ForeverAddonsService',
+                 'ForeverAddonsScreenKt', 'ComposableSingletons$ForeverAddonsScreenKt'):
+        root = f'Lapp/gamenative/{name}'
+        module.check_descriptor_delta({root + ';', root + '$generated$1;'}, set())
+        with pytest.raises(ValueError, match='unapproved DEX descriptor'):
+            module.check_descriptor_delta({root + 'Unexpected;'}, set())
+    with pytest.raises(ValueError, match='unapproved DEX descriptor'):
+        module.check_descriptor_delta({'Lapp/gamenative/ForeverAddonsTest;'}, set())
+
+
 def test_pasted_source_descriptors_are_admitted_by_exact_name_only():
     for name in ('ForeverClientSourceOrigin', 'PastedClientReport',
                  'PastedClientVerdict', 'FreshStagedDescriptor'):

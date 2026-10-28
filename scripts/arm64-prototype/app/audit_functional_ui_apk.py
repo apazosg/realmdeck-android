@@ -243,10 +243,19 @@ def check_descriptor_delta(added: set[str], removed: set[str]) -> None:
     def diagnostics_descriptor(name: str) -> bool:
         return any(name == root + ';' or name.startswith(root + '$')
                    for root in diagnostics_roots)
+    # C161: only the reviewed addon source roots and their compiler-generated
+    # nested classes. Neighboring ForeverAddons* classes remain unapproved.
+    addon_roots = {
+        f'Lapp/gamenative/{name}' for name in (
+            'ForeverAddons', 'ForeverAddonsApi', 'ForeverAddonsService',
+            'ForeverAddonsScreenKt', 'ComposableSingletons$ForeverAddonsScreenKt',
+        )
+    }
     unexpected = sorted(
         name for name in added | removed
         if name not in exact_descriptors and not name.startswith(prefixes)
         and not name.startswith(poc_nested_prefix) and not diagnostics_descriptor(name)
+        and not any(name == root + ';' or name.startswith(root + '$') for root in addon_roots)
     )
     require(not unexpected, 'unapproved DEX descriptor delta: ' + ', '.join(unexpected))
 

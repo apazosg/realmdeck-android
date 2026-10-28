@@ -17,6 +17,39 @@ import java.util.concurrent.atomic.AtomicReference
 
 class ForeverClientOperationLeaseTest {
     @Test
+    fun addonRecoveryCannotBeClearedByUpdaterOrByAnotherStorage() {
+        Fixture().use { fixture ->
+            val gate = fixture.gate()
+            gate.acquireAddons("wine-runtime-a") { true }.close()
+            assertEquals("addons_recovery_required", gate.blockingReason())
+            assertTrue(runCatching { gate.acquireUpdate("wine-runtime-a") { false } }.isFailure)
+            assertTrue(runCatching { gate.recoverUpdate("wine-runtime-a") { false } }.isFailure)
+            assertTrue(runCatching { gate.beginGuest("wine-runtime-a") }.isFailure)
+            assertTrue(runCatching { gate.acquireAddons("wine-runtime-b") { false } }.isFailure)
+            gate.acquireAddons("wine-runtime-a") { false }.close()
+            assertNull(gate.blockingReason())
+        }
+    }
+
+    @Test
+    fun addonsRejectUpdaterOwnerAndUnknownRuntimeAndHoldTheSharedLock() {
+        Fixture().use { fixture ->
+            val gate = fixture.gate()
+            gate.acquireUpdate("wine-runtime-a") { true }.close()
+            assertTrue(runCatching { gate.acquireAddons("wine-runtime-a") { false } }.isFailure)
+            gate.recoverUpdate("wine-runtime-a") { false }
+            fixture.observation = RuntimeObservation.Unknown("proc_unreadable")
+            assertTrue(runCatching { gate.acquireAddons("wine-runtime-a") { false } }.isFailure)
+            fixture.observation = RuntimeObservation.Quiescent
+            gate.acquireAddons("wine-runtime-a") { false }.use {
+                assertTrue(runCatching { fixture.gate().beginGuest("wine-runtime-a") }.isFailure)
+                assertTrue(runCatching { fixture.gate().acquireUpdate("wine-runtime-a") { false } }.isFailure)
+            }
+            assertNull(gate.blockingReason())
+        }
+    }
+
+    @Test
     fun preReservationCleanupRequiresQuiescenceAndRecoveredOwner() {
         Fixture().use { fixture ->
             val gate = fixture.gate()
