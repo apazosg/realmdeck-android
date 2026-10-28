@@ -1,6 +1,6 @@
 ---
 id: addon-management-2026-10-28
-state: draft
+state: in-progress
 date: 2026-10-28
 ---
 
@@ -8,8 +8,10 @@ date: 2026-10-28
 
 Goal: añadir a la app Android funcional de WoW Forever una gestión de addons
 sencilla e intuitiva: ver los instalados, desinstalar o desactivar y añadir otros
-buscando en CurseForge. Este documento propone el alcance; no aprueba cambios de
-comportamiento ni da por resuelta la autorización de CurseForge.
+buscando en CurseForge. El usuario aprobó continuar el 2026-10-28 y reutilizar
+nuestro proyecto Vercel existente para la integración. Esa aprobación del plan
+no sustituye las revisiones de US/UC/AC, FR/NFR y TC ni resuelve la autorización
+de CurseForge.
 
 Solo se ha realizado inspección de fuentes y documentación pública. No se ha
 modificado la app, consultado la API autenticada, solicitado claves ni operado el
@@ -26,8 +28,8 @@ la búsqueda e instalación desde CurseForge forman parte del resultado solicita
   `overlay/ForeverFunctionalClientStorage.kt`; hay exclusión compartida con el
   cliente/runtime y el actualizador. No se ha verificado todavía la ruta efectiva
   de addons en un dispositivo ni cómo se publican carpetas multiparte.
-- No existe una historia dedicada a addons en `.agents/specs/US-001.md` a
-  `US-009.md`. Se propone `US-010.md`, pendiente de comprobar disponibilidad al crearla.
+- Se ha creado [US-010](../specs/US-010.md) en draft con US/UC/AC, pendiente de
+  revisión del usuario antes de derivar FR/NFR y TC.
 - Aplican `SYSTEM.md` (draft), US-004 (UX, ready), US-007 (almacenamiento, dirty)
   y US-008 (actualizador/exclusión, dirty). No se reinterpretarán sus estados como
   aprobación nueva ni se modificarán sus contratos sin decisión explícita.
@@ -35,7 +37,7 @@ la búsqueda e instalación desde CurseForge forman parte del resultado solicita
   demuestra compatibilidad. Debe verificarse el etiquetado Forever y la versión
   del archivo, sin prometer funcionamiento en el juego solo por sus metadatos.
 
-### Propuesta visual y funcional, pendiente de aprobación
+### Alcance del plan aprobado; concreción UC/AC pendiente
 
 1. Entrada visible **Addons** desde la pantalla principal, manteniendo el estilo
    oscuro/dorado existente. Dos vistas: **Instalados** y **Buscar**; sin controles
@@ -62,7 +64,27 @@ la búsqueda e instalación desde CurseForge forman parte del resultado solicita
    largas no bloquean la UI. Etiquetas accesibles y controles táctiles conforme
    a los patrones existentes.
 
-### Integración externa: hechos y decisión pendiente
+### Integración externa: arquitectura aprobada y límites pendientes
+
+El usuario propuso usar un endpoint en nuestro backend Vercel y confirmó
+«perfecto adelante» tras identificar el proyecto ya existente:
+
+- Reutilizar `services/diagnostics/`, Vercel Functions TypeScript sin Next.js,
+  documentado en [diagnostics-api.md](../../docs/diagnostics-api.md).
+- Flujo **app → rutas propias de addons → API/CDN oficial de CurseForge**.
+  La clave queda exclusivamente en configuración secreta del servidor; nunca
+  en el APK, parámetros de URL, respuestas, redirecciones al cliente o logs.
+- Separar rutas y configuración de addons de las de informes. No reutilizar
+  `DIAGNOSTICS_READ_TOKEN`, capabilities de informes ni `CRON_SECRET` para addons;
+  no cambiar permisos, datos, retención ni rutas de diagnósticos.
+- No crear otro backend, una caché de catálogo ni almacenamiento de ZIP en Blob
+  como requisito implícito. La descarga autenticada necesita un transporte
+  permitido por CurseForge y verificado con los límites del proyecto Vercel.
+- No ofrecer un proxy de URLs arbitrarias: admitir solo proyectos/archivos
+  CurseForge identificados y revalidados por el servidor.
+
+La aprobación de arquitectura no autoriza desplegar, ampliar el plan de pago,
+aceptar términos ni eludir restricciones del proveedor.
 
 Fuentes oficiales consultadas el 2026-10-28:
 
@@ -83,9 +105,13 @@ Fuentes oficiales consultadas el 2026-10-28:
   Son evidencia de catálogo, no pruebas de compatibilidad en nuestro dispositivo.
 
 No incrustar secretos en APK/repositorio, hacer scraping ni usar claves ajenas.
-No añadir backend, contratar servicios ni aceptar términos en nombre del usuario.
-Primero confirmar si el proyecto dispone de acceso autorizado y qué arquitectura
-permite CurseForge; si requiere infraestructura nueva, someterla a aprobación.
+No contratar servicios ni aceptar términos en nombre del usuario. Confirmar si el
+proyecto dispone de acceso autorizado y si CurseForge permite este modelo de
+integración; reutilizar Vercel no elimina esa comprobación. Antes de implementar
+el transporte, verificar streaming, límites de tamaño/duración y consumo de
+transferencia del proyecto existente ([límites](https://vercel.com/docs/functions/limitations),
+[streaming](https://vercel.com/docs/functions/streaming-functions)). La documentación
+general no acredita la configuración o cuota restante de nuestro despliegue.
 La ausencia de clave no justifica cerrar el goal como completo con un buscador
 simulado o un enlace externo en lugar de la integración solicitada.
 
@@ -117,15 +143,18 @@ launcher. Reactivar sí forma parte de una desactivación reversible.
 ## Implementation / Action Items
 
 - [x] 1. Crear el goal y revisar specs, puntos de integración y fuentes oficiales.
-- [ ] 2. Obtener aprobación del alcance visual/funcional y resolver Open Issues.
+- [x] 2. Obtener aprobación del plan y decidir arquitectura: backend Vercel
+  existente con rutas de addons separadas, confirmado por el usuario el 2026-10-28.
 - [ ] 3. Crear US-010 en draft con US/UC/AC; obtener aprobación antes de derivar
-  FR/NFR. Después aprobar FR/NFR y TC conforme al flujo spec-as-source.
+  FR/NFR. Borrador creado; después aprobar FR/NFR y TC conforme al flujo spec-as-source.
 - [ ] 4. Confirmar autorización y arquitectura permitida de CurseForge, incluidos
   secretos, descargas y persistencia mínima; no implementar contra supuestos.
 - [ ] 5. Implementar inventario y acciones locales en el launcher funcional,
   reutilizando las guardas existentes y cambios mínimos de reconstrucción.
 - [ ] 6. Implementar búsqueda e instalación CurseForge admitidas, compatibilidad,
-  errores y extracción/publicación segura; pruebas solo del comportamiento tocado.
+  errores y extracción/publicación segura, con rutas independientes en
+  `services/diagnostics/`; pruebas solo del comportamiento tocado y no regresión
+  del contrato de diagnósticos.
 - [ ] 7. Revisar independientemente archivos no confiables, secretos y concurrencia;
   ejecutar verificaciones focales, build/auditoría y aceptación física posible.
 - [ ] 8. Actualizar trazabilidad/evidencias, hacer commits atómicos, auditar el
@@ -133,13 +162,15 @@ launcher. Reactivar sí forma parte de una desactivación reversible.
 
 ## Open Issues
 
-1. **Bloqueante para implementar:** aprobación del alcance y posterior historia.
-   Son propuestas, no requisitos aprobados, la entrada en Home, el alcance global
-   y conservar SavedVariables tras desinstalar.
+1. **Bloqueante para derivar FR/NFR:** revisar y aprobar US/UC/AC de US-010.
+   El plan y la arquitectura ya están aprobados; la historia concreta propone
+   rechazar sobrescrituras y dependencias ausentes, y no agrupar instalaciones
+   manuales por conjeturas. Después se mantienen las puertas FR/NFR y TC.
 2. **Bloqueante para integración real:** ¿dispone el proyecto de clave/acuerdo
-   autorizado de CurseForge? ¿Qué modelo permite para este launcher Android sin
-   exponer la clave? No enviar claves por chat ni incorporarlas a este documento.
-3. **Resolver con inspección/prueba antes de cerrar UC/AC:** ruta real de addons,
+   autorizado de CurseForge? ¿Permite servir búsquedas y descargas mediante este
+   backend sin exponer la clave? No enviar claves por chat ni incorporarlas a este
+   documento. Falta verificar transporte y cuotas Vercel sin afectar diagnósticos.
+3. **Resolver con inspección/prueba antes de implementar:** ruta real de addons,
    clasificación Blizzard/terceros, mecanismo reversible de desactivación,
    agrupación de paquetes, selección Forever/versiones y dependencias obligatorias.
    Si implican decisiones de producto, presentarlas para aprobación en lugar de
