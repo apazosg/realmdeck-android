@@ -203,6 +203,16 @@ consentimiento del plan real antes de adoptar o descargar.
 
 ## Open Issues
 
+- Kernel local `ForeverCasc.inspectForeignStage` implementado: autenticación por
+  objeto/EOF, catálogo suministrado, identidad de segmentos y digest de inventario;
+  callbacks y resumen siempre provisionales, nunca autoridad para adoptar. Exige
+  lease real y revalidación del llamador; no usa el loader que limpia/trunca colas.
+  Resultado original recuperado sin rerun: tres checks, cero fallos. Ampliación
+  posterior con N encoded >1 MiB: solo los dos targets afectados, cero fallos;
+  fuente `e0630ccc…d2743`, tests `f38f996f…6b29`. Evidencia externa en
+  `usb-portability-local-20261028/large-encoded-scanner-20261028/`.
+  Revisión independiente de código todavía pendiente: el revisor no tuvo acceso
+  a archivos. No es cobertura completa de TC-009/010 ni adopción sobre el USB.
 - Descubrimiento ligero local añadido, aún sin UI ni autenticación: distingue vacío,
   publicación candidata, parcial candidato y disposición ambigua con lecturas de
   metadatos acotadas, bajo lease real. Un candidato no declara objetos verificados

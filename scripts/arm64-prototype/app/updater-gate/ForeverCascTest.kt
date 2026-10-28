@@ -882,6 +882,110 @@ class ForeverCascTest {
     }
 
     @Test
+    fun foreignStageInspectionAuthenticatesRecordsAndPreservesItsOriginalRoute() {
+        val root = tempDir()
+        try {
+            val (stage, specs) = foreignStageFixture(root)
+            val largeEncodedSpec = specs.single { it.encodedSize > 1_048_576L }
+            val before = directFileHashes(stage)
+            val records = mutableListOf<Triple<String, Int, Long>>()
+            val membership = specs.mapIndexed { index, spec -> spec.ekey to IndexedValue(index, spec) }.toMap()
+            val result = ForeverCasc.inspectForeignStage(
+                stage, File(root, "private/scan"), "ab".repeat(32), specs.size,
+                { membership.getValue(it) }, { false }, {},
+            ) { spec, archive, offset -> records += Triple(spec.ekey, archive, offset) }
+
+            assertEquals(specs.size.toLong(), result.objectCount)
+            assertEquals(specs.sumOf { it.encodedSize }, result.encodedBytes)
+            assertEquals(specs.sumOf { it.decodedSize }, result.decodedBytes)
+            assertEquals("ab".repeat(32), result.targetCatalogDigest)
+            assertEquals(stage.canonicalPath, result.canonicalDataFilesPath)
+            assertEquals(listOf(0), result.segments.map { it.archiveId })
+            assertEquals(specs.size, records.size)
+            assertTrue("the >1MiB encoded N record was authenticated and reported",
+                records.any { it.first == largeEncodedSpec.ekey })
+            assertTrue(result.inventoryDigest.matches(Regex("[0-9a-f]{64}")))
+            assertFalse(File(root, "private/scan").exists())
+            assertEquals(before, directFileHashes(stage))
+        } finally {
+            delete(root)
+        }
+    }
+
+    @Test
+    fun foreignStageInspectionRejectsCorruptionCatalogMismatchTruncationSymlinkAndCancellationReadOnly() {
+        fun rejected(name: String, alter: (File, List<ForeverCasc.IncrementalObjectSpec>) -> Unit, cancel: Boolean = false) {
+            val root = tempDir()
+            try {
+                val (stage, specs) = foreignStageFixture(root)
+                alter(stage, specs)
+                val before = directFileHashes(stage)
+                val membership = specs.mapIndexed { index, spec -> spec.ekey to IndexedValue(index, spec) }.toMap()
+                var cancelled = false
+                val callbackCount = intArrayOf(0)
+                org.junit.Assert.assertThrows(Exception::class.java) {
+                    ForeverCasc.inspectForeignStage(
+                        stage, File(root, "private/scan"), "cd".repeat(32), specs.size,
+                        { key ->
+                            val admitted = membership.getValue(key)
+                            if (name == "catalog mismatch") IndexedValue(admitted.index, admitted.value.copy(contentKey = "ff".repeat(16)))
+                            else admitted
+                        }, { cancelled }, {},
+                    ) { _, _, _ ->
+                        callbackCount[0]++
+                        if (cancel) cancelled = true
+                    }
+                }
+                if (cancel) assertTrue("cancellation may leave only a provisional callback prefix", callbackCount[0] > 0)
+                assertEquals("$name must preserve the source", before, directFileHashes(stage))
+                assertFalse(File(root, "private/scan").exists())
+            } finally {
+                delete(root)
+            }
+        }
+
+        rejected("encoded corruption", { stage, _ ->
+            RandomAccessFile(File(stage, "data.000"), "rw").use { file ->
+                file.seek(480L + 30L + 8L + 1L)
+                file.write(file.read().let { it xor 1 })
+            }
+        })
+        rejected("catalog mismatch", { _, _ -> })
+        rejected("truncated tail", { stage, _ ->
+            val segment = File(stage, "data.000")
+            RandomAccessFile(segment, "rw").use { it.setLength(it.length() - 1) }
+        })
+        rejected("symlink", { stage, _ ->
+            val segment = File(stage, "data.000")
+            val saved = File(stage.parentFile, "segment.saved")
+            Files.move(segment.toPath(), saved.toPath())
+            Files.createSymbolicLink(segment.toPath(), saved.toPath())
+        })
+        rejected("cancellation", { _, _ -> }, cancel = true)
+    }
+
+    private fun foreignStageFixture(root: File): Pair<File, List<ForeverCasc.IncrementalObjectSpec>> {
+        val payloads = listOf(
+            "foreign-stage-small".toByteArray(),
+            ByteArray(256 * 1024) { (it * 31).toByte() },
+            ByteArray(1_048_576 + 257) { (it * 17).toByte() },
+        ).mapIndexed { index, decoded ->
+            val raw = if (index == 1) blteChunked(decoded) else blteRaw(decoded)
+            val spec = ForeverCasc.IncrementalObjectSpec(encodedEkey(raw), md5Hex(decoded), raw.size.toLong(), decoded.size.toLong())
+            spec to file(root, "private/raw-$index.blte", raw)
+        }.sortedBy { it.first.ekey }
+        val stage = File(root, "usb/client/Data/data")
+        assertTrue(stage.parentFile!!.mkdirs())
+        val checkpoint = File(root, "private/checkpoint").apply { assertTrue(mkdirs()) }
+        ForeverCasc.writeTargetIncrementalResumable(
+            null, stage, checkpoint, payloads.asSequence().map { it.first },
+            { spec -> payloads.single { it.first.ekey == spec.ekey }.second }, { false }, "foreign-fixture",
+        )
+        stage.listFiles()!!.filter { it.name.endsWith(".idx") }.forEach { assertTrue(it.delete()) }
+        return stage to payloads.map { it.first }
+    }
+
+    @Test
     fun targetInspectionPlansNineVerifiedAndOneMissingObjectWithoutProducingOutput() {
         val root = tempDir()
         try {

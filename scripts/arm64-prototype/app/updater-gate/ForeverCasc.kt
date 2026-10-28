@@ -433,6 +433,287 @@ object ForeverCasc {
         val finalizing: Boolean,
     )
 
+    /** One no-follow snapshot of an admitted physical segment in its original route. */
+    internal data class ForeignSegmentBinding(
+        val archiveId: Int,
+        val name: String,
+        val fileKey: String,
+        val size: Long,
+        val modifiedTime: java.nio.file.attribute.FileTime,
+        val generatedHeaderSha256: String,
+    )
+
+    /**
+     * Provisional, read-only result. This is deliberately not an admission token:
+     * the caller must retain its real updater lease and revalidate mount,
+     * destination, catalog and owner generation before any later adoption.
+     */
+    internal data class ForeignStageVerification(
+        val canonicalDataFilesPath: String,
+        val targetCatalogDigest: String,
+        val objectCount: Long,
+        val encodedBytes: Long,
+        val decodedBytes: Long,
+        val inventoryDigest: String,
+        val segments: List<ForeignSegmentBinding>,
+    )
+
+    /**
+     * Authenticate a foreign partial stage without loading or changing updater
+     * ownership state. The caller holds the real operation lease for this call
+     * and supplies [revalidateBinding] to recheck destination/mount/catalog/
+     * owner-generation state at entry, bounded scan checkpoints and success.
+     *
+     * Rows sent to [onVerifiedRecord] are provisional until this method returns;
+     * a callback failure or any later scan/binding failure invalidates the whole
+     * prefix. Neither those rows nor the returned summary authorize adoption.
+     * The caller must retain exclusion and freshly revalidate the source and
+     * owner/catalog/mount state before using them. The digest binds the admitted
+     * catalog identity and authenticated physical records plus segment metadata;
+     * metadata is not a content hash and this is not a distributed CAS.
+     *
+     * [workDirectory] must be fresh, private caller-owned scratch outside the
+     * stage. It is removed on every exit. The catalog is queried one EKey at a
+     * time; only its bounded ordinal bitset and disk-backed duplicate table are
+     * retained here.
+     */
+    internal fun inspectForeignStage(
+        dataFiles: File,
+        workDirectory: File,
+        targetCatalogDigest: String,
+        targetObjectCount: Int,
+        targetMembership: (String) -> IndexedValue<IncrementalObjectSpec>,
+        cancelled: () -> Boolean,
+        revalidateBinding: () -> Unit,
+        onVerifiedRecord: (IncrementalObjectSpec, Int, Long) -> Unit,
+    ): ForeignStageVerification {
+        require(targetCatalogDigest.matches(Regex("[0-9a-f]{64}"))) { "foreign-stage target catalog digest is invalid" }
+        require(targetObjectCount in 1..MAX_TOTAL_INDEX_ENTRIES) { "foreign-stage target count exceeds its bound" }
+        checkCancelled(cancelled)
+        revalidateBinding()
+        validateTargetInspectionPaths(dataFiles, workDirectory)
+        val dataPath = dataFiles.canonicalFile.toPath().normalize()
+        if (!Files.isDirectory(dataPath, LinkOption.NOFOLLOW_LINKS)) {
+            throw IllegalStateException("foreign CASC stage is not a regular data directory")
+        }
+        if (!workDirectory.mkdir()) throw IllegalStateException("foreign-stage work directory must be fresh")
+        return try {
+            checkCancelled(cancelled)
+            revalidateBinding()
+            val names = ArrayList<Pair<Int, File>>(1024)
+            Files.newDirectoryStream(dataPath).use { children ->
+                children.forEach { child ->
+                    val name = child.fileName.toString()
+                    val match = Regex("^data\\.(\\d{3,})$").matchEntire(name)
+                        ?: throw IllegalStateException("foreign CASC stage contains an unsupported data-directory entry")
+                    val id = match.groupValues[1].toInt()
+                    if (id !in 0..1023 || name != "data.%03d".format(id) || names.size >= 1024) {
+                        throw IllegalStateException("foreign CASC stage segment count or ID exceeds its bound")
+                    }
+                    names += id to child.toFile()
+                }
+            }
+            names.sortBy { it.first }
+            if (names.isEmpty() || names.indices.any { names[it].first != it }) {
+                throw IllegalStateException("foreign CASC stage segment IDs are not contiguous from zero")
+            }
+            val canonicalPath = dataPath.toString()
+            // Segment headers are generated from the exact route string used by
+            // the writer, not its canonicalized spelling. Bind both identities.
+            val pathHash = MessageDigest.getInstance("MD5").digest(dataFiles.absolutePath.toByteArray(Charsets.UTF_8))
+            val snapshots = names.map { (id, file) ->
+                val path = file.toPath()
+                if (Files.isSymbolicLink(path) || !Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) {
+                    throw IllegalStateException("foreign CASC segment is not a no-follow regular file")
+                }
+                val attributes = Files.readAttributes(path, java.nio.file.attribute.BasicFileAttributes::class.java, LinkOption.NOFOLLOW_LINKS)
+                val key = attributes.fileKey()?.toString()
+                    ?: throw IllegalStateException("foreign CASC segment has no stable file identity")
+                if (attributes.size() !in SEGMENT_HEADER_SIZE.toLong() + 1L..ARCHIVE_LIMIT) {
+                    throw IllegalStateException("foreign CASC segment is header-only, truncated or over its bound")
+                }
+                val expected = segmentHeader(id, pathHash)
+                SegmentSnapshot(id, file, key, attributes.size(), attributes.lastModifiedTime(), expected)
+            }
+            val targetSeen = java.util.BitSet(targetObjectCount)
+            val inventory = MessageDigest.getInstance("SHA-256")
+            inventory.update("FW-FOREIGN-CASC-INVENTORY-v1\u0000".toByteArray(Charsets.US_ASCII))
+            inventory.update(targetCatalogDigest.hexBytes())
+            updateForeignDigestText(inventory, canonicalPath)
+            val duplicateTable = DiskIndexTable(File(workDirectory, "duplicate-ekeys.bin"), 0, cancelled)
+            var count = 0L
+            var encodedBytes = 0L
+            var decodedBytes = 0L
+            try {
+                snapshots.forEach { snapshot ->
+                    checkCancelled(cancelled)
+                    revalidateBinding()
+                    val path = snapshot.file.toPath()
+                    checkForeignSegmentSnapshot(snapshot)
+                    val boundHeader = ByteArray(SEGMENT_HEADER_SIZE)
+                    FileChannel.open(path, StandardOpenOption.READ, LinkOption.NOFOLLOW_LINKS).use { channel ->
+                        readFullyAt(channel, ByteBuffer.wrap(boundHeader), 0)
+                        if (!boundHeader.contentEquals(snapshot.generatedHeader)) {
+                            throw IllegalStateException("foreign CASC generated segment header does not match its unchanged route")
+                        }
+                        updateForeignSegmentBindingDigest(inventory, snapshot)
+                        var offset = SEGMENT_HEADER_SIZE.toLong()
+                        var segmentObjects = 0
+                        while (offset < snapshot.size) {
+                            checkCancelled(cancelled)
+                            revalidateBinding()
+                            if (snapshot.size - offset < LOCAL_HEADER_SIZE) {
+                                throw IllegalStateException("foreign CASC segment ends in a truncated local header")
+                            }
+                            val header = ByteArray(LOCAL_HEADER_SIZE)
+                            readFullyAt(channel, ByteBuffer.wrap(header), offset)
+                            val reversedKey = header.copyOfRange(0, 16).reversedArray()
+                            val ekey = reversedKey.hex()
+                            val totalSize = u32(header, 0x10).toLong() and 0xffffffffL
+                            val flags = u16(header, 0x14)
+                            if (flags != 0 || totalSize < LOCAL_HEADER_SIZE + 4L || totalSize > ARCHIVE_LIMIT ||
+                                totalSize > snapshot.size - offset
+                            ) throw IllegalStateException("foreign CASC local record flags or exact size are unsupported")
+                            val entry = IndexEntry(reversedKey.copyOfRange(0, 9), snapshot.id, offset, totalSize)
+                            validateLocalHeader(header, entry)
+                            val encodedSize = totalSize - LOCAL_HEADER_SIZE
+                            val admitted = targetMembership(ekey)
+                            val spec = normalizeIncrementalSpec(admitted.value)
+                            val ordinal = admitted.index
+                            if (ordinal !in 0 until targetObjectCount || targetSeen.get(ordinal) || spec.ekey != ekey ||
+                                spec.encodedSize != encodedSize
+                            ) throw IllegalStateException("foreign CASC record is duplicate or not an exact official target member")
+                            validateIncrementalSpec(spec)
+                            val prior = ExistingIndexRecord(ekey, entry, 0, 0)
+                            if (!duplicateTable.put(prior)) throw IllegalStateException("foreign CASC stage contains a duplicate full EKey")
+                            val bodyStart = Math.addExact(offset, LOCAL_HEADER_SIZE.toLong())
+                            val bounded = object : InputStream() {
+                                private var position = bodyStart
+                                var remaining = encodedSize
+                                    private set
+                                override fun read(): Int {
+                                    val one = ByteArray(1)
+                                    return if (read(one, 0, 1) < 0) -1 else one[0].toInt() and 0xff
+                                }
+                                override fun read(buffer: ByteArray, off: Int, len: Int): Int {
+                                    if (off < 0 || len < 0 || off > buffer.size || len > buffer.size - off) throw IndexOutOfBoundsException()
+                                    if (len == 0) return 0
+                                    if (remaining == 0L) return -1
+                                    checkCancelled(cancelled)
+                                    val amount = min(len.toLong(), remaining).toInt()
+                                    val target = ByteBuffer.wrap(buffer, off, amount)
+                                    readFullyAt(channel, target, position)
+                                    position = Math.addExact(position, amount.toLong())
+                                    remaining -= amount
+                                    return amount
+                                }
+                                override fun close() { }
+                            }
+                            ForeverBlte.verifyEncodedRange(bounded, encodedSize, ekey, spec.decodedSize, spec.contentKey, cancelled)
+                            if (bounded.remaining != 0L) throw IllegalStateException("foreign CASC BLTE verifier did not consume the exact encoded body")
+                            targetSeen.set(ordinal)
+                            updateForeignObjectDigest(inventory, spec, snapshot.id, offset)
+                            onVerifiedRecord(spec, snapshot.id, offset)
+                            count = Math.addExact(count, 1L)
+                            encodedBytes = Math.addExact(encodedBytes, encodedSize)
+                            decodedBytes = Math.addExact(decodedBytes, spec.decodedSize)
+                            offset = Math.addExact(offset, totalSize)
+                            segmentObjects++
+                        }
+                        if (offset != snapshot.size || segmentObjects == 0 || channel.size() != snapshot.size) {
+                            throw IllegalStateException("foreign CASC segment has an unrepresented EOF or no payload records")
+                        }
+                    }
+                    checkForeignSegmentSnapshot(snapshot)
+                }
+                checkCancelled(cancelled)
+                revalidateBinding()
+                checkForeignStageNames(dataPath, snapshots)
+                snapshots.forEach(::checkForeignSegmentSnapshot)
+                checkCancelled(cancelled)
+                revalidateBinding()
+                val digest = inventory.digest().joinToString("") { "%02x".format(it.toInt() and 0xff) }
+                ForeignStageVerification(
+                    canonicalPath, targetCatalogDigest, count, encodedBytes, decodedBytes, digest,
+                    snapshots.map { snapshot ->
+                        ForeignSegmentBinding(
+                            snapshot.id, snapshot.file.name, snapshot.fileKey, snapshot.size,
+                            snapshot.modifiedTime,
+                            MessageDigest.getInstance("SHA-256").digest(snapshot.generatedHeader)
+                                .joinToString("") { "%02x".format(it.toInt() and 0xff) },
+                        )
+                    }.let { java.util.Collections.unmodifiableList(it) },
+                )
+            } finally {
+                duplicateTable.close()
+                Files.deleteIfExists(File(workDirectory, "duplicate-ekeys.bin").toPath())
+            }
+        } finally {
+            deleteOwnedScratch(workDirectory)
+        }
+    }
+
+    private data class SegmentSnapshot(
+        val id: Int,
+        val file: File,
+        val fileKey: String,
+        val size: Long,
+        val modifiedTime: java.nio.file.attribute.FileTime,
+        val generatedHeader: ByteArray,
+    )
+
+    private fun checkForeignSegmentSnapshot(snapshot: SegmentSnapshot) {
+        val path = snapshot.file.toPath()
+        if (Files.isSymbolicLink(path) || !Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) {
+            throw IllegalStateException("foreign CASC segment identity changed during inspection")
+        }
+        val attributes = Files.readAttributes(path, java.nio.file.attribute.BasicFileAttributes::class.java, LinkOption.NOFOLLOW_LINKS)
+        if (attributes.fileKey()?.toString() != snapshot.fileKey || attributes.size() != snapshot.size ||
+            attributes.lastModifiedTime() != snapshot.modifiedTime
+        ) throw IllegalStateException("foreign CASC segment metadata binding changed during inspection")
+    }
+
+    private fun checkForeignStageNames(directory: java.nio.file.Path, snapshots: List<SegmentSnapshot>) {
+        if (Files.isSymbolicLink(directory) || !Files.isDirectory(directory, LinkOption.NOFOLLOW_LINKS)) {
+            throw IllegalStateException("foreign CASC stage directory identity changed during inspection")
+        }
+        val expected = snapshots.map { it.file.name }.toSet()
+        var actualCount = 0
+        Files.newDirectoryStream(directory).use { children ->
+            children.forEach { child ->
+                val name = child.fileName.toString()
+                if (name !in expected || ++actualCount > snapshots.size) {
+                    throw IllegalStateException("foreign CASC stage entry set changed during inspection")
+                }
+            }
+        }
+        if (actualCount != snapshots.size) throw IllegalStateException("foreign CASC stage entry set changed during inspection")
+    }
+
+    private fun updateForeignSegmentBindingDigest(digest: MessageDigest, snapshot: SegmentSnapshot) {
+        digest.update(byteArrayOf(0x53))
+        digest.update(ByteBuffer.allocate(20).order(ByteOrder.BIG_ENDIAN).putInt(snapshot.id).putLong(snapshot.size)
+            .putLong(snapshot.modifiedTime.to(java.util.concurrent.TimeUnit.NANOSECONDS)).array())
+        updateForeignDigestText(digest, snapshot.file.name)
+        updateForeignDigestText(digest, snapshot.fileKey)
+        updateForeignDigestText(digest, snapshot.modifiedTime.toString())
+        digest.update(MessageDigest.getInstance("SHA-256").digest(snapshot.generatedHeader))
+    }
+
+    private fun updateForeignDigestText(digest: MessageDigest, value: String) {
+        val bytes = value.toByteArray(Charsets.UTF_8)
+        digest.update(ByteBuffer.allocate(4).order(ByteOrder.BIG_ENDIAN).putInt(bytes.size).array())
+        digest.update(bytes)
+    }
+
+    private fun updateForeignObjectDigest(digest: MessageDigest, spec: IncrementalObjectSpec, archiveId: Int, offset: Long) {
+        digest.update(byteArrayOf(0x4f))
+        digest.update(spec.ekey.hexBytes())
+        digest.update(spec.contentKey.hexBytes())
+        digest.update(ByteBuffer.allocate(28).order(ByteOrder.BIG_ENDIAN)
+            .putLong(spec.encodedSize).putLong(spec.decodedSize).putInt(archiveId).putLong(offset).array())
+    }
+
     internal fun materialize(
         staging: File,
         buildInfo: ByteArray,
