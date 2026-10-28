@@ -1947,6 +1947,37 @@ class ForeverClientUpdateService private constructor(
             )
         }
 
+        /**
+         * Publisher for the explicit transition's callback, not an adoption entry point.
+         * The caller retains the updater lease and its source/intent/consent bindings.
+         * Re-publication when the new digest is visible deliberately repeats the ordinary
+         * file and parent barriers: a prior rename may have completed before its force.
+         */
+        internal fun publishPortabilityCatalogReceipt(
+            root: File,
+            bytes: ByteArray,
+            expectedOldDigest: String?,
+            expectedNewDigest: String,
+        ): ActiveCatalogAdmission {
+            require(bytes.size in 1..MAX_ACTIVE_RECEIPT_BYTES) { "portability admission exceeds its fixed bound" }
+            val receiptBytes = bytes.copyOf() // Do not publish a caller-mutable buffer after validation.
+            require(expectedNewDigest.matches(HEX64) &&
+                (expectedOldDigest == null || expectedOldDigest.matches(HEX64)))
+            require(sha256(receiptBytes) == expectedNewDigest) { "portability admission differs from its intent" }
+            parseActiveCatalogReceipt(receiptBytes, root) // Same official namespace, hashes and target checks.
+            val receipt = File(root, ACTIVE_RECEIPT_NAME)
+            val previous = if (Files.exists(receipt.toPath(), LinkOption.NOFOLLOW_LINKS)) {
+                readBoundedReceipt(receipt, MAX_ACTIVE_RECEIPT_BYTES).also { parseActiveCatalogReceipt(it, root) }
+            } else null
+            require(previous?.let { sha256(it) }.let { it == expectedOldDigest || it == expectedNewDigest }) {
+                "active admission changed outside its portability intent"
+            }
+            publishActiveCatalogReceipt(root, receiptBytes)
+            val durable = readBoundedReceipt(receipt, MAX_ACTIVE_RECEIPT_BYTES)
+            require(sha256(durable) == expectedNewDigest) { "portability admission changed after publication" }
+            return parseActiveCatalogReceipt(durable, root)
+        }
+
         internal fun publishActiveCatalogReceipt(root: File, bytes: ByteArray) {
             require(bytes.size in 1..MAX_ACTIVE_RECEIPT_BYTES) { "active catalog receipt exceeds its fixed bound" }
             val rootPath = root.toPath().toAbsolutePath().normalize()

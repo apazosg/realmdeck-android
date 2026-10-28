@@ -430,6 +430,39 @@ class ForeverClientUpdateServiceTest {
     }
 
     @Test
+    fun portabilityCatalogPublicationBindsOldAndNewReceiptsAndCanResealTheNewState() {
+        Fixture().use { fixture ->
+            val first = syntheticAdmission(fixture.root, 70_700)
+            val next = syntheticAdmission(fixture.root, 70_900)
+            val firstBytes = ForeverClientUpdateService.encodeActiveCatalogReceipt(first)
+            val nextBytes = ForeverClientUpdateService.encodeActiveCatalogReceipt(next)
+            val receipt = File(fixture.root, "active-admission.json")
+            ForeverClientUpdateService.publishPortabilityCatalogReceipt(fixture.root, firstBytes, null, sha256(firstBytes))
+            assertThrows(IllegalArgumentException::class.java) {
+                ForeverClientUpdateService.publishPortabilityCatalogReceipt(fixture.root, nextBytes, "00".repeat(32), sha256(nextBytes))
+            }
+            assertArrayEquals(firstBytes, receipt.readBytes())
+            assertThrows(IllegalArgumentException::class.java) {
+                ForeverClientUpdateService.publishPortabilityCatalogReceipt(fixture.root, nextBytes, sha256(firstBytes), "00".repeat(32))
+            }
+            assertArrayEquals(firstBytes, receipt.readBytes())
+            repeat(2) { // First transition, then recovery with the new receipt already visible.
+                val observed = ForeverClientUpdateService.publishPortabilityCatalogReceipt(
+                    fixture.root, nextBytes, sha256(firstBytes), sha256(nextBytes),
+                )
+                assertEquals(next.target.fingerprint, observed.target.fingerprint)
+                assertArrayEquals(nextBytes, receipt.readBytes())
+            }
+            val sourceBytes = next.catalogFile.readBytes()
+            next.catalogFile.writeBytes(sourceBytes.copyOf().also { it[0] = (it[0].toInt() xor 1).toByte() })
+            assertThrows(IllegalArgumentException::class.java) {
+                ForeverClientUpdateService.publishPortabilityCatalogReceipt(fixture.root, nextBytes, sha256(firstBytes), sha256(nextBytes))
+            }
+            assertArrayEquals(nextBytes, receipt.readBytes())
+        }
+    }
+
+    @Test
     fun dynamicReceiptPersistsAcrossTwoSyntheticBuildsAndCorruptionOrOutsidePathsBlockSelection() {
         Fixture().use { fixture ->
             val first = syntheticAdmission(fixture.root, 70_700)

@@ -203,6 +203,25 @@ consentimiento del plan real antes de adoptar o descargar.
 
 ## Open Issues
 
+- Rendimiento preservado por petición explícita: no añadir escaneos completos al abrir,
+  seleccionar almacenamiento o a cada Resume ordinario. La autenticación adicional se
+  limita a la adopción explícita de datos ajenos. La integración debe evitar recorridos
+  redundantes y reutilizar pruebas solo bajo exclusión y bindings todavía válidos;
+  conservar las optimizaciones anteriores, la cadencia full/light y las barreras.
+  Medir preparación/verificación/primer payload antes de aceptar el inicio real.
+- Publicador oficial ligado al intent implementado localmente:
+  `publishPortabilityCatalogReceipt` valida el SHA nuevo y el recibo anterior/nuevo
+  esperado, aplica el parser ordinario y repite publicación/barreras incluso si el
+  nuevo recibo ya es visible. Un caso focal pasó; la revisión de snapshot detectó
+  un buffer mutable y se corrigió copiándolo antes de validar/publicar. Solo ese
+  caso se repitió sobre el código cambiado: 1 test, 0 fallos/errores/skips, JUnit
+  2026-10-28T22:04:14, paridad de fuentes. Evidencia externa:
+  `usb-portability-local-20261028/portability-catalog-publication-snapshot-tests/`.
+  La revisión confirmó la reparación solo sobre el snapshot suministrado, sin
+  acceso independiente al repositorio ni comandos. Sigue pendiente conectar el
+  publicador al caller con lease/intent/consentimiento y refrescar el catálogo en
+  memoria; no demuestra adopción física ni ejecución de todo TC-012/013.
+
 - Primitiva local de transición/recuperación C/P/S añadida bajo la lease real:
   valida el candidato privado, publica intent antes de cambiar propiedad, reserva
   solo el workspace previo ligado a su manifiesto, cambia la generación sin mover
