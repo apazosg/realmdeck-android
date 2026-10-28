@@ -881,7 +881,13 @@ class ForeverClientUpdater(
         checkCancelled(cancelled)
         val target = inspectTargetState(destination)
         if (target.sourceDataFiles != null) return block(target, null)
+        return withArchiveOrder(cancelled) { order -> block(target, order) }
+    }
 
+    private fun <T> withArchiveOrder(
+        cancelled: () -> Boolean,
+        block: (ForeverClientArchiveOrder) -> T,
+    ): T {
         val bounds = catalog.objectSizeBounds(cancelled)
         if (bounds.maxEncodedSize !in 1..MAX_ENCODED_BYTES) {
             throw IllegalStateException("catalog object exceeds the admitted CASC/transfer encoded-size bound: ${bounds.maxEncodedSize}")
@@ -903,7 +909,7 @@ class ForeverClientUpdater(
             )
         }
         return ForeverClientArchiveOrder.open(catalog, archiveOrderDirectory, cancelled).use { order ->
-            block(target, order)
+            block(order)
         }
     }
 
@@ -3385,22 +3391,28 @@ class ForeverClientUpdater(
     internal fun discoverPortabilitySource(
         destination: ForeverClientUpdateDestination,
     ): PortabilitySourceKind = withLease(destination, allowRootPending = true) {
+        inspectPortabilitySourceMetadata(destination)
+    }
+
+    private fun inspectPortabilitySourceMetadata(
+        destination: ForeverClientUpdateDestination,
+    ): PortabilitySourceKind {
         verifyStorageMarker(destination)
         val root = destination.root.toPath()
         fun directory(path: Path): Boolean = !Files.isSymbolicLink(path) &&
             Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS)
         fun regular(path: Path): Boolean = !Files.isSymbolicLink(path) &&
             Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)
-        if (!directory(root)) return@withLease PortabilitySourceKind.UNREADABLE_OR_AMBIGUOUS
+        if (!directory(root)) return PortabilitySourceKind.UNREADABLE_OR_AMBIGUOUS
         val published = root.resolve(".build.info")
         val stages = root.resolve(TRANSACTION_STAGING_NAME)
         var stage: Path? = null
         if (Files.exists(stages, LinkOption.NOFOLLOW_LINKS)) {
-            if (!directory(stages)) return@withLease PortabilitySourceKind.UNREADABLE_OR_AMBIGUOUS
+            if (!directory(stages)) return PortabilitySourceKind.UNREADABLE_OR_AMBIGUOUS
             Files.newDirectoryStream(stages).use { children ->
                 for (child in children) {
                     if (stage != null || !TRANSACTION_STAGE_ID.matches(child.fileName.toString()) || !directory(child)) {
-                        return@withLease PortabilitySourceKind.UNREADABLE_OR_AMBIGUOUS
+                        return PortabilitySourceKind.UNREADABLE_OR_AMBIGUOUS
                     }
                     stage = child
                 }
@@ -3432,7 +3444,77 @@ class ForeverClientUpdater(
         }
         destination.revalidate()
         verifyStorageMarker(destination)
-        verdict
+        return verdict
+    }
+
+    internal data class PartialPortabilityVerification(
+        val stageId: String,
+        val markerDigest: String,
+        val objects: ForeverCasc.ForeignStageVerification,
+    )
+
+    /** Explicit full verification, never called by discovery. Result/rows remain
+     * provisional: this lease ends on return; adoption must revalidate all bindings
+     * under its own uninterrupted exclusion before publishing any new state. */
+    internal fun verifyPartialPortabilitySource(
+        destination: ForeverClientUpdateDestination,
+        cancelled: () -> Boolean,
+        onVerifiedRecord: (ForeverCasc.IncrementalObjectSpec, Int, Long) -> Unit,
+    ): PartialPortabilityVerification = withLease(destination, allowRootPending = true) {
+        checkCancelled(cancelled)
+        require(inspectPortabilitySourceMetadata(destination) == PortabilitySourceKind.PARTIAL_CANDIDATE) {
+            "partial portability verification requires one unambiguous stage"
+        }
+        val parent = File(destination.root, TRANSACTION_STAGING_NAME).toPath()
+        val stage = Files.newDirectoryStream(parent).use { children ->
+            val iterator = children.iterator()
+            require(iterator.hasNext()) { "partial stage disappeared" }
+            val candidate = iterator.next()
+            require(!iterator.hasNext() && TRANSACTION_STAGE_ID.matches(candidate.fileName.toString())) {
+                "partial stage namespace changed"
+            }
+            candidate
+        }
+        val marker = stage.resolve(TRANSACTION_STAGE_OWNER_NAME)
+        val markerBytes = Files.newInputStream(marker, StandardOpenOption.READ, LinkOption.NOFOLLOW_LINKS).use {
+            val buffer = ByteArray(4097)
+            var count = 0
+            while (count < buffer.size) {
+                val read = it.read(buffer, count, buffer.size - count)
+                if (read < 0) break
+                require(read > 0) { "partial owner marker read made no progress" }
+                count += read
+            }
+            buffer.copyOf(count)
+        }
+        require(markerBytes.size in 1..4096) { "partial owner marker changed its bounded size" }
+        val markerDigest = sha256(markerBytes)
+        val stageId = stage.fileName.toString()
+        fun revalidate() {
+            checkCancelled(cancelled)
+            destination.revalidate()
+            verifyStorageMarker(destination)
+            require(inspectPortabilitySourceMetadata(destination) == PortabilitySourceKind.PARTIAL_CANDIDATE) {
+                "partial stage layout changed during verification"
+            }
+            Files.newDirectoryStream(parent).use { children ->
+                val iterator = children.iterator()
+                require(iterator.hasNext() && iterator.next() == stage && !iterator.hasNext()) {
+                    "partial stage identity changed during verification"
+                }
+            }
+            requireExactFile(marker, markerBytes, "foreign partial stage marker binding")
+        }
+        withArchiveOrder(cancelled) { order ->
+            val scratch = File(privateWorkDirectory, ".portability-scan-${UUID.randomUUID()}")
+            val result = ForeverCasc.inspectForeignStage(
+                stage.resolve("Data/data").toFile(), scratch, targetCatalogSha256,
+                targetSummary.objectCount.toInt(), { key -> archiveTargetMembership(order, key) },
+                cancelled, ::revalidate, onVerifiedRecord,
+            )
+            revalidate()
+            PartialPortabilityVerification(stageId, markerDigest, result)
+        }
     }
 
     /** Global private fence survives replacement of the canonical workspace. */

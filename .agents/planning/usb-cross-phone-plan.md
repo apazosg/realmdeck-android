@@ -203,6 +203,17 @@ consentimiento del plan real antes de adoptar o descargar.
 
 ## Open Issues
 
+- Integración local de verificación parcial: lease real, catálogo admitido y orden
+  físico enlazan el scanner con el destino/marcador revalidados. Resultado y callbacks
+  siguen provisionales; no se crea checkpoint/recibo ni se adopta el USB. El primer
+  test encontró que la inspección de bootstrap ordinaria rechazaba el parcial;
+  se reutiliza solo la preparación acotada del índice, conservando esa guarda normal.
+  GREEN posterior: dos checks, cero fallos/errores/skips, JUnit 28-10 20:28:26,
+  fuentes updater `ea57c3d8…d1591` / test `de7752ce…c538`, paridad comprobada.
+  Evidencia externa `usb-portability-local-20261028/partial-integration-green-tests`.
+  Revisión independiente solicitada pero inconclusa por falta de acceso del revisor;
+  sigue pendiente antes de desplegar. C/P/S, consentimiento/UI y prueba física no
+  quedan implementados por esta integración. No se repiten los tests cerrados.
 - Codec local de intent privado implementado: metadatos acotados a 16 KiB,
   checksum y representación canónica ligados a target/destino/storage, catálogo,
   plan, inventario, checkpoint y generaciones anterior/nueva. Solo produce/valida

@@ -42,6 +42,53 @@ class ForeverClientUpdaterTest {
         .joinToString("") { "%02x".format(it) }
 
     @Test
+    fun foreignPartialVerificationUsesTheAdmittedCatalogWithoutRestoringPrivateState() {
+        val assets = configAssetsOrSkip()
+        Fixture().use { fixture ->
+            val paths = fixture.makePaths()
+            val destination = fixture.destination(paths)
+            val original = fixture.updater(paths, assets) { record, work, _, progress ->
+                File(work, "${record.ekey}.blte").also {
+                    it.writeBytes(fixture.rawFor(record)); progress(it.length())
+                }
+            }
+            val plan = original.plan(destination)
+            val privateBase = File(paths.work, ".forever-client-update-work")
+            assertThrows(java.util.concurrent.CancellationException::class.java) {
+                original.execute(destination, plan, consentFor(plan), {
+                    privateBase.listFiles().orEmpty().any {
+                        File(it, ".forever-casc-resume-checkpoint").length() > 40L
+                    }
+                })
+            }
+            assertNoLiveFetchWorkers("foreign verification fixture")
+            fun clientBytes() = paths.client.walkTopDown().filter { it.isFile }.associate {
+                it.relativeTo(paths.client).path to sha256(it.readBytes())
+            }
+            val before = clientBytes()
+            val foreignPaths = fixture.makePaths("foreign-verification").copy(client = paths.client)
+            val foreignDestination = fixture.destination(foreignPaths)
+            val foreign = fixture.updater(foreignPaths, assets) { _, _, _, _ -> error("verification must not fetch") }
+            val records = ArrayList<ForeverCasc.IncrementalObjectSpec>()
+            val verified = foreign.verifyPartialPortabilitySource(foreignDestination, { false }) { spec, _, _ -> records += spec }
+            assertTrue(verified.objects.objectCount > 0)
+            assertEquals(records.size.toLong(), verified.objects.objectCount)
+            records.forEach { spec ->
+                val admitted = fixture.catalog.objectByKey(spec.ekey)
+                assertEquals(admitted.contentKey, spec.contentKey)
+                assertEquals(admitted.encodedSize, spec.encodedSize)
+            }
+            assertEquals(before, clientBytes())
+            assertEquals(ForeverClientUpdater.ResumeGuardState.BLOCKED, foreign.resumeGuardState(foreignDestination))
+            assertFalse(File(foreignPaths.work, ".forever-client-update-work").exists())
+            assertThrows(java.util.concurrent.CancellationException::class.java) {
+                foreign.verifyPartialPortabilitySource(foreignDestination, { true }) { _, _, _ -> error("cancelled") }
+            }
+            assertEquals(before, clientBytes())
+        }
+    }
+
+    @Test
     fun portabilityIntentCodecBindsItsDestinationCatalogAndExactSchemaWithoutWriting() {
         val assets = configAssetsOrSkip()
         Fixture().use { fixture ->
