@@ -203,6 +203,28 @@ consentimiento del plan real antes de adoptar o descargar.
 
 ## Open Issues
 
+- Primitiva local de transición/recuperación C/P/S añadida bajo la lease real:
+  valida el candidato privado, publica intent antes de cambiar propiedad, reserva
+  solo el workspace previo ligado a su manifiesto, cambia la generación sin mover
+  los cuerpos CASC y publica el candidato canónico. La entrada ordinaria sigue
+  bloqueada por intent; esta primitiva no es una entrada de consentimiento/adopción.
+  Recuperación vuelve a forzar los padres de renames ya visibles; P y su padre se
+  fuerzan antes del intent. El publicador oficial deberá ser idempotente y restablecer
+  su durabilidad incluso cuando el digest nuevo ya sea visible: integración pendiente.
+  Antes de borrar cualquier reserva privada verifica también cada SHA, no solo
+  tamaño/mtime/filekey; máximo 4096 entradas, manifiesto 2 MiB y reserva 2 GiB.
+  Revisión de flujo suministrado detectó y corrigió esa omisión; revisión posterior
+  sin hallazgo adicional, condicional al modelo privado/single-writer, sin acceso
+  independiente al repositorio. Primer intento falló compilando el fixture, sin
+  JUnit ejecutado. Después: dos checks PASS (JUnit 28-10 21:39:46); tras añadir la
+  barrera del padre de P se ejecutó solo el check afectado, PASS (21:46:48), archivo
+  de tests idéntico. Cubre doce escenarios sintéticos, cortes antes/después de
+  renames, reserva parcialmente retirada y corrupción de igual tamaño/mtime que
+  debe conservar todos los archivos restantes. Fuentes finales updater
+  `a2ea854b…a6df6` / test `986e55a5…24dc8`; evidencia externa
+  `usb-portability-local-20261028/portability-transition-parent-barrier-tests/`.
+  Sin USB, APK ni dispositivo. Publicador real, preparación/plan ligado,
+  consentimiento/UI, cobertura global obsoleta y prueba física siguen pendientes.
 - Preparación explícita de catálogo candidato añadida al servicio: conserva la
   guarda ordinaria de catálogo activo ante staging extranjero, resuelve únicamente
   metadatos oficiales consentidos y devuelve sus bindings sin publicar la admisión.

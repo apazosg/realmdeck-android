@@ -42,6 +42,126 @@ class ForeverClientUpdaterTest {
         .joinToString("") { "%02x".format(it) }
 
     @Test
+    fun portabilityTransitionRecoversDurableCutsWithFreshAuthenticatedCheckpoints() {
+        val assets = configAssetsOrSkip()
+        val cuts = listOf("intent-durable", "old-workspace-reserved", "new-marker-durable",
+            "new-workspace-durable", "catalog-durable", "reserved-entry-removed", "reserved-state-cleaned", "without-old-workspace",
+            "metadata-renamed:.forever-portability-intent.json", "metadata-renamed:.owner", "new-workspace-renamed", "changed-reserved-bytes")
+        for (scenario in cuts) Fixture(cascObjectCount = 4, contiguousRangeObjectCount = 3).use { fixture ->
+            val cut = when (scenario) {
+                "without-old-workspace" -> "new-marker-durable"
+                "changed-reserved-bytes" -> "catalog-durable"
+                else -> scenario
+            }
+            val paths = fixture.makePaths()
+            val destination = fixture.destination(paths)
+            fun updater() = fixture.updater(paths, assets) { record, work, _, progress ->
+                File(work, "${record.ekey}.blte").also { it.writeBytes(fixture.rawFor(record)); progress(it.length()) }
+            }
+            val first = updater()
+            val initial = first.plan(destination)
+            assertThrows(java.util.concurrent.CancellationException::class.java) {
+                first.execute(destination, initial, consentFor(initial), {
+                    workspaceRoot(paths)?.let { File(it, ".forever-casc-resume-checkpoint").length() > 40L } ?: false
+                })
+            }
+            assertNoLiveFetchWorkers("portability cut fixture")
+            val canonical = requireNotNull(workspaceRoot(paths))
+            val owner = File(canonical, ".owner").readBytes()
+            val receipt = JSONObject(File(canonical, ".transaction-stage-receipt.json").readText())
+            val payload = JSONObject(receipt.getString("payload"))
+            val stageId = payload.getString("stageId")
+            val stage = File(paths.client, ".forever-update-staging/$stageId")
+            val marker = File(stage, ".owner")
+            val oldMarker = marker.readBytes()
+            val data = File(stage, "Data/data")
+            fun segmentBytes() = data.listFiles()!!.filter { it.name.startsWith("data.") }.associate { it.name to sha256(it.readBytes()) }
+            val sourceBefore = segmentBytes()
+            val catalogDigest = fixture.catalog.verifiedSha256.lowercase()
+            val frozenIdentity = "$catalogDigest|${fixture.version}|${destination.storageId}|${paths.client.toPath().toAbsolutePath().normalize()}"
+            val generation = UUID.randomUUID().toString()
+            val newMarker = ForeverClientUpdateTransaction(paths.client, paths.journal, frozenIdentity,
+                identityStillMatches = { true }, mutationAllowed = { true })
+                .generationStagingMarkerBytes(stageId, generation)
+            val newMarkerDigest = sha256(newMarker)
+            val checkpointIdentity = "$frozenIdentity|${payload.getString("sourceRevision")}|$stageId|$newMarkerDigest"
+            val oldManifest = first.portabilityWorkspaceManifest(destination, canonical)
+            val admissionBytes = "official-fixture-admission:$cut".toByteArray()
+            var binding = ForeverClientUpdater.PortabilityIntentBinding(
+                UUID.randomUUID().toString(), generation, stageId, catalogDigest, sha256("plan:$cut".toByteArray()),
+                "01".repeat(32), "02".repeat(32), sha256(checkpointIdentity.toByteArray()),
+                sha256(oldMarker), newMarkerDigest, sha256(oldManifest), null, sha256(admissionBytes),
+            )
+            val prepared = first.portabilityPreparedWorkspace(destination, binding)
+            val membership = fixture.targetSpecs().withIndex().associateBy { it.value.ekey }
+            val verification = ForeverCasc.prepareForeignStageCheckpoint(data, prepared, checkpointIdentity,
+                catalogDigest, membership.size, { membership.getValue(it) }, { false }, {})
+            File(prepared, ".owner").writeBytes(owner)
+            payload.put("markerHash", newMarkerDigest)
+            val newPayload = payload.toString()
+            File(prepared, ".transaction-stage-receipt.json").writeText(JSONObject().put("payload", newPayload)
+                .put("sha256", sha256(newPayload.toByteArray())).toString())
+            binding = binding.copy(inventoryDigest = verification.inventoryDigest,
+                checkpointDigest = sha256(File(prepared, ".forever-casc-resume-checkpoint").readBytes()))
+            if (scenario == "without-old-workspace") {
+                check(canonical.deleteRecursively()) // This test fixture's own private state, never the USB source.
+                binding = binding.copy(oldWorkspaceDigest = null)
+            }
+            val admission = File(paths.privateRoot, "official-admission.fixture")
+            val validate: (File, Boolean) -> Unit = { candidate, forwardOnly ->
+                assertEquals(sourceBefore, segmentBytes())
+                assertArrayEquals(if (forwardOnly) newMarker else oldMarker, marker.readBytes())
+                val actualReceipt = JSONObject(File(candidate, ".transaction-stage-receipt.json").readText())
+                assertEquals(sha256(actualReceipt.getString("payload").toByteArray()), actualReceipt.getString("sha256"))
+                assertEquals(newMarkerDigest, JSONObject(actualReceipt.getString("payload")).getString("markerHash"))
+                ForeverCasc.withResumableCheckpointObjects(data, candidate, checkpointIdentity, { false }) { records ->
+                    assertEquals(verification.objectCount, records.count().toLong())
+                }
+            }
+            val readAdmission = { if (admission.exists()) sha256(admission.readBytes()) else null }
+            val publishAdmission = { admission.writeBytes(admissionBytes) }
+            first.portabilityBoundaryForTests = { if (it == cut) throw java.io.IOException("simulated durable cut: $cut") }
+            assertThrows(java.io.IOException::class.java) {
+                first.finishPortabilityTransition(destination, binding, binding.planDigest, validate, readAdmission, publishAdmission)
+            }
+            val intent = File(paths.work, ".forever-portability-intent.json")
+            assertTrue(intent.exists())
+            assertEquals(sourceBefore, segmentBytes())
+            assertThrows(IllegalStateException::class.java) { first.plan(destination) }
+            val recovered = updater()
+            val resumedBoundaries = ArrayList<String>()
+            recovered.portabilityBoundaryForTests = { resumedBoundaries += it }
+            if (scenario == "changed-reserved-bytes") {
+                val reserved = File(canonical.parentFile, "${canonical.name}.reserved-${binding.operationId}")
+                val oldCheckpoint = File(reserved, ".forever-casc-resume-checkpoint")
+                val bytes = oldCheckpoint.readBytes()
+                val time = Files.getLastModifiedTime(oldCheckpoint.toPath())
+                oldCheckpoint.writeBytes(bytes.copyOf().also { it[0] = (it[0].toInt() xor 1).toByte() })
+                Files.setLastModifiedTime(oldCheckpoint.toPath(), time)
+                val changed = reserved.walkTopDown().filter { it.isFile }.associate { it.relativeTo(reserved).path to sha256(it.readBytes()) }
+                assertThrows(IllegalArgumentException::class.java) {
+                    recovered.finishPortabilityTransition(destination, binding, binding.planDigest, validate, readAdmission, publishAdmission)
+                }
+                assertEquals(changed, reserved.walkTopDown().filter { it.isFile }.associate { it.relativeTo(reserved).path to sha256(it.readBytes()) })
+                assertTrue(intent.exists())
+                oldCheckpoint.writeBytes(bytes)
+                Files.setLastModifiedTime(oldCheckpoint.toPath(), time)
+            }
+            // Once the new marker is durable, cancellation must not roll it back or permit payload.
+            recovered.finishPortabilityTransition(destination, binding, binding.planDigest, validate, readAdmission,
+                publishAdmission, { cut == "new-marker-durable" })
+            assertTrue(resumedBoundaries.contains("marker-parent-sealed"))
+            assertFalse(intent.exists())
+            assertFalse(prepared.exists())
+            assertEquals(sourceBefore, segmentBytes())
+            assertArrayEquals(newMarker, marker.readBytes())
+            assertEquals(binding.newCatalogReceiptDigest, readAdmission())
+            assertEquals(setOf(canonical.name), canonical.parentFile!!.list()!!.toSet())
+            assertEquals(ForeverClientUpdater.ResumeGuardState.OWN_PENDING, recovered.resumeGuardState(destination))
+        }
+    }
+
+    @Test
     fun foreignPartialVerificationUsesTheAdmittedCatalogWithoutRestoringPrivateState() {
         val assets = configAssetsOrSkip()
         Fixture().use { fixture ->

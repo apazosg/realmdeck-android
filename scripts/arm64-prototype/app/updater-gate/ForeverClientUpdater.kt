@@ -3330,9 +3330,297 @@ class ForeverClientUpdater(
         },
     )
 
+    /** Derived private paths only. Preparing these files does not admit a USB source. */
+    internal fun portabilityPreparedWorkspace(
+        destination: ForeverClientUpdateDestination,
+        binding: PortabilityIntentBinding,
+    ): File {
+        encodePortabilityIntent(destination, binding)
+        require(binding.catalogDigest == targetCatalogSha256) { "portability catalog changed" }
+        return File(workBase, "${workspaceKey(destination)}.prepared-${binding.operationId}")
+    }
+
+    /**
+     * Metadata commit/recovery, NOT a verification or consent entry point. The caller must have
+     * confirmed the fresh bound plan and prepared P with prepareForeignStageCheckpoint. Validation
+     * must check the candidate receipt/checkpoint and the authenticated source bindings under this
+     * lease. After ownership changes, validation must not turn cancellation into old-state rollback.
+     * Catalog callbacks use the ordinary officially validated receipt namespace, never a new target.
+     */
+    internal fun finishPortabilityTransition(
+        destination: ForeverClientUpdateDestination,
+        binding: PortabilityIntentBinding,
+        confirmedPlanDigest: String,
+        validatePreparedAndSource: (File, Boolean) -> Unit,
+        catalogReceiptDigest: () -> String?,
+        publishCatalogReceipt: () -> Unit,
+        cancelled: () -> Boolean = { false },
+    ) = withLease(destination, allowRootPending = true, allowPortabilityIntent = true) {
+        require(confirmedPlanDigest == binding.planDigest) { "portability plan was not confirmed" }
+        validateDestination(destination)
+        require(!transaction(destination).hasPendingTransaction()) { "recover the ordinary journal first" }
+        val prepared = portabilityPreparedWorkspace(destination, binding)
+        val canonical = resumableWorkspacePath(destination)
+        val reserved = File(workBase, "${workspaceKey(destination)}.reserved-${binding.operationId}")
+        val intent = File(privateWorkDirectory, ".forever-portability-intent.json")
+        val manifest = File(privateWorkDirectory, ".forever-portability-${binding.operationId}.old-workspace")
+        val intentBytes = encodePortabilityIntent(destination, binding)
+        val marker = File(File(File(destination.root, TRANSACTION_STAGING_NAME), binding.stageId), TRANSACTION_STAGE_OWNER_NAME)
+        requireSafeAncestors(marker.toPath())
+        val newMarker = transaction(destination).generationStagingMarkerBytes(binding.stageId, binding.generation)
+        require(sha256(newMarker) == binding.newMarkerDigest) { "new ownership generation changed" }
+        fun exists(file: File) = Files.exists(file.toPath(), LinkOption.NOFOLLOW_LINKS)
+        fun markerDigest() = sha256(readPortabilityFile(marker, 4096))
+        fun checkCatalog() = require(catalogReceiptDigest().let {
+            it == binding.oldCatalogReceiptDigest || it == binding.newCatalogReceiptDigest
+        }) { "active catalog receipt changed outside portability recovery" }
+        fun validateCandidate(root: File, forwardOnly: Boolean) {
+            requireSafeAncestors(root.toPath())
+            requireExactFile(File(root, WORKSPACE_OWNER_NAME).toPath(), workspaceOwnerBytes(destination, EMPTY_SOURCE_REVISION), "prepared workspace owner")
+            validatePrivateWorkspaceContents(root)
+            val expectedFiles = setOf(WORKSPACE_OWNER_NAME, STAGE_RECEIPT_NAME, CASC_RESUME_OWNER_NAME, CASC_RESUME_CHECKPOINT_NAME)
+            require(boundedPortabilityWorkspaceNodes(root).map { root.toPath().relativize(it).toString() }.toSet() == expectedFiles) {
+                "prepared workspace contains unexpected state"
+            }
+            val checkpoint = File(root, CASC_RESUME_CHECKPOINT_NAME)
+            require(Files.isRegularFile(checkpoint.toPath(), LinkOption.NOFOLLOW_LINKS) && !Files.isSymbolicLink(checkpoint.toPath()))
+            require(sha256File(checkpoint) == binding.checkpointDigest) { "prepared checkpoint changed" }
+            val header = "FWCASCR1".toByteArray(Charsets.US_ASCII) + binding.checkpointIdentityDigest.chunked(2).map { it.toInt(16).toByte() }.toByteArray()
+            requireExactFile(File(root, CASC_RESUME_OWNER_NAME).toPath(), header, "prepared checkpoint identity")
+            validatePreparedAndSource(root, forwardOnly)
+            destination.revalidate()
+            verifyStorageMarker(destination)
+        }
+        fun boundary(name: String) { portabilityBoundaryForTests?.invoke(name) }
+
+        if (exists(intent)) {
+            require(decodePortabilityIntent(destination, binding.catalogDigest, readPortabilityFile(intent, MAX_STAGE_RECEIPT_BYTES)) == binding) {
+                "a different portability transition is pending"
+            }
+            // The previous process may have stopped after rename but before the directory force.
+            forceDirectory(privateWorkDirectory.toPath())
+        } else {
+            checkCancelled(cancelled)
+            require(markerDigest() == binding.oldMarkerDigest) { "foreign ownership changed before intent" }
+            require(!exists(reserved)) { "unexpected reserved workspace" }
+            require(catalogReceiptDigest() == binding.oldCatalogReceiptDigest) { "old active admission changed" }
+            validateCandidate(prepared, false)
+            if (binding.oldWorkspaceDigest == null) {
+                require(!exists(canonical) && !exists(manifest)) { "unexpected previous workspace" }
+            } else {
+                val bytes = portabilityWorkspaceManifest(destination, canonical)
+                require(sha256(bytes) == binding.oldWorkspaceDigest) { "previous private workspace changed" }
+                publishPortabilityFile(manifest, bytes, binding.operationId)
+            }
+            // P's checkpoint and all its files must already be durable before the intent can fence
+            // ordinary entry. Source-data forces belong to the authenticated preparation helper.
+            boundedPortabilityWorkspaceNodes(prepared).forEach { path ->
+                FileChannel.open(path, StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS).use { it.force(true) }
+            }
+            forceDirectory(prepared.toPath())
+            forceDirectory(workBase.toPath()) // Persist P's directory entry before the durable intent.
+            publishPortabilityFile(intent, intentBytes, binding.operationId)
+            boundary("intent-durable")
+        }
+
+        checkCatalog()
+        when (markerDigest()) {
+            binding.oldMarkerDigest -> {
+                checkCancelled(cancelled)
+                validateCandidate(prepared, false)
+                if (binding.oldWorkspaceDigest == null) {
+                    require(!exists(canonical) && !exists(reserved)) { "unexpected old private state" }
+                } else {
+                    val expected = readPortabilityFile(manifest, 2 * 1024 * 1024)
+                    require(sha256(expected) == binding.oldWorkspaceDigest) { "old workspace manifest changed" }
+                    require(exists(canonical) != exists(reserved)) { "ambiguous previous workspace reservation" }
+                    val old = if (exists(canonical)) canonical else reserved
+                    require(portabilityWorkspaceManifest(destination, old).contentEquals(expected)) { "old workspace contents changed" }
+                    if (old == canonical) {
+                        Files.move(canonical.toPath(), reserved.toPath(), StandardCopyOption.ATOMIC_MOVE)
+                    }
+                    forceDirectory(workBase.toPath())
+                }
+                boundary("old-workspace-reserved")
+                checkCancelled(cancelled)
+                validateCandidate(prepared, false)
+                require(markerDigest() == binding.oldMarkerDigest)
+                replacePortabilityMarker(marker, newMarker, binding.operationId)
+                boundary("new-marker-durable")
+            }
+            binding.newMarkerDigest -> Unit // Forward recovery only; never restore the old marker.
+            else -> throw IllegalStateException("USB ownership is not bound to this intent")
+        }
+        // Observing new bytes is not evidence that the preceding rename's barrier completed.
+        forceDirectory(requireNotNull(marker.parentFile).toPath())
+        boundary("marker-parent-sealed")
+
+        if (exists(prepared)) {
+            require(!exists(canonical)) { "both prepared and canonical workspaces exist" }
+            validateCandidate(prepared, true)
+            Files.move(prepared.toPath(), canonical.toPath(), StandardCopyOption.ATOMIC_MOVE)
+            boundary("new-workspace-renamed")
+            forceDirectory(workBase.toPath())
+            boundary("new-workspace-durable")
+        }
+        validateCandidate(canonical, true)
+        forceDirectory(workBase.toPath())
+        require(markerDigest() == binding.newMarkerDigest)
+        checkCatalog()
+        // The publisher must be idempotent and reestablish file+parent durability even when the
+        // new digest is already visible after an interrupted earlier publication.
+        publishCatalogReceipt()
+        require(catalogReceiptDigest() == binding.newCatalogReceiptDigest) { "new official admission was not published" }
+        boundary("catalog-durable")
+
+        if (exists(reserved)) {
+            val bytes = readPortabilityFile(manifest, 2 * 1024 * 1024)
+            require(binding.oldWorkspaceDigest != null && sha256(bytes) == binding.oldWorkspaceDigest)
+            removeReservedPortabilityWorkspace(reserved, bytes)
+            forceDirectory(workBase.toPath())
+        }
+        if (exists(manifest)) {
+            require(binding.oldWorkspaceDigest != null && sha256(readPortabilityFile(manifest, 2 * 1024 * 1024)) == binding.oldWorkspaceDigest)
+            Files.delete(manifest.toPath())
+            forceDirectory(privateWorkDirectory.toPath())
+        }
+        boundary("reserved-state-cleaned")
+        validateCandidate(canonical, true)
+        require(markerDigest() == binding.newMarkerDigest && catalogReceiptDigest() == binding.newCatalogReceiptDigest)
+        requireExactFile(intent.toPath(), intentBytes, "pending portability intent")
+        Files.delete(intent.toPath())
+        forceDirectory(privateWorkDirectory.toPath())
+        boundary("intent-removed")
+        // Never start payload work here. Ordinary planning/consent is a separate subsequent action.
+    }
+
+    internal var portabilityBoundaryForTests: ((String) -> Unit)? = null
+
+    /** A bounded, private cleanup manifest; not a catalog or a USB authentication substitute. */
+    internal fun portabilityWorkspaceManifest(destination: ForeverClientUpdateDestination, root: File): ByteArray {
+        requireSafeAncestors(root.toPath())
+        requireExactFile(File(root, WORKSPACE_OWNER_NAME).toPath(), workspaceOwnerBytes(destination, EMPTY_SOURCE_REVISION), "previous private workspace owner")
+        validatePrivateWorkspaceContents(root)
+        val entries = JSONArray()
+        val nodes = boundedPortabilityWorkspaceNodes(root)
+        var fileBytes = 0L
+        nodes.forEach { path ->
+            val attributes = Files.readAttributes(path, java.nio.file.attribute.BasicFileAttributes::class.java, LinkOption.NOFOLLOW_LINKS)
+            val entry = JSONObject().put("path", root.toPath().relativize(path).toString().replace(File.separatorChar, '/'))
+                .put("key", requireNotNull(attributes.fileKey()).toString()).put("directory", attributes.isDirectory)
+            if (!attributes.isDirectory) {
+                fileBytes = Math.addExact(fileBytes, attributes.size())
+                require(fileBytes <= 2L * 1024 * 1024 * 1024) { "previous private workspace exceeds its recovery bound" }
+                entry.put("size", attributes.size()).put("mtime", attributes.lastModifiedTime().toString()).put("sha256", sha256File(path.toFile()))
+            }
+            entries.put(entry)
+        }
+        val rootKey = requireNotNull(Files.readAttributes(root.toPath(), java.nio.file.attribute.BasicFileAttributes::class.java, LinkOption.NOFOLLOW_LINKS).fileKey()).toString()
+        return JSONObject().put("version", 1).put("root_key", rootKey).put("entries", entries).toString().toByteArray(Charsets.UTF_8).also {
+            require(it.size <= 2 * 1024 * 1024) { "private cleanup manifest exceeds its bound" }
+        }
+    }
+
+    private fun boundedPortabilityWorkspaceNodes(root: File): List<Path> {
+        require(!Files.isSymbolicLink(root.toPath()) && Files.isDirectory(root.toPath(), LinkOption.NOFOLLOW_LINKS))
+        val nodes = ArrayList<Path>()
+        Files.walk(root.toPath()).use { paths ->
+            val iterator = paths.iterator()
+            while (iterator.hasNext()) {
+                val path = iterator.next()
+                require(!Files.isSymbolicLink(path)) { "private portability state contains a symlink" }
+                if (path == root.toPath()) continue
+                require(nodes.size < 4096 && root.toPath().relativize(path).toString().length <= 1024) { "private portability state exceeds its bound" }
+                require(Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS) || Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS))
+                nodes.add(path)
+            }
+        }
+        return nodes.sortedBy { root.toPath().relativize(it).toString() }
+    }
+
+    private fun removeReservedPortabilityWorkspace(root: File, manifestBytes: ByteArray) {
+        val manifest = JSONObject(String(manifestBytes, Charsets.UTF_8))
+        require(manifest.getInt("version") == 1)
+        val rootAttributes = Files.readAttributes(root.toPath(), java.nio.file.attribute.BasicFileAttributes::class.java, LinkOption.NOFOLLOW_LINKS)
+        require(rootAttributes.fileKey()?.toString() == manifest.getString("root_key")) { "reserved workspace identity changed" }
+        val entries = manifest.getJSONArray("entries")
+        require(entries.length() <= 4096)
+        val expected = HashMap<String, JSONObject>()
+        for (index in 0 until entries.length()) {
+            val entry = entries.getJSONObject(index)
+            require(expected.put(entry.getString("path"), entry) == null)
+        }
+        // A crash may have removed a subset. Authenticate all remaining PRIVATE entries before any
+        // deletion; same-sized, same-mtime corruption must not be discarded. This never scans USB
+        // CASC bodies, and the private reservation has an explicit total-byte bound.
+        val nodes = boundedPortabilityWorkspaceNodes(root)
+        var fileBytes = 0L
+        nodes.forEach { path ->
+            val entry = requireNotNull(expected[root.toPath().relativize(path).toString().replace(File.separatorChar, '/')]) { "unowned reserved entry" }
+            val attributes = Files.readAttributes(path, java.nio.file.attribute.BasicFileAttributes::class.java, LinkOption.NOFOLLOW_LINKS)
+            require(attributes.fileKey()?.toString() == entry.getString("key") && attributes.isDirectory == entry.getBoolean("directory"))
+            if (!attributes.isDirectory) {
+                fileBytes = Math.addExact(fileBytes, attributes.size())
+                require(fileBytes <= 2L * 1024 * 1024 * 1024)
+                require(attributes.size() == entry.getLong("size") && attributes.lastModifiedTime().toString() == entry.getString("mtime"))
+                require(sha256File(path.toFile()) == entry.getString("sha256")) { "reserved private contents changed" }
+            }
+        }
+        nodes.sortedByDescending { it.nameCount }.forEach {
+            Files.delete(it)
+            portabilityBoundaryForTests?.invoke("reserved-entry-removed")
+        }
+        Files.delete(root.toPath())
+    }
+
+    private fun readPortabilityFile(file: File, maximum: Int): ByteArray {
+        requireSafeAncestors(file.toPath())
+        require(!Files.isSymbolicLink(file.toPath()) && Files.isRegularFile(file.toPath(), LinkOption.NOFOLLOW_LINKS))
+        val bytes = ByteArray(maximum + 1)
+        var count = 0
+        Files.newInputStream(file.toPath(), StandardOpenOption.READ, LinkOption.NOFOLLOW_LINKS).use { input ->
+            while (count < bytes.size) {
+                val read = input.read(bytes, count, bytes.size - count)
+                if (read < 0) break
+                require(read > 0) { "private portability read made no progress" }
+                count += read
+            }
+        }
+        require(count in 1..maximum) { "private portability file exceeds its bound" }
+        return bytes.copyOf(count)
+    }
+
+    private fun publishPortabilityFile(file: File, bytes: ByteArray, operationId: String) {
+        if (Files.exists(file.toPath(), LinkOption.NOFOLLOW_LINKS)) {
+            requireExactFile(file.toPath(), bytes, "prepared private portability metadata")
+            return
+        }
+        replacePortabilityMarker(file, bytes, operationId)
+    }
+
+    private fun replacePortabilityMarker(file: File, bytes: ByteArray, operationId: String) {
+        requireSafeAncestors(file.toPath())
+        val temporary = File(requireNotNull(file.parentFile), ".${file.name}.portability-$operationId.tmp")
+        if (Files.exists(temporary.toPath(), LinkOption.NOFOLLOW_LINKS)) {
+            require(!Files.isSymbolicLink(temporary.toPath()) && Files.isRegularFile(temporary.toPath(), LinkOption.NOFOLLOW_LINKS))
+            val partial = if (Files.size(temporary.toPath()) == 0L) byteArrayOf() else readPortabilityFile(temporary, bytes.size)
+            require(partial.size <= bytes.size && partial.contentEquals(bytes.copyOf(partial.size))) { "unowned portability temporary" }
+            Files.delete(temporary.toPath())
+            forceDirectory(requireNotNull(file.parentFile).toPath())
+        }
+        FileChannel.open(temporary.toPath(), StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS).use { channel ->
+            writeFully(channel, ByteBuffer.wrap(bytes))
+            channel.force(true)
+        }
+        Files.move(temporary.toPath(), file.toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
+        portabilityBoundaryForTests?.invoke("metadata-renamed:${file.name}")
+        forceDirectory(requireNotNull(file.parentFile).toPath())
+    }
+
     private inline fun <T> withLease(
         destination: ForeverClientUpdateDestination,
         allowRootPending: Boolean = false,
+        allowPortabilityIntent: Boolean = false,
         action: (leaseHeld: () -> Boolean) -> T,
     ): T {
         destination.revalidate()
@@ -3341,7 +3629,7 @@ class ForeverClientUpdater(
         val lease = operationLease.acquireUpdate(destination.storageId) { hasPendingUpdateState(destination) }
         try {
             destination.revalidate()
-            if (portabilityIntentPresent()) {
+            if (!allowPortabilityIntent && portabilityIntentPresent()) {
                 throw IllegalStateException("finish the explicit USB portability recovery before ordinary updater operations")
             }
             if (!allowRootPending && hasPendingTransaction(destination)) {
