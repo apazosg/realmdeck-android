@@ -1534,6 +1534,34 @@ class ForeverClientUpdaterTest {
     }
 
     @Test
+    fun pendingPortabilityIntentBlocksOrdinaryPlanningExecutionAndRecoveryWithoutDeletion() {
+        val configAssets = configAssetsOrSkip()
+        Fixture().use { fixture ->
+            val paths = fixture.makePaths()
+            val destination = fixture.destination(paths)
+            val fetch: (ForeverClientUpdateCatalog.ObjectRecord, File, () -> Boolean, (Long) -> Unit) -> File =
+                { _, _, _, _ -> throw AssertionError("pending portability must not fetch") }
+            val updater = fixture.updater(paths, configAssets, fetch)
+            val plan = updater.plan(destination)
+            val intent = File(paths.work, ".forever-portability-intent.json")
+            // Even malformed bytes fence normal entry; only explicit recovery
+            // may parse them, and must preserve them on failure.
+            val original = byteArrayOf(1, 2, 3)
+            intent.writeBytes(original)
+            val clientBefore = paths.client.list()!!.toSet()
+            assertEquals(ForeverClientUpdater.ResumeGuardState.BLOCKED, updater.resumeGuardState(destination))
+            assertThrows(IllegalStateException::class.java) { updater.plan(destination) }
+            assertThrows(IllegalStateException::class.java) {
+                updater.execute(destination, plan, consentFor(plan))
+            }
+            assertThrows(IllegalStateException::class.java) { updater.recover(destination) }
+            assertTrue(original.contentEquals(intent.readBytes()))
+            assertEquals(clientBefore, paths.client.list()!!.toSet())
+            assertNoLiveFetchWorkers("pending portability intent")
+        }
+    }
+
+    @Test
     fun generationReceiptGuardRequiresItsExactPrivateHashAndNeverAdoptsForeignStage() {
         val configAssets = configAssetsOrSkip()
         Fixture().use { fixture ->

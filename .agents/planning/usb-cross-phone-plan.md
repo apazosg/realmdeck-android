@@ -203,6 +203,12 @@ consentimiento del plan real antes de adoptar o descargar.
 
 ## Open Issues
 
+- Guarda privada de intención pendiente implementada localmente: su presencia,
+  incluso con bytes malformados, bloquea plan, execute, recover y Resume ordinarios;
+  la lease conserva la operación pendiente. Un test focal pasa (JUnit 19:10:01 UTC),
+  sin modificar datos del destino ni retirar la intención. Es solo la barrera de
+  entrada: parser, publicación durable C/P/S y recuperación explícita siguen pendientes,
+  al igual que la revisión sensible de esta integración. Sin acción en el USB real.
 - Integración local del recibo generacional: tres controles del updater reutilizan
   el lector canónico acotado de Transaction y su hash privado, sin admitir un stage
   extranjero ni un checkpoint nuevo. Tres tests focales pasan (JUnit 18:21:51 UTC),

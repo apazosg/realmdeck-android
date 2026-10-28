@@ -613,6 +613,9 @@ class ForeverClientUpdater(
      * recovered or reset.
      */
     internal fun resumeGuardState(destination: ForeverClientUpdateDestination): ResumeGuardState {
+        // A pending takeover must be handled by its explicit recovery path, never
+        // by ordinary journal recovery or a stale receipt, even if malformed.
+        if (portabilityIntentPresent()) return ResumeGuardState.BLOCKED
         val receipt: UpdateStageReceipt? = try {
             readStageReceipt(destination)
         } catch (failure: CancellationException) {
@@ -3249,6 +3252,9 @@ class ForeverClientUpdater(
         val lease = operationLease.acquireUpdate(destination.storageId) { hasPendingUpdateState(destination) }
         try {
             destination.revalidate()
+            if (portabilityIntentPresent()) {
+                throw IllegalStateException("finish the explicit USB portability recovery before ordinary updater operations")
+            }
             if (!allowRootPending && hasPendingTransaction(destination)) {
                 throw IllegalStateException("recover the unfinished client transaction before planning or updating")
             }
@@ -3285,8 +3291,14 @@ class ForeverClientUpdater(
     }
 
     private fun hasPendingUpdateState(destination: ForeverClientUpdateDestination): Boolean =
-        hasPendingTransaction(destination) ||
+        portabilityIntentPresent() || hasPendingTransaction(destination) ||
             Files.exists(resumableWorkspacePath(destination).toPath(), LinkOption.NOFOLLOW_LINKS)
+
+    /** Global private fence survives replacement of the canonical workspace. */
+    private fun portabilityIntentPresent(): Boolean = Files.exists(
+        File(privateWorkDirectory, ".forever-portability-intent.json").toPath(),
+        LinkOption.NOFOLLOW_LINKS,
+    )
 
     /** Reject any root stage that is not the exact UUID/hash pair in private updater state. */
     private fun cleanupOrphanTransactionStaging(destination: ForeverClientUpdateDestination) {
