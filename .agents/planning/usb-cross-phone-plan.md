@@ -10,8 +10,8 @@ La primera fase autorizada fue pausa, inspección sin cambios y devolución:
 «es mi móvil. activo el adb wifi también y probamos. avisame y quito el USB de uno
 y lo pongo en el nuevo». Después confirma «Ya está enchufado en el mío» y facilita
 un endpoint privado. Después aclara: «pero tenemos que resolverlo en este móvil no?
-el objetivo es poder moverlo de un móvil a otro». El USB permanece en el segundo
-móvil: devolverlo al original no constituye una solución de portabilidad.
+el objetivo es poder moverlo de un móvil a otro». En ese corte el USB permanece en
+el segundo móvil: devolverlo al original no constituye una solución de portabilidad.
 La inspección y C160 ya están verificadas. El usuario eligió **«Ambos»**:
 reutilizar el cliente terminado y continuar el parcial en el segundo móvil.
 La selección está resuelta y después aprobó **«Aprobar criterios»** para
@@ -192,6 +192,14 @@ de reutilización: pruebas e implementación conservan sus puertas.
 
 ## Open Issues
 
+- Nuevo escenario solicitado el 28-10: el usuario borró los datos de la app y devolvió
+  el USB al móvil original. Lectura 17:22:09 UTC: la app informa C160, sin workspace
+  privado previo, admisión dinámica ni preferencias de almacenamiento en las rutas
+  comprobadas. USB esperado montado, `.owner` igual al histórico y mismos 81 nombres
+  y tamaños CASC, 51.625.635.891 bytes. Sin lanzar app, UI, descarga o adopción;
+  cero servicios updater antes/después. No hay nuevo recuento de objetos autenticados.
+  Esta fixture prueba ausencia de estado local; no sustituye la validación entre
+  teléfonos distintos ni aprueba los TC pendientes. No restaurar el checkpoint antiguo.
 - Actualización C160 completada y verificada en versión/UID/metadatos. La app se
   abrió después por petición expresa, sin descargar/reparar/adoptar el parcial ni
   migrar el checkpoint. La inspección de archivos del cliente sigue siendo de

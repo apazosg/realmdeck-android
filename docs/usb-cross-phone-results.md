@@ -218,3 +218,35 @@ Evidencia externa: `personal-storage-options/summary.json`,
 `personal-current-usb-selection/summary.json`, sus dos inventarios y
 `permission-verification.json`. Informes iniciales fallidos conservados, ninguna
 confirmación de selección repetida. No se hashearon todos los cuerpos CASC.
+
+## Original con datos de app borrados: nuevo escenario del 28-10
+
+El usuario comunica que borró los datos de la app y volvió a conectar el USB al
+móvil original para simular la reutilización sin historial local. Tras un anuncio
+ADB que no conectaba, el emparejamiento normal expresamente solicitado permitió
+conectar y verificar el modelo original. Sin escaneo de puertos ni excepción de
+seguridad; el código de emparejamiento no se guarda en los artefactos.
+
+Inspección de metadatos **17:22:07–17:22:09 UTC**, sin abrir la app:
+
+- La app informa C160 `0.2.136-bounded-blte-buffers-test`.
+- No existen las rutas comprobadas del workspace privado del updater, la admisión
+  dinámica activa ni las preferencias de selección de almacenamiento.
+- El USB esperado está montado. El staging conserva el digest `.owner` histórico
+  y los **81 archivos CASC / 51.625.635.891 bytes**, con los mismos nombres y tamaños.
+- Cero servicios updater antes/después. Sin acciones UI, descarga, reparación,
+  preparación, adopción, copia de checkpoint/recibo ni cambio de permisos.
+
+Esto confirma un escenario útil de **datos externos presentes sin el estado privado
+anterior**. No es todavía recuperación: no se han autenticado los cuerpos CASC ni
+reconstruido el progreso. Los 822.658 objetos anteriores siguen siendo evidencia
+pretraslado, no un recuento reconocido en este estado nuevo. El recibo histórico
+se usa solo para localizar/comparar metadatos, no para reintroducirlo como autoridad.
+
+La ausencia de estado local no reproduce todas las diferencias de otro Android o
+teléfono. La implementación de adopción y la revisión de TC-007–013 siguen pendientes;
+no se usará Descargar como atajo. Evidencia externa:
+`usb-cross-phone-20261028/pairing-attempt-01/summary.json` y
+`usb-cross-phone-20261028/reset-original-readonly/summary.json`, atributos/listado CASC
+y verificación de comparación con el inventario previo. El código de producto no
+se ha cambiado para esta inspección.
