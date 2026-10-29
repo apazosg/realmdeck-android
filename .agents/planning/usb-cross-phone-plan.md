@@ -223,6 +223,23 @@ consentimiento del plan real antes de adoptar o descargar.
 
 ## Open Issues
 
+- Diagnóstico corto C165 cerrado: única revisión 21:10:19→21:13:50 UTC,
+  perfil propio de 15 s capturado y cancelación/idle confirmados; ninguna adopción
+  ni payload. El primer intento había fallado antes de cualquier click porque
+  Management ya estaba abierto; se conservó y solo se continuó desde la pantalla
+  real. Traza `diagnostic-current-profile` (3281750 bytes, SHA256
+  `92a277524fd9138b6440290e7ea2a27dbdaffcf8e5248271fc503972bf27e7a5`):
+  siete consultas host nuevas, sin recaptura, sin errores/pérdidas reportados;
+  cuatro errores parciales de unwind en main/GC. Productor: 99 muestras,
+  4,879902096 CPU-s, 54 muestras inclusivas en membership (27 objectByKey,
+  25 ordinalOf). Workers de autenticación: 11,49454332 CPU-s en conjunto,
+  con BLTE/inflate efectivo. Frames inclusivos no son partición de tiempo.
+  Corrección siguiente: consultas existentes por lotes de claves/ordinales,
+  descriptores acotados a 64 o al máximo admitido menor; conservar cuatro
+  futuros, orden físico, autenticación completa, cancelación/join y fallback
+  secuencial de preparación/recuperación. Pruebas focales y revisión antes
+  de nueva candidata; no se atribuye aún mejora física ni cumplimiento de 900 s.
+
 - Diagnóstico siguiente de C165, distinto de la medición cerrada: una revisión
   nueva con máximo 300 s para observar autenticación, un único perfil de CPU/
   scheduling de 15 s con la configuración ya validada y cancelación cooperativa
