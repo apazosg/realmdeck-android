@@ -113,8 +113,8 @@ PINNED_UPDATER_CASC_PREIMAGES = {
 # Locally reviewed foreign-stage verification/planning and checkpoint preparation;
 # checkpoint frames unchanged. Independent whole-feature review remains a release gate.
 PINNED_UPDATER_CASC_POSTIMAGES = {
-    "ForeverCasc.kt": "26644bcca1a1c47b2d61e8e12ce8bb40bf425616f5728a1844cbbd9a7636e39b",
-    "ForeverCascTest.kt": "b5d203478182231873660e70d0dcf1fc54aadf2083ae9d0f58e772d3d53b2201",
+    "ForeverCasc.kt": "abefaca10fa709edae7bf2c4336b666c5a152ccfdc4f3d5b076ee1d5e1c66880",
+    "ForeverCascTest.kt": "8fcbca92499e8f4e84dbe44ccac53393dfe8723d744b34e483ed7114b378acc6",
 }
 # Reviewed reconstruction edit (2026-10-18): TACT-encrypted ('E') BLTE frames are
 # verified without decryption for CASC reconstruction consumers; strict decode is
@@ -133,7 +133,7 @@ BRIDGE_TARGET = Path("app/src/main/java/com/wowforever/launcher/ForeverPatchBrid
 CODE64_NATIVE_MEMBER = "lib/arm64-v8a/libforever_patcher_jni.so"
 FUNCTIONAL_MARKER_MEMBER = "assets/forever/functional-poc/provenance.json"
 SOURCE_VERSION = (62, "0.2.38-automated")
-CANDIDATE_VERSION = (165, "0.2.141-parallel-usb-review-test")
+CANDIDATE_VERSION = (166, "0.2.142-batched-usb-review-test")
 FUNCTIONAL_OVERLAY_NAMES = (
     "ForeverAddons.kt",
     "ForeverAddonsApi.kt",
