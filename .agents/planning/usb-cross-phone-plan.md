@@ -223,6 +223,15 @@ consentimiento del plan real antes de adoptar o descargar.
 
 ## Open Issues
 
+- C164 canónica terminada el 29-10 a las 19:46:29: build offline 5m22s,
+  auditoría exacta `PASS_SOURCE_BUILD_AND_PAYLOAD_AUDIT`, 2231 fuentes
+  coincidentes con el recibo y 178 payloads. APK 485364419 bytes, SHA-256
+  `e4da3f0970c7937c6dcff2676c271d99c1f85981f022947ab2eb4164e122dd54`.
+  Se prepara sustitución preservadora autorizada C163→C164, exigiendo UI idle
+  real además de cero foreground updater, mismo UID y marcador/diccionario
+  completo de nombres/tamaños CASC antes/después. No autoarranque, adopción ni
+  payload desde el instalador. Solo la medición posterior podrá aceptar <=900 s.
+
 - Corrección guiada por perfil físico C163, 29-10: captura única de 15 s,
   `usb-portability-c163-20261029/active-review-profile/analysis/`: 51 muestras
   del hilo verificador, 45 inclusivas en revalidación por objeto, 34 en el
