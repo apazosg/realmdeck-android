@@ -223,6 +223,21 @@ consentimiento del plan real antes de adoptar o descargar.
 
 ## Open Issues
 
+- Perfil real C164 de 15 s (29-10, 19:58:45–19:59:01): el coste dominante ya no
+  son las comprobaciones FUSE repetidas. El worker tiene 205 muestras CPU, 152 en
+  verificación BLTE y 116 en inflate; tiempos inclusivos, no sumables. Consume
+  10.6365 s CPU/15 s; GC 3.6043 s. El contador observado a 349 s era 47148 objetos/
+  3.1 GiB, insuficiente para aceptar 900 s. Evidencia fuera de Git en
+  `usb-portability-c164-20261029/active-review-profile/analysis`.
+  Próxima corrección acotada propuesta dentro de la revisión explícita: hasta
+  cuatro autenticaciones independientes en paralelo, streaming sin cuerpos
+  completos en RAM, con admisión/callbacks en orden físico y bajo la misma
+  exclusión; drenar antes de cerrar cada segmento y cancelar/unir los workers
+  antes de devolver o limpiar. Sin paralelizar mutaciones ni cambiar checks,
+  cotas de descarga o Home/Resume. Exige pruebas focales, revisión sensible y
+  nueva candidata exacta antes de cualquier instalación. La medición C164
+  original no se reinicia y conserva su cancelación a los 900 s.
+
 - Sustitución C163→C164 terminada el 29-10 a las 19:48:43, instalación confirmada,
   mismo UID, cero updater antes/después y marcador+81 nombres/tamaños CASC
   idénticos (51625635891 bytes). No autoarranque ni operaciones del cliente.
