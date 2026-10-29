@@ -223,6 +223,19 @@ consentimiento del plan real antes de adoptar o descargar.
 
 ## Open Issues
 
+- C166: revisión única 21:43:53→21:59:13 UTC, sin resumen antes de 900 s;
+  cancelación cooperativa e idle confirmados y cero updater posterior. No adopción
+  ni payload. Las muestras muestran preparación de metadatos (download/size/root
+  y catálogo de archivos), no el contador de autenticación USB. Diagnóstico de
+  solo lectura en `usb-portability-c166-20261029/metadata-postmortem`: catálogo
+  terminado con fingerprint anterior; caché nueva para otra configuración CDN,
+  manteniendo build 70532 y build-config. El resolver solo reutiliza el directorio
+  final de la fingerprint exacta (incluye CDN). No atribuir este ensayo al coste
+  de las búsquedas por lotes ni saltarse esa frontera de confianza. Próximo análisis:
+  reutilización de metadatos con identidad criptográfica compartida, sin asumir
+  que los índices/ubicaciones de otra CDN son válidos. Mantener las dos evidencias
+  y no repetir esta revisión ni ninguna instalación/prueba ya cerrada.
+
 - C166 instalada: final 2026-10-29 21:41:42 UTC, `install -r` confirmado,
   UID conservado, cero updater antes/después, marcador y 81 archivos/
   51625635891 bytes sin cambios de metadatos; no lanzamiento automático ni
