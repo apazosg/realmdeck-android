@@ -265,6 +265,12 @@ class ForeverClientUpdaterTest {
             assertEquals(plan.totalObjects - verified.objects.objectCount, verified.targetPlan.missingObjects)
             assertEquals(fixture.catalog.summary().totalEncodedBytes - verified.objects.encodedBytes,
                 verified.targetPlan.downloadBytes)
+            assertTrue(verified.review.downloadBytes >= verified.targetPlan.downloadBytes)
+            assertEquals(verified.review.privateAdditionalBytes + verified.review.destinationAdditionalBytes,
+                verified.review.peakAdditionalBytes)
+            assertTrue(verified.review.privateAdditionalBytes > 0)
+            assertTrue(verified.review.destinationAdditionalBytes >= verified.targetPlan.newSegmentBytesUpperBound)
+            assertEquals(64, verified.review.digest.length)
             records.forEach { spec ->
                 val admitted = fixture.catalog.objectByKey(spec.ekey)
                 assertEquals(admitted.contentKey, spec.contentKey)

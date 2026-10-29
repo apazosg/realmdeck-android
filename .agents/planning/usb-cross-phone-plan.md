@@ -203,6 +203,22 @@ consentimiento del plan real antes de adoptar o descargar.
 
 ## Open Issues
 
+- 2026-10-29: la verificación explícita devuelve además un resumen provisional
+  de descarga y espacio privado/destino/pico, ligado por digest al catálogo,
+  volumen/ruta, marcador, inventario autenticado y snapshot loose/config.
+  Incluye segmentos retenidos en el límite transaccional, checkpoint nuevo completo
+  y manifest privado; no acredita como libre el staging existente ni copia el
+  checkpoint del móvil anterior. Son cotas conservadoras, no un plan ejecutable
+  ni consentimiento. Service usa los configs de la candidata sin activarla.
+  La prueba sintética existente de verificación/reutilización pasa con las nuevas
+  aserciones: `portability-review-tests/summary.json`, 1 test/0 fallos, paridad
+  de fuentes, Gradle offline 4m8s. Se recuperó el resultado original tras reinicio,
+  sin repetir Gradle. Revisión limitada al snapshot suministrado, sin acceso del
+  revisor al repositorio; no satisface la revisión independiente integral.
+  No nuevos escaneos de cuerpos ni llamadas desde Home/Resume ordinario; no USB,
+  APK ni adopción real. Pendientes consentimiento/UI, preparación/publicación
+  integrada y recuperación, auditoría de candidata y validación física completa.
+
 - Planificación integrada tras autenticación: `inspectForeignTarget` y el
   verificador explícito de Updater devuelven reutilizados, faltantes, bytes de
   delta y cotas CASC de segmentos/índices. Los cuerpos se verifican una sola vez;

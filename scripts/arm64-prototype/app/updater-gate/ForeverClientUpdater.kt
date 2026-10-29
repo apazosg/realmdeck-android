@@ -3740,7 +3740,78 @@ class ForeverClientUpdater(
         val markerDigest: String,
         val objects: ForeverCasc.ForeignStageVerification,
         val targetPlan: ForeverCasc.TargetScanResult,
+        val review: PortabilityReview,
     )
+
+    /** Review only: this is not an ordinary executable plan or an adoption token. */
+    internal data class PortabilityReview(
+        val digest: String,
+        val downloadBytes: Long,
+        val privateAdditionalBytes: Long,
+        val destinationAdditionalBytes: Long,
+        val peakAdditionalBytes: Long,
+        val hasEnoughSpace: Boolean,
+        val snapshotHash: String,
+    )
+
+    private fun portabilityReview(
+        destination: ForeverClientUpdateDestination,
+        markerDigest: String,
+        verified: ForeverCasc.ForeignStageVerification,
+        scan: ForeverCasc.TargetScanResult,
+        cancelled: () -> Boolean,
+    ): PortabilityReview {
+        checkCancelled(cancelled)
+        val configs = validateConfigAssets()
+        val loose = inspectLooseFiles(destination)
+        val buildInfo = buildInfoBytes()
+        var configBytes = 0L
+        var configCount = 0
+        val observed = configs.associate { config ->
+            val file = configTarget(destination.root, config.hash)
+            val current = existingFingerprint(file)
+            if (current == null) {
+                configBytes = Math.addExact(configBytes, config.size)
+                configCount++
+            } else check(configMatches(file, config.hash)) { "existing CASC config is corrupt or foreign" }
+            config.hash to current
+        }
+        val operations = Math.addExact(Math.addExact(Math.addExact(verified.segments.size, scan.newSegmentCount), 16),
+            Math.addExact(Math.addExact(loose.changes.size, configCount), 1))
+        require(operations in 1..MAX_TRANSACTION_FILES) { "portability exceeds the bounded transaction file count" }
+        val bounds = catalog.objectSizeBounds(cancelled)
+        require(bounds.maxEncodedSize in 1..MAX_ENCODED_BYTES && bounds.maxDecodedSize in 0..MAX_DECODED_BYTES)
+        val largest = bounds.maxEncodedSize
+        val prefetch = if (scan.missingObjects == 0L) 0L else
+            if (scan.missingObjects > PREFETCH_MAX_BYTES / largest) PREFETCH_MAX_BYTES else
+                minOf(PREFETCH_MAX_BYTES, Math.multiplyExact(scan.missingObjects, largest))
+        // Reserve a complete NEW checkpoint, not a copy of the previous phone's
+        // state. C->S is a same-filesystem rename, not another private-data copy.
+        // The manifest reserve matches the transition codec's bounded 2 MiB.
+        val privateBytes = sumExact(prefetch, largest, loose.changedDecodedBytes,
+            Math.multiplyExact(scan.totalObjects, CHECKPOINT_FRAME_BYTES.toLong()),
+            CASC_CHECKPOINT_HEADER_BYTES + CASC_CHECKPOINT_FINALIZE_BYTES,
+            METADATA_RESERVE, ForeverClientArchiveOrder.MAX_BYTES, CASC_TABLE_AND_SORT_RESERVE,
+            2L * 1024 * 1024)
+        val destinationBytes = sumExact(scan.newSegmentBytesUpperBound, scan.indexBytesUpperBound,
+            CASC_TABLE_AND_SORT_RESERVE, loose.changedDecodedBytes, configBytes, buildInfo.size.toLong(),
+            loose.backupBytes, JOURNAL_AND_MARGIN_RESERVE)
+        val download = Math.addExact(scan.downloadBytes, loose.changes.sumOf { it.record.encodedSize })
+        val buildState = inspectBuildInfo(destination, buildInfo, true, destination.sourceOrigin)
+        val snapshot = snapshotHash(EMPTY_SOURCE_REVISION, verifyStorageMarker(destination),
+            destination.storageMarkerIdentity, loose, buildState, configs, observed, buildInfo)
+        val peak = Math.addExact(privateBytes, destinationBytes)
+        val privateAvailable = ForeverClientUpdateCatalog.availableBytes(privateWorkDirectory.toPath())
+        val destinationAvailable = ForeverClientUpdateCatalog.availableBytes(destination.root.toPath())
+        val shared = ForeverClientUpdateCatalog.sharedCapacity(privateWorkDirectory.toPath(), destination.root.toPath())
+        checkCancelled(cancelled)
+        val digest = sha256(listOf(targetBinding, destination.storageId,
+            destination.root.toPath().toAbsolutePath().normalize().toString(), markerDigest,
+            verified.inventoryDigest, snapshot, download, privateBytes, destinationBytes).joinToString("\n").toByteArray(Charsets.UTF_8))
+        return PortabilityReview(digest, download, privateBytes, destinationBytes, peak,
+            if (shared) privateAvailable >= peak else privateAvailable >= privateBytes && destinationAvailable >= destinationBytes,
+            snapshot)
+    }
 
     /** Explicit full verification, never called by discovery. Result/rows remain
      * provisional: this lease ends on return; adoption must revalidate all bindings
@@ -3806,7 +3877,9 @@ class ForeverClientUpdater(
                     }, cancelled, ::revalidate, onVerifiedRecord,
                 )
                 revalidate()
-                PartialPortabilityVerification(stageId, markerDigest, result.verification, result.target)
+                val review = portabilityReview(destination, markerDigest, result.verification, result.target, cancelled)
+                revalidate()
+                PartialPortabilityVerification(stageId, markerDigest, result.verification, result.target, review)
             }
         }
     }

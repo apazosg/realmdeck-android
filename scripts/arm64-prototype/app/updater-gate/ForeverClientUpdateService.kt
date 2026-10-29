@@ -571,7 +571,10 @@ class ForeverClientUpdateService private constructor(
         checkPreviousAdmission()
         ForeverClientUpdateCatalog(admission.catalogFile, admission.catalogSha256,
             admission.catalogBytes, admission.target).use { candidateCatalog ->
-            val engine = updater(candidateCatalog, includeConfigAssets = false)
+            val engine = updater(candidateCatalog, configAssets = mapOf(
+                admission.target.buildConfig.hash to admission.buildConfigFile,
+                admission.target.cdnConfig.hash to admission.cdnConfigFile,
+            ))
             val verified = engine.verifyPartialPortabilitySource(destination, cancelled, onVerifiedRecord)
             storage.revalidateForUpdate(target)
             checkPreviousAdmission()
@@ -758,9 +761,10 @@ class ForeverClientUpdateService private constructor(
     private fun updater(
         catalog: ForeverClientUpdateCatalog,
         includeConfigAssets: Boolean = true,
+        configAssets: Map<String, File>? = null,
     ): ForeverClientUpdater {
         val noBackup = privateAnchor
-        val configs = if (includeConfigAssets) configFiles(noBackup) else emptyMap()
+        val configs = configAssets ?: if (includeConfigAssets) configFiles(noBackup) else emptyMap()
         val work = File(noBackup, WORK_DIRECTORY)
         val journal = File(noBackup, JOURNAL_DIRECTORY)
         ensurePrivateDirectory(work)
