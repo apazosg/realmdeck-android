@@ -16,6 +16,10 @@ import java.nio.channels.FileChannel
 import java.security.MessageDigest
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
+import java.util.concurrent.ArrayBlockingQueue
+import java.util.concurrent.Future
+import java.util.concurrent.ThreadPoolExecutor
+import java.util.concurrent.TimeUnit
 import java.util.logging.Logger
 import java.util.zip.CRC32
 import kotlin.math.min
@@ -318,6 +322,7 @@ object ForeverCasc {
     private val LOWERCASE_HEX_KEY = Regex("[0-9a-f]{32}")
     private val CASE_INSENSITIVE_HEX_KEY = Regex("(?i)[0-9a-f]{32}")
     private const val LOCAL_HEADER_SIZE = 30
+    private const val FOREIGN_AUTH_WORKERS = 4
     private const val SEGMENT_HEADER_SIZE = 480
     private const val ARCHIVE_LIMIT = 1L shl 30
     private const val INDEX_SIZE = 0x30000
@@ -559,6 +564,7 @@ object ForeverCasc {
         cancelled: () -> Boolean,
         revalidateBinding: () -> Unit,
         revalidateRecordBinding: () -> Unit = revalidateBinding,
+        parallelAuthentication: Boolean = false,
         onVerifiedRecord: (IncrementalObjectSpec, Int, Long) -> Unit,
     ): ForeignStageVerification {
         require(targetCatalogDigest.matches(Regex("[0-9a-f]{64}"))) { "foreign-stage target catalog digest is invalid" }
@@ -633,7 +639,51 @@ object ForeverCasc {
                         updateForeignSegmentBindingDigest(inventory, snapshot)
                         var offset = SEGMENT_HEADER_SIZE.toLong()
                         var segmentObjects = 0
-                        while (offset < snapshot.size) {
+                        data class PendingAuthentication(
+                            val future: Future<*>, val spec: IncrementalObjectSpec,
+                            val recordOffset: Long,
+                        )
+                        val authentications = if (parallelAuthentication) ThreadPoolExecutor(
+                            FOREIGN_AUTH_WORKERS, FOREIGN_AUTH_WORKERS, 0L, TimeUnit.MILLISECONDS,
+                            ArrayBlockingQueue(FOREIGN_AUTH_WORKERS),
+                            { runnable -> Thread(runnable, "foreign-casc-auth").apply { isDaemon = true } },
+                            ThreadPoolExecutor.AbortPolicy(),
+                        ) else null
+                        val authenticationStopped = AtomicBoolean(false)
+                        val workerCancelled = {
+                            authenticationStopped.get() || Thread.currentThread().isInterrupted || cancelled()
+                        }
+                        val pending = java.util.ArrayDeque<PendingAuthentication>()
+                        var segmentComplete = false
+                        fun publishAuthenticated(record: PendingAuthentication) {
+                            checkCancelled(cancelled)
+                            try {
+                                while (true) {
+                                    checkCancelled(cancelled)
+                                    try {
+                                        record.future.get(250L, TimeUnit.MILLISECONDS)
+                                        break
+                                    } catch (_: java.util.concurrent.TimeoutException) {
+                                        // Observe UI cancellation even while a read is pending.
+                                    }
+                                }
+                            } catch (failure: InterruptedException) {
+                                Thread.currentThread().interrupt()
+                                throw java.util.concurrent.CancellationException("foreign authentication interrupted").apply {
+                                    initCause(failure)
+                                }
+                            } catch (failure: java.util.concurrent.ExecutionException) {
+                                throw failure.cause ?: failure
+                            }
+                            checkCancelled(cancelled)
+                            updateForeignObjectDigest(inventory, record.spec, snapshot.id, record.recordOffset)
+                            onVerifiedRecord(record.spec, snapshot.id, record.recordOffset)
+                            count = Math.addExact(count, 1L)
+                            encodedBytes = Math.addExact(encodedBytes, record.spec.encodedSize)
+                            decodedBytes = Math.addExact(decodedBytes, record.spec.decodedSize)
+                        }
+                        try {
+                            while (offset < snapshot.size) {
                             checkCancelled(cancelled)
                             revalidateRecordBinding()
                             if (snapshot.size - offset < LOCAL_HEADER_SIZE) {
@@ -673,7 +723,7 @@ object ForeverCasc {
                                     if (off < 0 || len < 0 || off > buffer.size || len > buffer.size - off) throw IndexOutOfBoundsException()
                                     if (len == 0) return 0
                                     if (remaining == 0L) return -1
-                                    checkCancelled(cancelled)
+                                    checkCancelled(workerCancelled)
                                     val amount = min(len.toLong(), remaining).toInt()
                                     val target = ByteBuffer.wrap(buffer, off, amount)
                                     readFullyAt(channel, target, position)
@@ -683,19 +733,47 @@ object ForeverCasc {
                                 }
                                 override fun close() { }
                             }
-                            ForeverBlte.verifyEncodedRange(bounded, encodedSize, ekey, spec.decodedSize, spec.contentKey, cancelled)
-                            if (bounded.remaining != 0L) throw IllegalStateException("foreign CASC BLTE verifier did not consume the exact encoded body")
                             targetSeen.set(ordinal)
-                            updateForeignObjectDigest(inventory, spec, snapshot.id, offset)
-                            onVerifiedRecord(spec, snapshot.id, offset)
-                            count = Math.addExact(count, 1L)
-                            encodedBytes = Math.addExact(encodedBytes, encodedSize)
-                            decodedBytes = Math.addExact(decodedBytes, spec.decodedSize)
+                            val recordOffset = offset
+                            val authenticate = {
+                                ForeverBlte.verifyEncodedRange(bounded, encodedSize, ekey, spec.decodedSize, spec.contentKey, workerCancelled)
+                                if (bounded.remaining != 0L) throw IllegalStateException("foreign CASC BLTE verifier did not consume the exact encoded body")
+                            }
+                            val future = authentications?.submit<Unit> { authenticate() }
+                                ?: java.util.concurrent.CompletableFuture.completedFuture(authenticate())
+                            pending.addLast(PendingAuthentication(future, spec, recordOffset))
+                            if (authentications == null || pending.size >= FOREIGN_AUTH_WORKERS) {
+                                publishAuthenticated(pending.removeFirst())
+                            }
                             offset = Math.addExact(offset, totalSize)
                             segmentObjects++
-                        }
-                        if (offset != snapshot.size || segmentObjects == 0 || channel.size() != snapshot.size) {
-                            throw IllegalStateException("foreign CASC segment has an unrepresented EOF or no payload records")
+                            }
+                            while (pending.isNotEmpty()) publishAuthenticated(pending.removeFirst())
+                            if (offset != snapshot.size || segmentObjects == 0 || channel.size() != snapshot.size) {
+                                throw IllegalStateException("foreign CASC segment has an unrepresented EOF or no payload records")
+                            }
+                            segmentComplete = true
+                        } finally {
+                            if (authentications != null) {
+                                if (!segmentComplete) {
+                                    authenticationStopped.set(true)
+                                    pending.forEach { it.future.cancel(true) }
+                                    authentications.shutdownNow()
+                                } else {
+                                    authentications.shutdown()
+                                }
+                                var interrupted = false
+                                while (true) {
+                                    try {
+                                        if (authentications.awaitTermination(Long.MAX_VALUE, TimeUnit.NANOSECONDS)) break
+                                    } catch (_: InterruptedException) {
+                                        interrupted = true
+                                        authenticationStopped.set(true)
+                                        authentications.shutdownNow()
+                                    }
+                                }
+                                if (interrupted) Thread.currentThread().interrupt()
+                            }
                         }
                     }
                     checkForeignSegmentSnapshot(snapshot)
@@ -1542,15 +1620,22 @@ object ForeverCasc {
         check(workDirectory.mkdir()) { "foreign target planner requires fresh private scratch" }
         try {
             val verified = java.util.BitSet(targetObjectCount.coerceIn(0, MAX_TOTAL_INDEX_ENTRIES))
-            var lastMembership: IndexedValue<IncrementalObjectSpec>? = null
+            val admittedOrdinals = java.util.ArrayDeque<IndexedValue<IncrementalObjectSpec>>()
             val verification = inspectForeignStage(dataFiles, File(workDirectory, "verify"),
-                targetCatalogDigest, targetObjectCount, { key -> targetMembership(key).also { lastMembership = it } }, cancelled, revalidateBinding, revalidateRecordBinding,
+                targetCatalogDigest, targetObjectCount, { key ->
+                    targetMembership(key).also {
+                        check(admittedOrdinals.size < FOREIGN_AUTH_WORKERS) { "foreign target admission window exceeded its bound" }
+                        admittedOrdinals.addLast(it)
+                    }
+                }, cancelled, revalidateBinding, revalidateRecordBinding,
+                parallelAuthentication = true,
             ) { spec, archive, offset ->
-                val admitted = requireNotNull(lastMembership)
+                val admitted = admittedOrdinals.removeFirst()
                 require(admitted.value == spec && admitted.index in 0 until targetObjectCount)
                 verified.set(admitted.index)
                 onVerifiedRecord(spec, archive, offset)
             }
+            check(admittedOrdinals.isEmpty()) { "foreign target admission window was not fully acknowledged" }
             // Starting a fresh segment is conservative: the actual writer may use free
             // space in the last retained segment, but cannot need more than this plan.
             val packing = TargetPlanPacking(verification.segments.last().archiveId + 1)

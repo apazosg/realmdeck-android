@@ -891,9 +891,22 @@ class ForeverCascTest {
             val target = specs + missing
             val membership = target.withIndex().associateBy { it.value.ekey }
             val before = directFileHashes(stage)
+            val callbackOrder = mutableListOf<String>()
+            val authThreads = java.util.concurrent.ConcurrentHashMap.newKeySet<Long>()
+            val allStarted = java.util.concurrent.CountDownLatch(specs.size)
             val plan = ForeverCasc.inspectForeignTarget(stage, File(root, "private/plan"), "ab".repeat(32),
-                target.size, { membership.getValue(it) }, target.asSequence(), { false }, {}, onVerifiedRecord = { _, _, _ -> })
+                target.size, { membership.getValue(it) }, target.asSequence(), {
+                    if (Thread.currentThread().name == "foreign-casc-auth" && authThreads.add(Thread.currentThread().id)) {
+                        allStarted.countDown()
+                        assertTrue("independent authentication workers must run concurrently",
+                            allStarted.await(10, java.util.concurrent.TimeUnit.SECONDS))
+                    }
+                    false
+                }, {},
+                onVerifiedRecord = { spec, _, _ -> callbackOrder += spec.ekey })
+            assertEquals(specs.size, authThreads.size)
             assertEquals(specs.size.toLong(), plan.target.verifiedObjects)
+            assertEquals(specs.map { it.ekey }, callbackOrder)
             assertEquals(target.size.toLong(), plan.target.totalObjects)
             assertEquals(1L, plan.target.missingObjects)
             assertEquals(1234L, plan.target.downloadBytes)
@@ -960,7 +973,7 @@ class ForeverCascTest {
                             val admitted = membership.getValue(key)
                             if (name == "catalog mismatch") IndexedValue(admitted.index, admitted.value.copy(contentKey = "ff".repeat(16)))
                             else admitted
-                        }, { cancelled }, {},
+                        }, { cancelled }, {}, parallelAuthentication = true,
                     ) { _, _, _ ->
                         callbackCount[0]++
                         if (cancel) cancelled = true
@@ -969,6 +982,7 @@ class ForeverCascTest {
                 if (cancel) assertTrue("cancellation may leave only a provisional callback prefix", callbackCount[0] > 0)
                 assertEquals("$name must preserve the source", before, directFileHashes(stage))
                 assertFalse(File(root, "private/scan").exists())
+                assertFalse(Thread.getAllStackTraces().keys.any { it.name == "foreign-casc-auth" && it.isAlive })
             } finally {
                 delete(root)
             }
@@ -992,6 +1006,30 @@ class ForeverCascTest {
             Files.createSymbolicLink(segment.toPath(), saved.toPath())
         })
         rejected("cancellation", { _, _ -> }, cancel = true)
+    }
+
+    @Test
+    fun parallelForeignTargetCancellationJoinsAuthenticationWorkersBeforeReturning() {
+        val root = tempDir()
+        try {
+            val (stage, specs) = foreignStageFixture(root)
+            val membership = specs.mapIndexed { index, spec -> spec.ekey to IndexedValue(index, spec) }.toMap()
+            val cancelled = java.util.concurrent.atomic.AtomicBoolean(false)
+            val callbacks = mutableListOf<String>()
+            org.junit.Assert.assertThrows(java.util.concurrent.CancellationException::class.java) {
+                ForeverCasc.inspectForeignTarget(stage, File(root, "private/cancel-plan"), "ab".repeat(32),
+                    specs.size, { membership.getValue(it) }, specs.asSequence(), cancelled::get, {},
+                    onVerifiedRecord = { spec, _, _ ->
+                        callbacks += spec.ekey
+                        cancelled.set(true)
+                    })
+            }
+            assertEquals(listOf(specs.first().ekey), callbacks)
+            assertFalse(Thread.getAllStackTraces().keys.any { it.name == "foreign-casc-auth" && it.isAlive })
+            assertFalse(File(root, "private/cancel-plan").exists())
+        } finally {
+            delete(root)
+        }
     }
 
     @Test

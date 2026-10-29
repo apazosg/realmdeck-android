@@ -223,6 +223,18 @@ consentimiento del plan real antes de adoptar o descargar.
 
 ## Open Issues
 
+- Autenticación paralela explícita implementada: hasta cuatro rangos streaming,
+  publicación de resultados en orden físico, drenaje por segmento y cancelación/
+  unión de todos los workers antes de cerrar canales o limpiar. Preparación de
+  checkpoints y recuperación conservan el modo secuencial por defecto. Sin cuerpos
+  completos en RAM ni cambios de escritura, cotas o validaciones criptográficas.
+  Pruebas focales `parallel-foreign-auth-tests`: 5/0 fallos/errores/omitidos,
+  paridad de fuentes, Gradle offline 7m57s; concurrencia demostrada con rendezvous,
+  orden, corrupción/cancelación sin workers vivos, checkpoint y caller Updater.
+  Revisión independiente leyó el diff y fuentes/callers reales mediante snapshot
+  HTTP inmutable; sin hallazgos, sin repetir tests. Aún no prueba los 900 s ni la
+  portabilidad física. Postimages CASC fijados a esas fuentes; auditor sin cambios.
+
 - C164 no cumple el objetivo de 900 s: revisión iniciada una sola vez a las
   19:51:52; última muestra a los 886.285 s, 208134 objetos/13.2 GiB autenticados
   provisionalmente, sin resumen completo. Se canceló localmente al límite;
