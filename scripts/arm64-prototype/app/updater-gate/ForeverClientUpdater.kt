@@ -3936,6 +3936,7 @@ class ForeverClientUpdater(
 
     private fun inspectPortabilitySourceMetadata(
         destination: ForeverClientUpdateDestination,
+        revalidateStorage: () -> Unit = destination.revalidate,
     ): PortabilitySourceKind {
         verifyStorageMarker(destination)
         val root = destination.root.toPath()
@@ -3982,7 +3983,7 @@ class ForeverClientUpdater(
             }
             if (empty) PortabilitySourceKind.EMPTY else PortabilitySourceKind.UNREADABLE_OR_AMBIGUOUS
         }
-        destination.revalidate()
+        revalidateStorage()
         verifyStorageMarker(destination)
         return verdict
     }
@@ -4102,11 +4103,11 @@ class ForeverClientUpdater(
         require(markerBytes.size in 1..4096) { "partial owner marker changed its bounded size" }
         val markerDigest = sha256(markerBytes)
         val stageId = stage.fileName.toString()
-        fun revalidate() {
+        fun revalidateStorageAndBinding(storageCheck: () -> Unit) {
             checkCancelled(cancelled)
-            destination.revalidate()
+            storageCheck()
             verifyStorageMarker(destination)
-            require(inspectPortabilitySourceMetadata(destination) == PortabilitySourceKind.PARTIAL_CANDIDATE) {
+            require(inspectPortabilitySourceMetadata(destination, storageCheck) == PortabilitySourceKind.PARTIAL_CANDIDATE) {
                 "partial stage layout changed during verification"
             }
             Files.newDirectoryStream(parent).use { children ->
@@ -4117,6 +4118,13 @@ class ForeverClientUpdater(
             }
             requireExactFile(marker, markerBytes, "foreign partial stage marker binding")
         }
+        fun revalidate() = revalidateStorageAndBinding(destination.revalidate)
+        // Both hooks are required to admit the existing directed full/light
+        // capability. Segment/entry/final checks stay full; each record still
+        // checks mount identity, namespace and exact owner before authentication.
+        val recordStorageCheck = if (destination.revalidateCascSegment != null &&
+            destination.revalidateCascCommitGroup != null) destination.revalidateCascCommitGroup else destination.revalidate
+        fun revalidateRecord() = revalidateStorageAndBinding(recordStorageCheck)
         withArchiveOrder(cancelled) { order ->
             val scratch = File(privateWorkDirectory, ".portability-scan-${UUID.randomUUID()}")
             order.withObjects(cancelled) { records ->
@@ -4126,7 +4134,7 @@ class ForeverClientUpdater(
                     records.map { record ->
                         validateTransferBounds(record)
                         ForeverCasc.IncrementalObjectSpec(record.ekey, record.contentKey, record.encodedSize, record.decodedSize)
-                    }, cancelled, ::revalidate, onVerifiedRecord,
+                    }, cancelled, ::revalidate, ::revalidateRecord, onVerifiedRecord,
                 )
                 revalidate()
                 val review = portabilityReview(destination, markerDigest, result.verification, result.target, cancelled)

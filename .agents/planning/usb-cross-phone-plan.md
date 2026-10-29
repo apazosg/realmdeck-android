@@ -223,6 +223,32 @@ consentimiento del plan real antes de adoptar o descargar.
 
 ## Open Issues
 
+- Corrección de la prueba real, 29-10 17:19: el observador se había detenido
+  tras un fallo al extraer XML a las 15:42, pero la app seguía autenticando.
+  No debía presentarse el observador como activo sin verificarlo. Se pulsó Pausar
+  una sola vez y se observó el mensaje de cancelación, sin adopción/payload.
+  Inspección del código revela validación completa de destino en cada registro
+  del escáner extranjero; es un coste repetido candidato, no una atribución
+  medida de toda la demora. Corrección focal aplicada: distinguir fronteras full
+  de comprobaciones light por registro únicamente bajo las capacidades vigentes,
+  manteniendo fallback full, autenticación y binding por objeto. Se añade regresión
+  de cadencia antes de desplegar y contador de objetos/bytes
+  autenticados con actualización acotada (máximo dos por segundo), no bytes de red.
+  RED focal reproducido (1 fallo esperado). La primera corrección pasó el caso de
+  corrupción/cancelación, pero falló el límite de llamadas full: el helper de
+  clasificación de metadatos aún invocaba full al terminar cada registro. Se
+  corrigió para recibir la misma capacidad light admitida del llamador, con
+  default full sin cambios; se repite solo el test afectado, no el ya pasado.
+  El siguiente fallo era una aserción incorrecta: comparaba coste full fijo de
+  entrada/salida/lease/review con el tamaño de un prefijo forzado por presión.
+  Se corrigió solo el test a una cota por segmentos (16 + 4 por segmento), sin
+  cambiar más producción. GREEN real: `foreign-cadence-bound-tests/summary.json`,
+  1 test/0 fallos, paridad de seis fuentes, Gradle 4m7s; conserva pruebas de
+  autenticación, bytes inmutables, fallback full y ausencia de estado heredado.
+  La UI compiló pero no está instalada. C163 está etiquetada (3 Python PASS);
+  pendientes revisión independiente del código exacto y auditoría de candidata
+  antes de instalación preservadora y repetir explícitamente la revisión real.
+
 - Prueba real C162, 29-10: sustitución preservadora completada a las 14:28:44,
   mismo UID, cero servicios updater y `.owner`/diccionario de nombres-tamaños de
   los 81 CASC (51625635891 bytes) idénticos antes/después. No es un hash completo

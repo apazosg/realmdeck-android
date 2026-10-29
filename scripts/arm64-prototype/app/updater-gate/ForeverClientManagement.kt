@@ -300,12 +300,23 @@ fun ForeverClientManagementDialog(
     fun reviewPortableDownload() {
         runOperation("Consultando versión para revisar la descarga existente…") { service ->
             val target = service.checkVersions().published ?: throw IllegalStateException("network versions unavailable")
+            var verifiedObjects = 0L
+            var verifiedEncodedBytes = 0L
+            var lastVerificationProgress = 0L
             val reviewed = service.beginPartialPortabilityReview(
                 ForeverClientUpdateService.MetadataConsent(target, 1L shl 30, false), cancel::get,
                 { stage, completed, total ->
                     progressFlow.value = ForeverFunctionalUiText.preparationStatus(stage, completed, total)
                 },
-                { _, _, _ -> progressFlow.value = "Autenticando datos existentes del USB…" },
+                { spec, _, _ ->
+                    verifiedObjects++
+                    verifiedEncodedBytes = Math.addExact(verifiedEncodedBytes, spec.encodedSize)
+                    val now = System.nanoTime()
+                    if (verifiedObjects == 1L || now - lastVerificationProgress >= 500_000_000L) {
+                        progressFlow.value = "Autenticando USB: $verifiedObjects objetos · ${ForeverFunctionalUiText.clientBytes(verifiedEncodedBytes)} verificados"
+                        lastVerificationProgress = now
+                    }
+                },
             )
             withContextOnMain { if (alive.get() && !cancel.get()) { portabilityReview = reviewed; plan = null } }
         }

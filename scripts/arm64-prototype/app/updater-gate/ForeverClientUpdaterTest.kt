@@ -231,7 +231,7 @@ class ForeverClientUpdaterTest {
     @Test
     fun foreignPartialVerificationUsesTheAdmittedCatalogWithoutRestoringPrivateState() {
         val assets = configAssetsOrSkip()
-        Fixture().use { fixture ->
+        Fixture(cascObjectCount = 33, contiguousRangeObjectCount = 32).use { fixture ->
             val paths = fixture.makePaths()
             val destination = fixture.destination(paths)
             val original = fixture.updater(paths, assets) { record, work, _, progress ->
@@ -254,12 +254,25 @@ class ForeverClientUpdaterTest {
             }
             val before = clientBytes()
             val foreignPaths = fixture.makePaths("foreign-verification").copy(client = paths.client)
-            val foreignDestination = fixture.destination(foreignPaths)
+            var fullValidations = 0
+            var lightValidations = 0
+            val foreignBase = fixture.destination(foreignPaths)
+            val foreignDestination = foreignBase.copy(
+                revalidate = { fullValidations++; foreignBase.revalidate() },
+                revalidateCascSegment = { fullValidations++; foreignBase.revalidate() },
+                revalidateCascCommitGroup = { lightValidations++ },
+            )
             val foreign = fixture.updater(foreignPaths, assets) { _, _, _, _ -> error("verification must not fetch") }
             val records = ArrayList<ForeverCasc.IncrementalObjectSpec>()
             val verified = foreign.verifyPartialPortabilitySource(foreignDestination, { false }) { spec, _, _ -> records += spec }
             assertTrue(verified.objects.objectCount > 0)
             assertEquals(records.size.toLong(), verified.objects.objectCount)
+            assertTrue("foreign records must use the admitted light storage capability", lightValidations >= records.size)
+            // Entry/exit, the metadata review and lease have fixed full checks;
+            // each segment adds bounded checks. Do not compare that fixed cost
+            // to a pressure-flushed prefix which may contain very few objects.
+            assertTrue("full validation count $fullValidations exceeds scan/segment boundaries",
+                fullValidations <= 16 + 4 * verified.objects.segments.size)
             assertEquals(verified.objects.objectCount, verified.targetPlan.verifiedObjects)
             assertEquals(plan.totalObjects, verified.targetPlan.totalObjects)
             assertEquals(plan.totalObjects - verified.objects.objectCount, verified.targetPlan.missingObjects)
@@ -271,6 +284,13 @@ class ForeverClientUpdaterTest {
             assertTrue(verified.review.privateAdditionalBytes > 0)
             assertTrue(verified.review.destinationAdditionalBytes >= verified.targetPlan.newSegmentBytesUpperBound)
             assertEquals(64, verified.review.digest.length)
+            val lightBeforeFallback = lightValidations
+            val fullBeforeFallback = fullValidations
+            foreign.verifyPartialPortabilitySource(
+                foreignDestination.copy(revalidateCascSegment = null), { false },
+            ) { _, _, _ -> }
+            assertEquals(lightBeforeFallback, lightValidations)
+            assertTrue(fullValidations - fullBeforeFallback >= records.size)
             records.forEach { spec ->
                 val admitted = fixture.catalog.objectByKey(spec.ekey)
                 assertEquals(admitted.contentKey, spec.contentKey)

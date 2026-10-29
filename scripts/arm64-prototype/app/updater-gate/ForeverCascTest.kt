@@ -892,7 +892,7 @@ class ForeverCascTest {
             val membership = target.withIndex().associateBy { it.value.ekey }
             val before = directFileHashes(stage)
             val plan = ForeverCasc.inspectForeignTarget(stage, File(root, "private/plan"), "ab".repeat(32),
-                target.size, { membership.getValue(it) }, target.asSequence(), { false }, {}, { _, _, _ -> })
+                target.size, { membership.getValue(it) }, target.asSequence(), { false }, {}, onVerifiedRecord = { _, _, _ -> })
             assertEquals(specs.size.toLong(), plan.target.verifiedObjects)
             assertEquals(target.size.toLong(), plan.target.totalObjects)
             assertEquals(1L, plan.target.missingObjects)
@@ -904,7 +904,7 @@ class ForeverCascTest {
             assertThrows(IllegalArgumentException::class.java) {
                 ForeverCasc.inspectForeignTarget(stage, File(root, "private/changed"), "ab".repeat(32),
                     target.size, { membership.getValue(it) }, (specs.reversed() + missing).asSequence(),
-                    { false }, {}, { _, _, _ -> })
+                    { false }, {}, onVerifiedRecord = { _, _, _ -> })
             }
             assertEquals(before, directFileHashes(stage))
             assertFalse(File(root, "private/changed").exists())

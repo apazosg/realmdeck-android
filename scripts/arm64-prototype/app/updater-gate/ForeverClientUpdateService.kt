@@ -561,7 +561,7 @@ class ForeverClientUpdateService private constructor(
         cancelled: () -> Boolean,
         onVerifiedRecord: (ForeverCasc.IncrementalObjectSpec, Int, Long) -> Unit,
     ): ForeverClientUpdater.PartialPortabilityVerification = withStorageIo(cancelled) { target ->
-        val destination = recoveryDestination(target)
+        val destination = recoveryDestination(target, allowDirectedVerification = true)
         require(candidate.storageId == destination.storageId &&
             candidate.destinationPath == destination.root.toPath().toAbsolutePath().normalize().toString()) {
             "portability candidate belongs to a different destination"
@@ -991,6 +991,7 @@ class ForeverClientUpdateService private constructor(
 
     private fun recoveryDestination(
         target: ForeverFunctionalClientStorage.UpdateTarget,
+        allowDirectedVerification: Boolean = false,
     ): ForeverClientUpdateDestination {
         storage.revalidateForUpdate(target)
         val marker = readStorageMarker(target)
@@ -1001,6 +1002,14 @@ class ForeverClientUpdateService private constructor(
             revalidate = { storage.revalidateForUpdate(target) },
             verifiedOwnedFiles = ownership,
             storageMarkerIdentity = target.identity.id,
+            revalidateCascSegment = if (allowDirectedVerification && target.hasDirectedProof() &&
+                target.rootIdentity != null && target.baseIdentity != null) {
+                { storage.revalidateForUpdate(target) }
+            } else null,
+            revalidateCascCommitGroup = if (allowDirectedVerification && target.hasDirectedProof() &&
+                target.rootIdentity != null && target.baseIdentity != null) {
+                { storage.revalidateForUpdateLight(target) }
+            } else null,
         )
     }
 

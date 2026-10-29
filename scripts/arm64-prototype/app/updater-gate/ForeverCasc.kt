@@ -558,6 +558,7 @@ object ForeverCasc {
         targetMembership: (String) -> IndexedValue<IncrementalObjectSpec>,
         cancelled: () -> Boolean,
         revalidateBinding: () -> Unit,
+        revalidateRecordBinding: () -> Unit = revalidateBinding,
         onVerifiedRecord: (IncrementalObjectSpec, Int, Long) -> Unit,
     ): ForeignStageVerification {
         require(targetCatalogDigest.matches(Regex("[0-9a-f]{64}"))) { "foreign-stage target catalog digest is invalid" }
@@ -634,7 +635,7 @@ object ForeverCasc {
                         var segmentObjects = 0
                         while (offset < snapshot.size) {
                             checkCancelled(cancelled)
-                            revalidateBinding()
+                            revalidateRecordBinding()
                             if (snapshot.size - offset < LOCAL_HEADER_SIZE) {
                                 throw IllegalStateException("foreign CASC segment ends in a truncated local header")
                             }
@@ -1534,6 +1535,7 @@ object ForeverCasc {
         objects: Sequence<IncrementalObjectSpec>,
         cancelled: () -> Boolean,
         revalidateBinding: () -> Unit,
+        revalidateRecordBinding: () -> Unit = revalidateBinding,
         onVerifiedRecord: (IncrementalObjectSpec, Int, Long) -> Unit,
     ): ForeignTargetPlan {
         validateTargetInspectionPaths(dataFiles, workDirectory)
@@ -1542,7 +1544,7 @@ object ForeverCasc {
             val verified = java.util.BitSet(targetObjectCount.coerceIn(0, MAX_TOTAL_INDEX_ENTRIES))
             var lastMembership: IndexedValue<IncrementalObjectSpec>? = null
             val verification = inspectForeignStage(dataFiles, File(workDirectory, "verify"),
-                targetCatalogDigest, targetObjectCount, { key -> targetMembership(key).also { lastMembership = it } }, cancelled, revalidateBinding,
+                targetCatalogDigest, targetObjectCount, { key -> targetMembership(key).also { lastMembership = it } }, cancelled, revalidateBinding, revalidateRecordBinding,
             ) { spec, archive, offset ->
                 val admitted = requireNotNull(lastMembership)
                 require(admitted.value == spec && admitted.index in 0 until targetObjectCount)
