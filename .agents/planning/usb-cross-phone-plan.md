@@ -223,6 +223,16 @@ consentimiento del plan real antes de adoptar o descargar.
 
 ## Open Issues
 
+- Sustitución C163→C164 terminada el 29-10 a las 19:48:43, instalación confirmada,
+  mismo UID, cero updater antes/después y marcador+81 nombres/tamaños CASC
+  idénticos (51625635891 bytes). No autoarranque ni operaciones del cliente.
+  Nueva medición prefijada `usb-portability-c164-20261029/review_partial.py`:
+  una apertura/navegación y una revisión explícita; tiempo conservador desde
+  intención de click hasta resumen observado, incluyendo metadatos/autenticación/
+  planificación, muestras cada 15 s. A los 900 s sin resumen se solicita cancelación
+  local y se comprueba idle; no aceptar una revisión parcial ni pulsar adopción o
+  descarga. Los fallos transitorios de XML se registran y no reinician la revisión.
+
 - C164 canónica terminada el 29-10 a las 19:46:29: build offline 5m22s,
   auditoría exacta `PASS_SOURCE_BUILD_AND_PAYLOAD_AUDIT`, 2231 fuentes
   coincidentes con el recibo y 178 payloads. APK 485364419 bytes, SHA-256
