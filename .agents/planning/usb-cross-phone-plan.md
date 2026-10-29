@@ -223,6 +223,16 @@ consentimiento del plan real antes de adoptar o descargar.
 
 ## Open Issues
 
+- C163 instalada el 29-10 a las 18:45:28: sustitución confirmada, mismo UID,
+  cero updater antes/después y marcador+81 nombres/tamaños CASC idénticos
+  (51625635891 bytes), sin autoarranque del instalador. Después se abrió la app
+  una sola vez; la primera navegación no envió clicks por el espacio inicial
+  del texto « Ajustes». Una lectura confirmó ese texto y la navegación restante
+  se completó sin relanzar. Se inicia una nueva revisión explícita, nunca adopción
+  ni payload; el observador conserva heartbeat atómico y registra XML temporalmente
+  no disponible en vez de morir silenciosamente al primer fallo. El contador
+  identifica objetos/bytes autenticados, no velocidad de red ni progreso adoptado.
+
 - C163 canónica cerrada, 29-10 18:42:43: build offline 5m20s y auditoría exacta
   `PASS_SOURCE_BUILD_AND_PAYLOAD_AUDIT`, 2231 fuentes coincidentes con el recibo,
   178 payloads. APK 485363483 bytes, SHA-256
