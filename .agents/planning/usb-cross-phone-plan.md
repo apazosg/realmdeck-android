@@ -39,6 +39,16 @@ todavía no demuestran adopción real. No se vuelve a pedir el permiso ya conced
 para crear, instalar y probar APKs; sigue siendo necesario el consentimiento del
 coste y la adopción del plan real antes de mutar propiedad o iniciar payload.
 
+El 29-10 autoriza «si ampliamos 12 horas el goal. pero debemos ser efectivos».
+El sucesor `c07e6f7f-a0e6-4b71-bc73-b34caab2eee4` dispone de un máximo de 12 horas;
+conserva los seis criterios y las tareas/evidencias anteriores, sin declarar
+logrado el goal agotado. Punto de continuación: integración `f3f3fc3` probada
+localmente y postimages de reconstrucción `1eeaeb7`; no hay APK nueva ni adopción
+física. Prioridad: revisión del código integrado, candidata exacta auditada e
+instalación/prueba real, sin repetir pruebas cerradas ni permisos ya concedidos.
+La revisión solicitada en este corte resultó inconclusa por falta de acceso del
+revisor a los archivos; no se considera una aprobación del código.
+
 ## Content
 
 - Original: C160 cerró 19:14:11 UTC con **822.658 objetos durables**, prefix/CRC y
