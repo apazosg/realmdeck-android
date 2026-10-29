@@ -3355,7 +3355,22 @@ class ForeverClientUpdater(
         catalogReceiptDigest: () -> String?,
         publishCatalogReceipt: () -> Unit,
         cancelled: () -> Boolean = { false },
-    ) = withLease(destination, allowRootPending = true, allowPortabilityIntent = true) {
+    ) = withLease(destination, allowRootPending = true, allowPortabilityIntent = true) { leaseHeld ->
+        finishPortabilityTransitionHeld(destination, binding, confirmedPlanDigest, validatePreparedAndSource,
+            catalogReceiptDigest, publishCatalogReceipt, cancelled, leaseHeld)
+    }
+
+    private fun finishPortabilityTransitionHeld(
+        destination: ForeverClientUpdateDestination,
+        binding: PortabilityIntentBinding,
+        confirmedPlanDigest: String,
+        validatePreparedAndSource: (File, Boolean) -> Unit,
+        catalogReceiptDigest: () -> String?,
+        publishCatalogReceipt: () -> Unit,
+        cancelled: () -> Boolean,
+        leaseHeld: () -> Boolean,
+    ) {
+        check(leaseHeld()) { "portability transition requires the real updater lease" }
         require(confirmedPlanDigest == binding.planDigest) { "portability plan was not confirmed" }
         validateDestination(destination)
         require(!transaction(destination).hasPendingTransaction()) { "recover the ordinary journal first" }
@@ -3495,6 +3510,243 @@ class ForeverClientUpdater(
     }
 
     internal var portabilityBoundaryForTests: ((String) -> Unit)? = null
+
+    internal data class PortabilityAdoptionResult(
+        val verification: PartialPortabilityVerification,
+        val binding: PortabilityIntentBinding,
+    )
+
+    internal data class PendingPortabilityAdmission(
+        val operationId: String,
+        val receiptDigest: String,
+        val receiptBytes: ByteArray,
+    )
+
+    /** Reads only the fixed intent and its UUID-derived, bounded official receipt artifact. */
+    internal fun pendingPortabilityAdmission(destination: ForeverClientUpdateDestination): PendingPortabilityAdmission? {
+        val intent = File(privateWorkDirectory, ".forever-portability-intent.json")
+        if (!Files.exists(intent.toPath(), LinkOption.NOFOLLOW_LINKS)) return null
+        val bytes = readPortabilityFile(intent, MAX_STAGE_RECEIPT_BYTES)
+        val envelope = JSONObject(String(bytes, Charsets.UTF_8))
+        val payloadText = envelope.get("payload") as? String ?: error("invalid portability payload")
+        val payload = JSONObject(payloadText)
+        val operationId = payload.get("operationId") as? String ?: error("invalid portability operation")
+        require(UUID.fromString(operationId).toString() == operationId)
+        val receiptDigest = payload.get("newCatalogReceiptDigest") as? String ?: error("invalid portability receipt digest")
+        require(receiptDigest.matches(Regex("[0-9a-f]{64}")))
+        val receipt = File(privateWorkDirectory, ".forever-portability-$operationId.admission")
+        val receiptBytes = readPortabilityFile(receipt, MAX_PORTABILITY_ADMISSION_BYTES)
+        require(sha256(receiptBytes) == receiptDigest) { "pending official admission artifact changed" }
+        // Destination and checksum are fully validated by decodePortabilityIntent before use.
+        destination.revalidate()
+        return PendingPortabilityAdmission(operationId, receiptDigest, receiptBytes)
+    }
+
+    /**
+     * Fresh confirmation and adoption are one updater operation. The earlier review is only a
+     * display/consent binding: this operation authenticates the current source into a new private
+     * checkpoint while holding the same real lease used by the durable C/P/S transition.
+     */
+    internal fun confirmAndAdoptPartialPortability(
+        destination: ForeverClientUpdateDestination,
+        reviewed: PartialPortabilityVerification,
+        confirmedReviewDigest: String,
+        oldCatalogReceiptDigest: String?,
+        newCatalogReceiptDigest: String,
+        newCatalogReceiptBytes: ByteArray,
+        catalogReceiptDigest: () -> String?,
+        publishCatalogReceipt: () -> Unit,
+        cancelled: () -> Boolean = { false },
+    ): PortabilityAdoptionResult = withLease(destination, allowRootPending = true) { leaseHeld ->
+        check(leaseHeld())
+        require(confirmedReviewDigest == reviewed.review.digest) { "partial continuation plan was not confirmed" }
+        require(reviewed.review.hasEnoughSpace) { "partial continuation plan does not have enough space" }
+        require(reviewed.objects.targetCatalogDigest == targetCatalogSha256 &&
+            reviewed.targetPlan.totalObjects == targetSummary.objectCount) { "partial review belongs to another admitted target" }
+        validateDestination(destination)
+        require(!transaction(destination).hasPendingTransaction()) { "recover the ordinary journal first" }
+        require(inspectPortabilitySourceMetadata(destination) == PortabilitySourceKind.PARTIAL_CANDIDATE) {
+            "partial stage changed before confirmation"
+        }
+        val parent = File(destination.root, TRANSACTION_STAGING_NAME)
+        val stage = File(parent, reviewed.stageId)
+        val dataFiles = File(File(stage, "Data"), "data")
+        val marker = File(stage, TRANSACTION_STAGE_OWNER_NAME)
+        val oldMarkerBytes = readPortabilityFile(marker, 4096)
+        val oldMarkerDigest = sha256(oldMarkerBytes)
+        require(oldMarkerDigest == reviewed.markerDigest) { "partial stage ownership changed since review" }
+        require(dataFiles.toPath().toAbsolutePath().normalize().toString() == reviewed.objects.canonicalDataFilesPath) {
+            "partial source route changed since review"
+        }
+        require(catalogReceiptDigest() == oldCatalogReceiptDigest) { "active catalog admission changed since review" }
+        val operationId = UUID.randomUUID().toString()
+        val generation = UUID.randomUUID().toString()
+        val transaction = transaction(destination, leaseHeld)
+        val markerBytes = transaction.generationStagingMarkerBytes(reviewed.stageId, generation)
+        val markerDigest = sha256(markerBytes)
+        val checkpointIdentity = cascCheckpointIdentity(destination, EMPTY_SOURCE_REVISION,
+            UpdateStageReceipt(reviewed.stageId, markerDigest, EMPTY_SOURCE_REVISION, reviewed.review.snapshotHash,
+                destination.storageId, destination.root.toPath().toAbsolutePath().normalize().toString()))
+        ensureDirectoryTree(workBase.toPath())
+        val prepared = File(workBase, "${workspaceKey(destination)}.prepared-$operationId")
+        require(!Files.exists(prepared.toPath(), LinkOption.NOFOLLOW_LINKS)) { "unexpected prepared portability workspace" }
+
+        fun revalidateSource(expectedMarker: String = reviewed.markerDigest, inventory: Boolean = false,
+            forwardOnly: Boolean = false) {
+            if (!forwardOnly) checkCancelled(cancelled)
+            check(leaseHeld()) { "portability updater lease was lost" }
+            destination.revalidate()
+            verifyStorageMarker(destination)
+            require(inspectPortabilitySourceMetadata(destination) == PortabilitySourceKind.PARTIAL_CANDIDATE) {
+                "partial stage layout changed during adoption"
+            }
+            require(sha256(readPortabilityFile(marker, 4096)) == expectedMarker) { "partial stage marker changed during adoption" }
+            require(dataFiles.toPath().toAbsolutePath().normalize().toString() == reviewed.objects.canonicalDataFilesPath)
+            // The scanner already checks each segment around its body reads. Do not
+            // restat the entire USB inventory for every authenticated object.
+            if (!inventory) return
+            val expectedSegments = reviewed.objects.segments.associateBy { it.name }
+            Files.newDirectoryStream(dataFiles.toPath()).use { children ->
+                var count = 0
+                children.forEach { path ->
+                    require(++count <= expectedSegments.size) { "partial source segment inventory changed" }
+                    val expected = expectedSegments[path.fileName.toString()]
+                        ?: throw IllegalStateException("partial source contains an unreviewed segment")
+                    require(!Files.isSymbolicLink(path) && Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS))
+                    val attrs = Files.readAttributes(path, java.nio.file.attribute.BasicFileAttributes::class.java, LinkOption.NOFOLLOW_LINKS)
+                    require(attrs.size() == expected.size && attrs.lastModifiedTime() == expected.modifiedTime &&
+                        attrs.fileKey()?.toString().orEmpty() == expected.fileKey) { "partial source segment changed since review" }
+                }
+                require(count == expectedSegments.size) { "partial source segment inventory changed" }
+            }
+        }
+
+        // Confirmed consent precedes this full authenticated scan and its source-data force barriers.
+        revalidateSource(inventory = true)
+        val freshVerification = withArchiveOrder(cancelled) { order ->
+            val membershipCache = object : LinkedHashMap<String, IndexedValue<ForeverCasc.IncrementalObjectSpec>>(2048, 0.75f, true) {
+                override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, IndexedValue<ForeverCasc.IncrementalObjectSpec>>?) = size > 2048
+            }
+            ForeverCasc.prepareForeignStageCheckpoint(
+                dataFiles, prepared, checkpointIdentity, targetCatalogSha256, targetSummary.objectCount.toInt(),
+                { ekey -> membershipCache[ekey] ?: archiveTargetMembership(order, ekey).also { membershipCache[ekey] = it } },
+                cancelled, { revalidateSource() },
+            )
+        }
+        require(freshVerification.targetCatalogDigest == reviewed.objects.targetCatalogDigest &&
+            freshVerification.inventoryDigest == reviewed.objects.inventoryDigest &&
+            freshVerification.objectCount == reviewed.objects.objectCount &&
+            freshVerification.canonicalDataFilesPath == reviewed.objects.canonicalDataFilesPath) {
+            "partial source inventory changed since confirmation review"
+        }
+        val freshReview = portabilityReview(destination, oldMarkerDigest, freshVerification, reviewed.targetPlan, cancelled)
+        require(freshReview.digest == confirmedReviewDigest && freshReview.hasEnoughSpace) {
+            "partial continuation bindings or available space changed; review and confirm again"
+        }
+
+        val receipt = UpdateStageReceipt(reviewed.stageId, markerDigest, EMPTY_SOURCE_REVISION, freshReview.snapshotHash,
+            destination.storageId, destination.root.toPath().toAbsolutePath().normalize().toString())
+        val workspaceOwner = workspaceOwnerBytes(destination, EMPTY_SOURCE_REVISION)
+        writeDurableNewFile(File(prepared, WORKSPACE_OWNER_NAME), workspaceOwner)
+        writeDurableNewFile(File(prepared, STAGE_RECEIPT_NAME), encodeStageReceipt(receipt))
+        forceDirectory(prepared.toPath())
+        forceDirectory(workBase.toPath())
+        revalidateSource()
+        require(catalogReceiptDigest() == oldCatalogReceiptDigest)
+        require(newCatalogReceiptBytes.size in 1..MAX_PORTABILITY_ADMISSION_BYTES &&
+            sha256(newCatalogReceiptBytes) == newCatalogReceiptDigest) { "official receipt bytes do not match their bound digest" }
+        val admissionArtifact = File(privateWorkDirectory, ".forever-portability-$operationId.admission")
+        writeDurableNewFile(admissionArtifact, newCatalogReceiptBytes)
+        forceDirectory(privateWorkDirectory.toPath())
+        val checkpoint = File(prepared, CASC_RESUME_CHECKPOINT_NAME)
+        val checkpointIdentityDigest = sha256(checkpointIdentity.toByteArray(Charsets.UTF_8))
+        val oldCanonical = resumableWorkspacePath(destination)
+        val oldWorkspaceDigest = if (Files.exists(oldCanonical.toPath(), LinkOption.NOFOLLOW_LINKS)) {
+            sha256(portabilityWorkspaceManifest(destination, oldCanonical))
+        } else null
+        val binding = PortabilityIntentBinding(
+            operationId, generation, reviewed.stageId, targetCatalogSha256, confirmedReviewDigest,
+            freshVerification.inventoryDigest, sha256File(checkpoint), checkpointIdentityDigest,
+            reviewed.markerDigest, markerDigest, oldWorkspaceDigest, oldCatalogReceiptDigest, newCatalogReceiptDigest,
+        )
+        val validatePreparedAndSource: (File, Boolean) -> Unit = { candidate, forwardOnly ->
+            revalidateSource(if (forwardOnly) binding.newMarkerDigest else binding.oldMarkerDigest,
+                inventory = true, forwardOnly = forwardOnly)
+            requireExactFile(File(candidate, WORKSPACE_OWNER_NAME).toPath(), workspaceOwner, "prepared workspace owner")
+            requireExactFile(File(candidate, STAGE_RECEIPT_NAME).toPath(), encodeStageReceipt(receipt), "prepared stage receipt")
+            require(sha256File(File(candidate, CASC_RESUME_CHECKPOINT_NAME)) == binding.checkpointDigest)
+            requireExactFile(File(candidate, CASC_RESUME_OWNER_NAME).toPath(),
+                "FWCASCR1".toByteArray(Charsets.US_ASCII) + checkpointIdentityDigest.chunked(2).map { it.toInt(16).toByte() }.toByteArray(),
+                "prepared checkpoint identity")
+        }
+        finishPortabilityTransitionHeld(destination, binding, confirmedReviewDigest,
+            validatePreparedAndSource, catalogReceiptDigest, publishCatalogReceipt, cancelled, leaseHeld)
+        Files.deleteIfExists(admissionArtifact.toPath())
+        forceDirectory(privateWorkDirectory.toPath())
+        PortabilityAdoptionResult(reviewed.copy(objects = freshVerification, review = freshReview), binding)
+    }
+
+    /** Forward-only completion of a durable intent; no ordinary plan or payload is started. */
+    internal fun recoverPendingPortabilityTransition(
+        destination: ForeverClientUpdateDestination,
+        admissionBytes: ByteArray,
+        catalogReceiptDigest: () -> String?,
+        publishCatalogReceipt: () -> Unit,
+        cancelled: () -> Boolean = { false },
+    ): PortabilityIntentBinding = withLease(destination, allowRootPending = true, allowPortabilityIntent = true) { leaseHeld ->
+        check(leaseHeld())
+        val preliminary = pendingPortabilityAdmission(destination)
+            ?: throw IllegalStateException("no portability transition is pending")
+        require(preliminary.receiptBytes.contentEquals(admissionBytes)) { "pending admission artifact changed" }
+        val admissionPayload = JSONObject(String(admissionBytes, Charsets.UTF_8)).get("payload") as? String
+            ?: throw IllegalStateException("invalid pending admission receipt")
+        val catalogDigest = JSONObject(admissionPayload).get("catalogSha256") as? String
+            ?: throw IllegalStateException("invalid pending admission catalog digest")
+        val binding = decodePortabilityIntent(destination, catalogDigest,
+            readPortabilityFile(File(privateWorkDirectory, ".forever-portability-intent.json"), MAX_STAGE_RECEIPT_BYTES))
+        require(binding.operationId == preliminary.operationId && binding.newCatalogReceiptDigest == preliminary.receiptDigest)
+        require(binding.planDigest.matches(Regex("[0-9a-f]{64}")))
+        val stage = File(File(destination.root, TRANSACTION_STAGING_NAME), binding.stageId)
+        val marker = File(stage, TRANSACTION_STAGE_OWNER_NAME)
+        val dataFiles = File(File(stage, "Data"), "data")
+        require(sha256(readPortabilityFile(marker, 4096)) in setOf(binding.oldMarkerDigest, binding.newMarkerDigest))
+        val prepared = portabilityPreparedWorkspace(destination, binding)
+        val canonical = resumableWorkspacePath(destination)
+        val candidate = if (Files.exists(prepared.toPath(), LinkOption.NOFOLLOW_LINKS)) prepared else canonical
+        val receiptBytes = readPortabilityFile(File(candidate, STAGE_RECEIPT_NAME), MAX_STAGE_RECEIPT_BYTES)
+        val stageReceipt = decodePortabilityStageReceipt(destination, receiptBytes)
+        require(stageReceipt.stageId == binding.stageId && stageReceipt.markerHash == binding.newMarkerDigest &&
+            stageReceipt.sourceRevision == EMPTY_SOURCE_REVISION && stageReceipt.storageId == destination.storageId)
+        val owner = readPortabilityFile(File(candidate, WORKSPACE_OWNER_NAME), MAX_STAGE_RECEIPT_BYTES)
+        require(owner.contentEquals(workspaceOwnerBytes(destination, EMPTY_SOURCE_REVISION)))
+        val markerBytes = transaction(destination, leaseHeld).generationStagingMarkerBytes(binding.stageId, binding.generation)
+        require(sha256(markerBytes) == binding.newMarkerDigest)
+        val scratch = File(candidate, ".recovery-scan-${binding.operationId}")
+        val refreshed = withArchiveOrder(cancelled) { order ->
+            ForeverCasc.inspectForeignStage(dataFiles, scratch, binding.catalogDigest, targetSummary.objectCount.toInt(),
+                { ekey -> archiveTargetMembership(order, ekey) }, cancelled, {
+                    check(leaseHeld()); destination.revalidate(); verifyStorageMarker(destination)
+                    require(sha256(readPortabilityFile(marker, 4096)) in setOf(binding.oldMarkerDigest, binding.newMarkerDigest))
+                }) { _, _, _ -> }
+        }
+        require(refreshed.inventoryDigest == binding.inventoryDigest && refreshed.targetCatalogDigest == binding.catalogDigest)
+        val validate: (File, Boolean) -> Unit = { root, _ ->
+            require(root == candidate || root == prepared || root == canonical)
+            requireExactFile(File(root, WORKSPACE_OWNER_NAME).toPath(), owner, "pending workspace owner")
+            requireExactFile(File(root, STAGE_RECEIPT_NAME).toPath(), receiptBytes, "pending stage receipt")
+            require(sha256File(File(root, CASC_RESUME_CHECKPOINT_NAME)) == binding.checkpointDigest)
+            val checkpointOwner = "FWCASCR1".toByteArray(Charsets.US_ASCII) + binding.checkpointIdentityDigest
+                .chunked(2).map { it.toInt(16).toByte() }.toByteArray()
+            requireExactFile(File(root, CASC_RESUME_OWNER_NAME).toPath(), checkpointOwner, "pending checkpoint identity")
+            destination.revalidate(); verifyStorageMarker(destination)
+        }
+        finishPortabilityTransitionHeld(destination, binding, binding.planDigest, validate,
+            catalogReceiptDigest, publishCatalogReceipt, cancelled, leaseHeld)
+        val artifact = File(privateWorkDirectory, ".forever-portability-${binding.operationId}.admission")
+        Files.deleteIfExists(artifact.toPath())
+        forceDirectory(privateWorkDirectory.toPath())
+        binding
+    }
 
     /** A bounded, private cleanup manifest; not a catalog or a USB authentication substitute. */
     internal fun portabilityWorkspaceManifest(destination: ForeverClientUpdateDestination, root: File): ByteArray {
@@ -4508,23 +4760,7 @@ class ForeverClientUpdater(
         if (existing != null && (existing.stageId != receipt.stageId || existing.markerHash != receipt.markerHash ||
                 existing.sourceRevision != receipt.sourceRevision || existing.snapshotHash != receipt.snapshotHash)
         ) throw IllegalStateException("private stage receipt update changed its immutable destination/source binding")
-        val payload = JSONObject()
-            .put("version", 2)
-            .put("stageId", receipt.stageId)
-            .put("markerHash", receipt.markerHash)
-            .put("sourceRevision", receipt.sourceRevision)
-            .put("snapshotHash", receipt.snapshotHash)
-            .put("storageId", receipt.storageId)
-            .put("destinationPath", receipt.destinationPath)
-            .put("resetCasc", receipt.resetCasc)
-            .toString()
-        val payloadBytes = payload.toByteArray(Charsets.UTF_8)
-        val envelope = JSONObject()
-            .put("payload", payload)
-            .put("sha256", sha256(payloadBytes))
-            .toString()
-            .toByteArray(Charsets.UTF_8)
-        require(envelope.size <= MAX_STAGE_RECEIPT_BYTES) { "private transaction-stage receipt exceeds its bound" }
+        val envelope = encodeStageReceipt(receipt)
         val temporary = File(root, STAGE_RECEIPT_TEMP_NAME).toPath()
         val destination = File(root, STAGE_RECEIPT_NAME).toPath()
         if (Files.exists(temporary, LinkOption.NOFOLLOW_LINKS)) {
@@ -4545,6 +4781,55 @@ class ForeverClientUpdater(
             throw IllegalStateException("private transaction-stage receipt cannot be atomically published", failure)
         }
         forceDirectory(destination.parent)
+    }
+
+    private fun encodeStageReceipt(receipt: UpdateStageReceipt): ByteArray {
+        val payload = JSONObject()
+            .put("version", 2)
+            .put("stageId", receipt.stageId)
+            .put("markerHash", receipt.markerHash)
+            .put("sourceRevision", receipt.sourceRevision)
+            .put("snapshotHash", receipt.snapshotHash)
+            .put("storageId", receipt.storageId)
+            .put("destinationPath", receipt.destinationPath)
+            .put("resetCasc", receipt.resetCasc)
+            .toString()
+        val payloadBytes = payload.toByteArray(Charsets.UTF_8)
+        val envelope = JSONObject()
+            .put("payload", payload)
+            .put("sha256", sha256(payloadBytes))
+            .toString()
+            .toByteArray(Charsets.UTF_8)
+        require(envelope.size <= MAX_STAGE_RECEIPT_BYTES) { "private transaction-stage receipt exceeds its bound" }
+        return envelope
+    }
+
+    private fun writeDurableNewFile(file: File, bytes: ByteArray) {
+        requireSafeAncestors(file.toPath())
+        FileChannel.open(file.toPath(), StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS).use { channel ->
+            writeFully(channel, ByteBuffer.wrap(bytes))
+            channel.force(true)
+        }
+    }
+
+    private fun decodePortabilityStageReceipt(
+        destination: ForeverClientUpdateDestination,
+        bytes: ByteArray,
+    ): UpdateStageReceipt {
+        require(bytes.size in 1..MAX_STAGE_RECEIPT_BYTES)
+        val envelope = JSONObject(String(bytes, Charsets.UTF_8))
+        require(envelope.keys().asSequence().toSet() == setOf("payload", "sha256"))
+        val payloadText = envelope.get("payload") as? String ?: error("invalid pending stage receipt payload")
+        require(envelope.get("sha256") == sha256(payloadText.toByteArray(Charsets.UTF_8)))
+        val payload = JSONObject(payloadText)
+        require(payload.keys().asSequence().toSet() == STAGE_RECEIPT_FIELDS && payload.getInt("version") == 2)
+        val receipt = UpdateStageReceipt(payload.getString("stageId"), payload.getString("markerHash"),
+            payload.getString("sourceRevision"), payload.getString("snapshotHash"), payload.getString("storageId"),
+            payload.getString("destinationPath"), payload.getBoolean("resetCasc"))
+        require(bytes.contentEquals(encodeStageReceipt(receipt)))
+        require(receipt.destinationPath == destination.root.toPath().toAbsolutePath().normalize().toString() &&
+            receipt.storageId == destination.storageId && receipt.snapshotHash.matches(Regex("[0-9a-f]{64}")))
+        return receipt
     }
 
     private fun transactionStageDirectory(destination: ForeverClientUpdateDestination, receipt: UpdateStageReceipt): File =
@@ -4847,6 +5132,7 @@ class ForeverClientUpdater(
         private const val CASC_CHECKPOINT_FINALIZE_BYTES = 72L
         private const val MAX_EKEY_HEADER_BYTES = 16L * 1024 * 1024
         private const val MAX_STAGE_RECEIPT_BYTES = 16 * 1024
+        private const val MAX_PORTABILITY_ADMISSION_BYTES = 64 * 1024
         private const val MAX_STORAGE_MARKER_BYTES = 512
         private const val COPY_BUFFER_BYTES = 64 * 1024
         private const val CASC_TABLE_AND_SORT_RESERVE = 256L * 1024 * 1024

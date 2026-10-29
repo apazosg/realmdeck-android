@@ -92,6 +92,20 @@ class ForeverClientUpdateService private constructor(
         val admissionDigest: String,
     )
 
+    internal data class PartialPortabilityReview(
+        val candidate: PortabilityCatalogCandidate,
+        val verification: ForeverClientUpdater.PartialPortabilityVerification,
+    )
+
+    internal data class PartialPortabilityAdoption(
+        val verification: ForeverClientUpdater.PartialPortabilityVerification,
+        val binding: ForeverClientUpdater.PortabilityIntentBinding,
+    )
+
+    internal data class PartialPortabilityRecovery(
+        val binding: ForeverClientUpdater.PortabilityIntentBinding,
+    )
+
     constructor(context: Context) : this(
         context,
         null,
@@ -582,6 +596,132 @@ class ForeverClientUpdateService private constructor(
             verified
         }
     }
+
+    /** Explicit review flow: official metadata admission remains unactivated and all results provisional. */
+    internal fun beginPartialPortabilityReview(
+        consent: MetadataConsent,
+        cancelled: () -> Boolean,
+        metadataProgress: (String, Long, Long) -> Unit,
+        verificationProgress: (ForeverCasc.IncrementalObjectSpec, Int, Long) -> Unit,
+    ): PartialPortabilityReview {
+        val candidate = preparePortabilityCatalog(consent, cancelled, metadataProgress)
+        val verification = verifyPortabilityCandidate(candidate, cancelled, verificationProgress)
+        return PartialPortabilityReview(candidate, verification)
+    }
+
+    /** Confirm and atomically hand off only the reviewed partial; no payload is started here. */
+    internal fun confirmPartialPortabilityAdoption(
+        review: PartialPortabilityReview,
+        confirmedReviewDigest: String,
+        cancelled: () -> Boolean,
+    ): PartialPortabilityAdoption = withStorageIo(cancelled) { target ->
+        val candidate = review.candidate
+        val admissionBytes = encodeActiveCatalogReceipt(candidate.admission)
+        require(sha256(admissionBytes) == candidate.admissionDigest) { "portability candidate receipt changed" }
+        require(candidate.storageId == storage.operationStorageId(target) &&
+            candidate.destinationPath == target.root.toPath().toAbsolutePath().normalize().toString()) {
+            "portability review belongs to a different selected destination"
+        }
+        val root = dynamicCatalogRoot()
+        val previousReceipt = File(root, ACTIVE_RECEIPT_NAME)
+        val previousBytes = if (Files.exists(previousReceipt.toPath(), LinkOption.NOFOLLOW_LINKS)) {
+            readSmallRegularFile(previousReceipt, MAX_ACTIVE_RECEIPT_BYTES)
+                ?: throw IllegalStateException("active admission is unreadable")
+        } else null
+        require(previousBytes?.let { sha256(it) } == candidate.previousAdmissionDigest) {
+            "active admission changed since portability review"
+        }
+        val admission = parseActiveCatalogReceipt(admissionBytes, root)
+        ForeverClientUpdateCatalog(admission.catalogFile, admission.catalogSha256,
+            admission.catalogBytes, admission.target).use { candidateCatalog ->
+            val engine = updater(candidateCatalog, configAssets = mapOf(
+                admission.target.buildConfig.hash to admission.buildConfigFile,
+                admission.target.cdnConfig.hash to admission.cdnConfigFile,
+            ))
+            val destination = recoveryDestination(target)
+            val result = engine.confirmAndAdoptPartialPortability(
+                destination, review.verification, confirmedReviewDigest,
+                candidate.previousAdmissionDigest, candidate.admissionDigest,
+                admissionBytes,
+                catalogReceiptDigest = {
+                    val bytes = if (Files.exists(previousReceipt.toPath(), LinkOption.NOFOLLOW_LINKS)) {
+                        readSmallRegularFile(previousReceipt, MAX_ACTIVE_RECEIPT_BYTES)
+                            ?: throw IllegalStateException("active admission is unreadable during adoption")
+                    } else null
+                    bytes?.let { sha256(it) }
+                },
+                publishCatalogReceipt = {
+                    publishPortabilityCatalogReceipt(root, admissionBytes,
+                        candidate.previousAdmissionDigest, candidate.admissionDigest)
+                },
+                cancelled = cancelled,
+            )
+            storage.revalidateForUpdate(target)
+            // Do not invalidate pinned state until the durable transition and bound publication finish.
+            activeAdmissionLoaded = false
+            cachedActiveAdmission = null
+            ownedCatalog?.close()
+            ownedCatalog = null
+            check(activeAdmission()?.let { sha256(encodeActiveCatalogReceipt(it)) } == candidate.admissionDigest) {
+                "completed portability transition did not reopen its official catalog admission"
+            }
+            PartialPortabilityAdoption(result.verification, result.binding)
+        }
+    }
+
+    /** Recover only a strict durable portability intent; never plan or fetch payloads here. */
+    internal fun recoverPendingPartialPortability(cancelled: () -> Boolean): PartialPortabilityRecovery =
+        withStorageIo(cancelled) { target ->
+            val destination = recoveryDestination(target)
+            val work = File(privateAnchor, WORK_DIRECTORY)
+            val intent = File(work, ".forever-portability-intent.json")
+            require(!Files.isSymbolicLink(intent.toPath()) && Files.isRegularFile(intent.toPath(), LinkOption.NOFOLLOW_LINKS)) {
+                "no durable portability transition is pending"
+            }
+            require(Files.size(intent.toPath()) in 1..16 * 1024)
+            val envelope = JSONObject(String(requireNotNull(readSmallRegularFile(intent, 16 * 1024)), Charsets.UTF_8))
+            val payloadText = envelope.get("payload") as? String ?: error("invalid pending portability intent")
+            val payload = JSONObject(payloadText)
+            val operationId = payload.get("operationId") as? String ?: error("invalid pending portability operation")
+            require(java.util.UUID.fromString(operationId).toString() == operationId)
+            val artifact = File(work, ".forever-portability-$operationId.admission")
+            require(!Files.isSymbolicLink(artifact.toPath()) && Files.isRegularFile(artifact.toPath(), LinkOption.NOFOLLOW_LINKS))
+            require(Files.size(artifact.toPath()) in 1..MAX_ACTIVE_RECEIPT_BYTES)
+            val admissionBytes = requireNotNull(readSmallRegularFile(artifact, MAX_ACTIVE_RECEIPT_BYTES))
+            val root = dynamicCatalogRoot()
+            val admission = parseActiveCatalogReceipt(admissionBytes, root)
+            val receiptDigest = sha256(admissionBytes)
+            require(payload.get("newCatalogReceiptDigest") == receiptDigest) { "pending admission receipt digest changed" }
+            ForeverClientUpdateCatalog(admission.catalogFile, admission.catalogSha256,
+                admission.catalogBytes, admission.target).use { candidateCatalog ->
+                val engine = updater(candidateCatalog, configAssets = mapOf(
+                    admission.target.buildConfig.hash to admission.buildConfigFile,
+                    admission.target.cdnConfig.hash to admission.cdnConfigFile,
+                ))
+                val binding = engine.recoverPendingPortabilityTransition(
+                    destination, admissionBytes,
+                    catalogReceiptDigest = {
+                        val receipt = File(root, ACTIVE_RECEIPT_NAME)
+                        if (!Files.exists(receipt.toPath(), LinkOption.NOFOLLOW_LINKS)) null
+                        else readSmallRegularFile(receipt, MAX_ACTIVE_RECEIPT_BYTES)?.let(::sha256)
+                    },
+                    publishCatalogReceipt = {
+                        publishPortabilityCatalogReceipt(root, admissionBytes,
+                            payload.optString("oldCatalogReceiptDigest").takeUnless { it == "absent" }, receiptDigest)
+                    },
+                    cancelled = cancelled,
+                )
+                storage.revalidateForUpdate(target)
+                activeAdmissionLoaded = false
+                cachedActiveAdmission = null
+                ownedCatalog?.close()
+                ownedCatalog = null
+                check(activeAdmission()?.let { sha256(encodeActiveCatalogReceipt(it)) } == receiptDigest) {
+                    "recovered portability transition did not reopen its official catalog admission"
+                }
+                PartialPortabilityRecovery(binding)
+            }
+        }
 
     private fun <T> withStorageIo(
         cancelled: () -> Boolean,

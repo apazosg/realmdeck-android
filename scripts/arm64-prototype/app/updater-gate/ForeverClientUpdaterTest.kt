@@ -287,6 +287,73 @@ class ForeverClientUpdaterTest {
     }
 
     @Test
+    fun confirmedPartialAdoptionCreatesFreshPrivateCheckpointAndOrdinaryResumeFetchesOnlyMissingObjects() {
+        val assets = configAssetsOrSkip()
+        for (cut in listOf<String?>(null, "new-workspace-renamed")) {
+        Fixture(cascObjectCount = 4, contiguousRangeObjectCount = 3).use { fixture ->
+            val paths = fixture.makePaths()
+            val destination = fixture.destination(paths)
+            val sourceUpdater = fixture.updater(paths, assets) { record, work, _, progress ->
+                File(work, "${record.ekey}.blte").also { it.writeBytes(fixture.rawFor(record)); progress(it.length()) }
+            }
+            val initial = sourceUpdater.plan(destination)
+            val privateBase = File(paths.work, ".forever-client-update-work")
+            assertThrows(java.util.concurrent.CancellationException::class.java) {
+                sourceUpdater.execute(destination, initial, consentFor(initial), {
+                    privateBase.listFiles().orEmpty().any { File(it, ".forever-casc-resume-checkpoint").length() > 40L }
+                })
+            }
+            val foreignPaths = fixture.makePaths("adopted-private-state").copy(client = paths.client)
+            val fetched = LinkedHashSet<String>()
+            val adopter = fixture.updater(foreignPaths, assets) { record, work, _, progress ->
+                fetched += record.ekey
+                File(work, "${record.ekey}.blte").also { it.writeBytes(fixture.rawFor(record)); progress(it.length()) }
+            }
+            val authenticatedKeys = LinkedHashSet<String>()
+            val review = adopter.verifyPartialPortabilitySource(destination, { false }) { spec, _, _ -> authenticatedKeys += spec.ekey }
+            val sourceData = File(File(paths.client, ".forever-update-staging/${review.stageId}"), "Data/data")
+            val sourceBefore = sourceData.listFiles()!!.filter { it.name.startsWith("data.") }.associate { it.name to sha256(it.readBytes()) }
+            // Internal publisher seam only; Service separately authenticates official receipts.
+            val receipt = JSONObject().put("payload", JSONObject().put("catalogSha256",
+                fixture.catalog.verifiedSha256).toString()).toString().toByteArray()
+            var pointer: ByteArray? = null
+            assertThrows(IllegalArgumentException::class.java) {
+                adopter.confirmAndAdoptPartialPortability(destination, review, "00".repeat(32), null,
+                    sha256(receipt), receipt, { pointer?.let(::sha256) }, { pointer = receipt.copyOf() })
+            }
+            if (cut != null) adopter.portabilityBoundaryForTests = { if (it == cut) throw java.io.IOException("synthetic cut") }
+            fun adopt() = adopter.confirmAndAdoptPartialPortability(destination, review, review.review.digest,
+                null, sha256(receipt), receipt, { pointer?.let(::sha256) }, { pointer = receipt.copyOf() })
+            if (cut == null) {
+                assertEquals(review.objects.inventoryDigest, adopt().verification.objects.inventoryDigest)
+            } else {
+                assertThrows(java.io.IOException::class.java) { adopt() }
+                assertEquals(ForeverClientUpdater.ResumeGuardState.BLOCKED, adopter.resumeGuardState(destination))
+                val recovered = fixture.updater(foreignPaths, assets) { _, _, _, _ -> error("recovery must not fetch") }
+                recovered.recoverPendingPortabilityTransition(destination, receipt,
+                    { pointer?.let(::sha256) }, { pointer = receipt.copyOf() })
+            }
+            assertEquals(receipt.toList(), pointer?.toList())
+            val workspace = requireNotNull(workspaceRoot(foreignPaths))
+            assertTrue(File(workspace, ".forever-casc-resume-checkpoint").length() > 40L)
+            assertTrue(File(workspace, ".forever-casc-resume-owner").isFile)
+            val resumed = adopter.plan(destination)
+            // The ordinary plan counts CASC misses against the published source;
+            // durable checkpoint credit reduces download bytes, not that count.
+            assertTrue(resumed.downloadBytes <= review.review.downloadBytes)
+            assertEquals(sourceBefore, sourceData.listFiles()!!.filter { it.name.startsWith("data.") }.associate { it.name to sha256(it.readBytes()) })
+            adopter.execute(destination, resumed, consentFor(resumed))
+            val looseKeys = fixture.catalog.looseFiles().map { it.objectRecord.ekey }.toSet()
+            assertTrue("authenticated CASC payload must not be fetched again",
+                fetched.intersect(authenticatedKeys).all { it in looseKeys })
+            assertTrue(fetched.size.toLong() <= review.targetPlan.missingObjects + looseKeys.size)
+            assertTrue(File(paths.client, ".build.info").isFile)
+            assertNoLiveFetchWorkers("confirmed partial adoption")
+        }
+        }
+    }
+
+    @Test
     fun portabilityIntentCodecBindsItsDestinationCatalogAndExactSchemaWithoutWriting() {
         val assets = configAssetsOrSkip()
         Fixture().use { fixture ->

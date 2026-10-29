@@ -107,6 +107,7 @@ fun ForeverClientManagementDialog(
     }) }
     var published by remember { mutableStateOf<ForeverClientUpdateCheck.Fingerprint?>(null) }
     var plan by remember { mutableStateOf<ForeverClientUpdatePlan?>(null) }
+    var portabilityReview by remember { mutableStateOf<ForeverClientUpdateService.PartialPortabilityReview?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
 
     val execution = remember { ForeverClientUpdateExecution }
@@ -296,6 +297,44 @@ fun ForeverClientManagementDialog(
         }
     }
 
+    fun reviewPortableDownload() {
+        runOperation("Consultando versión para revisar la descarga existente…") { service ->
+            val target = service.checkVersions().published ?: throw IllegalStateException("network versions unavailable")
+            val reviewed = service.beginPartialPortabilityReview(
+                ForeverClientUpdateService.MetadataConsent(target, 1L shl 30, false), cancel::get,
+                { stage, completed, total ->
+                    progressFlow.value = ForeverFunctionalUiText.preparationStatus(stage, completed, total)
+                },
+                { _, _, _ -> progressFlow.value = "Autenticando datos existentes del USB…" },
+            )
+            withContextOnMain { if (alive.get() && !cancel.get()) { portabilityReview = reviewed; plan = null } }
+        }
+    }
+
+    fun adoptPortableDownload(reviewed: ForeverClientUpdateService.PartialPortabilityReview) {
+        runOperation("Verificando y recuperando la descarga existente…") { service ->
+            service.confirmPartialPortabilityAdoption(reviewed, reviewed.verification.review.digest, cancel::get)
+            // Adoption never starts payload. The ordinary freshly computed plan is
+            // displayed afterwards and still requires its own Download confirmation.
+            if (cancel.get()) throw CancellationException("portable download recovered and paused")
+            service.qualify(cancel::get)
+            val computed = service.plan(cancel::get, ::publishProgress)
+            withContextOnMain {
+                if (alive.get() && !cancel.get()) { portabilityReview = null; plan = computed; onClientChanged() }
+            }
+        }
+    }
+
+    fun recoverPortableDownload() {
+        runOperation("Recuperando la continuación interrumpida…") { service ->
+            service.recoverPendingPartialPortability(cancel::get)
+            if (cancel.get()) throw CancellationException("portability recovery paused")
+            service.qualify(cancel::get)
+            val computed = service.plan(cancel::get, ::publishProgress)
+            withContextOnMain { if (alive.get() && !cancel.get()) { portabilityReview = null; plan = computed } }
+        }
+    }
+
     fun resumeDownload(previous: ForeverClientUpdatePlan) {
         runOperation("Comprobando descarga pendiente…") { service ->
             service.qualify(cancel::get)
@@ -353,7 +392,22 @@ fun ForeverClientManagementDialog(
                     val readyPlan = plan
                     val local = inspection
                     error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-                    if (readyPlan != null) {
+                    val portable = portabilityReview
+                    if (portable != null) {
+                        val verified = portable.verification
+                        val costs = verified.review
+                        Text("Reutilizables verificados: ${verified.objects.objectCount} objetos")
+                        Text("Pendientes CASC: ${verified.targetPlan.missingObjects} objetos")
+                        Text("Descarga prevista, incluidos archivos sueltos: hasta ${ForeverFunctionalUiText.clientBytes(costs.downloadBytes)}")
+                        Text("Espacio adicional: hasta ${ForeverFunctionalUiText.clientBytes(costs.peakAdditionalBytes)}")
+                        Text("App: hasta ${ForeverFunctionalUiText.clientBytes(costs.privateAdditionalBytes)} · USB: hasta ${ForeverFunctionalUiText.clientBytes(costs.destinationAdditionalBytes)}")
+                        Text("Al confirmar se verificará el estado actual y se creará una reanudación propia. La descarga se confirma después.")
+                        Button(enabled = costs.hasEnoughSpace, onClick = { adoptPortableDownload(portable) }) {
+                            Text("Reutilizar y preparar continuación")
+                        }
+                        if (!costs.hasEnoughSpace) Text("No hay espacio suficiente.", color = MaterialTheme.colorScheme.error)
+                        TextButton(onClick = { portabilityReview = null }) { Text("Cancelar revisión") }
+                    } else if (readyPlan != null) {
                         Text("Versión: ${readyPlan.version}")
                         Text("Descarga: ${ForeverFunctionalUiText.clientBytes(readyPlan.downloadBytes)}")
                         Text("Espacio adicional: ${ForeverFunctionalUiText.clientBytes(readyPlan.peakAdditionalBytes)}")
@@ -422,6 +476,12 @@ fun ForeverClientManagementDialog(
                         }
                     } else {
                         Button(onClick = ::inspectLocal, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Reintentar") }
+                    }
+                    if (readyPlan == null && portable == null && execution.resumePlan == null) {
+                        Text("Descarga parcial trasladada: revisión explícita, hasta 1 GiB de metadatos por Wi-Fi. No inicia la descarga del juego.",
+                            style = MaterialTheme.typography.bodySmall)
+                        TextButton(onClick = ::reviewPortableDownload) { Text("Revisar descarga de otro móvil") }
+                        TextButton(onClick = ::recoverPortableDownload) { Text("Recuperar adopción interrumpida") }
                     }
                 }
                 if (inline && !inspection?.detail.isNullOrBlank()) {

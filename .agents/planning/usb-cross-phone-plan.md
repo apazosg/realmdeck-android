@@ -213,6 +213,24 @@ consentimiento del plan real antes de adoptar o descargar.
 
 ## Open Issues
 
+- Integración en validación (2026-10-29): la interfaz ofrece revisión explícita,
+  reutilización/delta/espacio, confirmación de adopción y recuperación interrumpida;
+  el payload conserva su confirmación ordinaria separada. Backend mantiene una
+  única exclusión real desde la autenticación fresca del checkpoint nuevo hasta
+  la transición C/P/S y la publicación oficial; no restaura el checkpoint antiguo.
+  Prueba integrada sintética de adopción, corte tras rename P→C, recuperación y
+  ejecución ordinaria hasta `.build.info`: PASS, 1 test/0 fallos/errores/skips,
+  `integrated-adoption-clean-service-tests/summary.json`, 10:32:54 UTC. La prueba
+  de 12 cortes del primitivo pasó en la ejecución aislada anterior; no se repitió.
+  La primera aserción integrada confundía missingObjects del origen publicado
+  con crédito del checkpoint: se corrigió solo el test, manteniendo el planner.
+  Interrupciones y fallos HOST Gradle/KSP anteriores no cuentan como JUnit;
+  se conservaron sus logs y se ejecutó con outputs limpios bajo servicio de usuario.
+  Fuentes de producción/UI compiladas; NO prueba real, APK nueva ni adopción USB.
+  Revisión independiente del diff solicitada, pero la herramienta falló por
+  variante no disponible y NO emitió revisión. Sigue pendiente, igual que
+  auditoría de candidata y validación física de ambos casos.
+
 - 2026-10-29: la verificación explícita devuelve además un resumen provisional
   de descarga y espacio privado/destino/pico, ligado por digest al catálogo,
   volumen/ruta, marcador, inventario autenticado y snapshot loose/config.
