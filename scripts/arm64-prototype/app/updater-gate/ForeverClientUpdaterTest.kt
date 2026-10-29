@@ -267,7 +267,10 @@ class ForeverClientUpdaterTest {
             val verified = foreign.verifyPartialPortabilitySource(foreignDestination, { false }) { spec, _, _ -> records += spec }
             assertTrue(verified.objects.objectCount > 0)
             assertEquals(records.size.toLong(), verified.objects.objectCount)
-            assertTrue("foreign records must use the admitted light storage capability", lightValidations >= records.size)
+            assertTrue("directed review must check bindings at least every sixteen records",
+                lightValidations >= (records.size + 15) / 16)
+            assertTrue("directed review must not repeat binding checks for every fast fixture object",
+                records.size <= 1 || lightValidations < records.size)
             // Entry/exit, the metadata review and lease have fixed full checks;
             // each segment adds bounded checks. Do not compare that fixed cost
             // to a pressure-flushed prefix which may contain very few objects.
@@ -299,6 +302,23 @@ class ForeverClientUpdaterTest {
             assertEquals(before, clientBytes())
             assertEquals(ForeverClientUpdater.ResumeGuardState.BLOCKED, foreign.resumeGuardState(foreignDestination))
             assertFalse(File(foreignPaths.work, ".forever-client-update-work").exists())
+            val stageMarker = paths.client.walkTopDown().single {
+                it.isFile && it.name == ".owner" && it.parentFile.parentFile.name == ".forever-update-staging"
+            }
+            val originalMarker = stageMarker.readBytes()
+            var changedOwner = false
+            try {
+                assertThrows(IllegalStateException::class.java) {
+                    foreign.verifyPartialPortabilitySource(foreignDestination, { false }) { _, _, _ ->
+                        if (!changedOwner) {
+                            stageMarker.writeBytes(originalMarker.map { (it.toInt() xor 1).toByte() }.toByteArray())
+                            changedOwner = true
+                        }
+                    }
+                }
+                assertTrue(changedOwner)
+            } finally { stageMarker.writeBytes(originalMarker) }
+            assertEquals(before, clientBytes())
             assertThrows(java.util.concurrent.CancellationException::class.java) {
                 foreign.verifyPartialPortabilitySource(foreignDestination, { true }) { _, _, _ -> error("cancelled") }
             }

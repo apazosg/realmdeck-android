@@ -4119,13 +4119,31 @@ class ForeverClientUpdater(
             requireExactFile(marker, markerBytes, "foreign partial stage marker binding")
         }
         fun revalidate() = revalidateStorageAndBinding(destination.revalidate)
-        // Both hooks are required to admit the existing directed full/light
-        // capability. Segment/entry/final checks refresh mount identity. Each
-        // record checks selection/root/base identities through the light hook,
-        // plus namespace and exact owner before authentication.
-        val recordStorageCheck = if (destination.revalidateCascSegment != null &&
-            destination.revalidateCascCommitGroup != null) destination.revalidateCascCommitGroup else destination.revalidate
-        fun revalidateRecord() = revalidateStorageAndBinding(recordStorageCheck)
+        // This scanner never writes/adopts the source. Full namespace, mount and
+        // marker checks bracket each segment and the complete result. With both
+        // directed capabilities, bound intervening identity/owner checks to the
+        // existing 16-object group size (or 250 ms between records), rather than
+        // walking and hashing the same ancestors several times per object.
+        // Every object is still authenticated; callbacks remain provisional.
+        val lightCheck = destination.revalidateCascCommitGroup
+            ?.takeIf { destination.revalidateCascSegment != null }
+        var recordsSinceBindingCheck = 0
+        var nextBindingCheck = 0L
+        fun revalidateRecord() {
+            checkCancelled(cancelled)
+            if (lightCheck == null) {
+                revalidate()
+                return
+            }
+            val now = System.nanoTime()
+            if (recordsSinceBindingCheck == 0 || now >= nextBindingCheck) {
+                lightCheck()
+                requireExactFile(marker, markerBytes, "foreign partial stage marker binding")
+                nextBindingCheck = now + 250_000_000L
+                recordsSinceBindingCheck = 0
+            }
+            recordsSinceBindingCheck = (recordsSinceBindingCheck + 1) % ForeverCasc.RESUMABLE_COMMIT_GROUP_OBJECTS
+        }
         withArchiveOrder(cancelled) { order ->
             val scratch = File(privateWorkDirectory, ".portability-scan-${UUID.randomUUID()}")
             order.withObjects(cancelled) { records ->

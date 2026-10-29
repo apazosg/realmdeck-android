@@ -223,6 +223,27 @@ consentimiento del plan real antes de adoptar o descargar.
 
 ## Open Issues
 
+- Corrección guiada por perfil físico C163, 29-10: captura única de 15 s,
+  `usb-portability-c163-20261029/active-review-profile/analysis/`: 51 muestras
+  del hilo verificador, 45 inclusivas en revalidación por objeto, 34 en el
+  clasificador de namespace/marcador y 6 en BLTE; no sumar contadores inclusivos
+  ni interpretarlos como partición del tiempo bloqueado. Sin pérdidas reportadas.
+  Corrección implementada: autenticación/cancelación por objeto y validación completa
+  al entrar, cambiar de segmento y finalizar. Solo con ambas capacidades dirigidas,
+  comprobar selección/identidad raíz-base y dueño exacto en grupos de hasta 16
+  registros o al vencer 250 ms entre registros; sin capacidades, conservar full
+  por objeto. La revisión es de solo lectura y todo resultado sigue provisional:
+  cualquier cambio detectado impide devolver el resumen/adoptar. No aplicar esta
+  optimización a preparación durable, recuperación ni escritura ordinaria.
+  Prueba focal `foreign-binding-group-tests`: 1/0 fallos, paridad de fuentes,
+  Gradle offline 4m9s; comprueba agrupación, fallback, cambio de dueño rechazado,
+  cuerpos preservados y cancelación. Revisión independiente de fuentes reales
+  por snapshot HTTP, sin hallazgos accionables ni repetición de pruebas.
+  C163 quedó pausada a las 19:36:33 sin adopción/payload; dos intentos de obtener
+  XML no enviaron clicks. Cancelación local mediante navegación UHID y el
+  BackHandler de la propia pantalla, sin matar procesos ni cambiar seguridad.
+  Medir de nuevo en USB: ni el perfil ni el test prueban todavía <=900 s.
+
 - Requisito de rendimiento solicitado explícitamente por el usuario el 29-10:
   «nuestro objetivo ahí debería ser similar al tiempo de preparación unos
   15 minutos máximo». Criterio para la revisión previa de adopción: como máximo
