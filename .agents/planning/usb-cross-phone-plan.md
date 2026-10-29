@@ -223,6 +223,15 @@ consentimiento del plan real antes de adoptar o descargar.
 
 ## Open Issues
 
+- Diagnóstico siguiente de C165, distinto de la medición cerrada: una revisión
+  nueva con máximo 300 s para observar autenticación, un único perfil de CPU/
+  scheduling de 15 s con la configuración ya validada y cancelación cooperativa
+  inmediatamente después, también si falla la captura. No es otra prueba de
+  900 s, ni adopción o payload. `diagnostic-calibration.json` comprueba sintaxis
+  y paridad de las guardas de cancelación; los resultados anteriores se conservan.
+  El perfil debe distinguir trabajo del productor/catálogo y workers BLTE/lectura,
+  sin atribuir tiempo exclusivo a frames inclusivos ni aumentar concurrencia a ciegas.
+
 - C165: la única revisión real terminó el 2026-10-29 a las 20:52:13 UTC;
   no produjo el resumen en 900 s. Última muestra a 902,065 s: 212295 objetos
   y 13,5 GiB autenticados provisionalmente. Cancelación cooperativa e idle
