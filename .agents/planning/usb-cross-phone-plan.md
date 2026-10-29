@@ -223,6 +223,19 @@ consentimiento del plan real antes de adoptar o descargar.
 
 ## Open Issues
 
+- C166 canónica: `1de8a65`, Modern offline 5m31s, auditor sin cambios
+  `PASS_SOURCE_BUILD_AND_PAYLOAD_AUDIT`, 2231 fuentes coincidentes con recibo,
+  178 payloads. APK 485379823 bytes, SHA256
+  `cc1f9b2bb02ca4bdb3654227905ee8d7b65c3ff2dd2f822990e6bed9179791f3`.
+  La revisión independiente pendiente se completó tras nueva comprobación del
+  catálogo del proveedor: el revisor leyó manifiesto/diff y fuentes completas
+  inmutables por HTTP local; sin hallazgos accionables, sin repetir tests ni
+  validar por ello velocidad/USB físico. Snapshot cerrado. Reemplazo preservador
+  C165→C166 bajo autorización vigente: preflight nuevo exige review idle,
+  versión/UID/guest/updater y marcador+81 archivos; un solo `install -r`, sin
+  borrar datos ni lanzar operaciones. Después deberá medirse la revisión real;
+  no se declara conseguido el objetivo de 900 s ni la portabilidad completa.
+
 - Consultas por lotes implementadas en la revisión explícita: máximo 64
   descriptores/cabeceras y cuatro autenticaciones pendientes; respuesta oficial
   ligada a clave completa, ordinal y orden. Mantiene límites, auth/EOF, callbacks
