@@ -223,6 +223,15 @@ consentimiento del plan real antes de adoptar o descargar.
 
 ## Open Issues
 
+- C164 no cumple el objetivo de 900 s: revisión iniciada una sola vez a las
+  19:51:52; última muestra a los 886.285 s, 208134 objetos/13.2 GiB autenticados
+  provisionalmente, sin resumen completo. Se canceló localmente al límite;
+  terminó 20:06:57 sin error, idle confirmado y cero updater comprobado después.
+  No adopción ni payload. Evidencia `usb-portability-c164-20261029/partial-review/`
+  (`summary.json`, `verdict.json`, `services-after.txt`). La ventana incluyó un
+  perfil de 15 s, no se presenta como ensayo sin instrumentación. Los contadores
+  no son progreso adoptado ni sustituyen la autenticación completa pendiente.
+
 - Perfil real C164 de 15 s (29-10, 19:58:45–19:59:01): el coste dominante ya no
   son las comprobaciones FUSE repetidas. El worker tiene 205 muestras CPU, 152 en
   verificación BLTE y 116 en inflate; tiempos inclusivos, no sumables. Consume
