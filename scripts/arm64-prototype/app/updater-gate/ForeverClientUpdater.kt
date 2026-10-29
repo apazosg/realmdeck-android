@@ -4120,8 +4120,9 @@ class ForeverClientUpdater(
         }
         fun revalidate() = revalidateStorageAndBinding(destination.revalidate)
         // Both hooks are required to admit the existing directed full/light
-        // capability. Segment/entry/final checks stay full; each record still
-        // checks mount identity, namespace and exact owner before authentication.
+        // capability. Segment/entry/final checks refresh mount identity. Each
+        // record checks selection/root/base identities through the light hook,
+        // plus namespace and exact owner before authentication.
         val recordStorageCheck = if (destination.revalidateCascSegment != null &&
             destination.revalidateCascCommitGroup != null) destination.revalidateCascCommitGroup else destination.revalidate
         fun revalidateRecord() = revalidateStorageAndBinding(recordStorageCheck)

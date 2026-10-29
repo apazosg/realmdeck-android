@@ -246,7 +246,13 @@ consentimiento del plan real antes de adoptar o descargar.
   1 test/0 fallos, paridad de seis fuentes, Gradle 4m7s; conserva pruebas de
   autenticación, bytes inmutables, fallback full y ausencia de estado heredado.
   La UI compiló pero no está instalada. C163 está etiquetada (3 Python PASS);
-  pendientes revisión independiente del código exacto y auditoría de candidata
+  La revisión independiente accedió al diff y fuentes exactas por snapshot HTTP
+  local: señaló un comentario inexacto, corregido sin cambio ejecutable. El check
+  light valida selección/root/base; la identidad de montaje se refresca en los
+  límites full, no por objeto. Bajo ese contrato no quedaron bloqueos runtime
+  identificados; no es prueba física ni exclusión de escritores maliciosos.
+  La compilación C163 iniciada una sola vez usa `7f14bc1`, con el comentario
+  anterior y código ejecutable idéntico al corregido. Pendiente auditoría exacta
   antes de instalación preservadora y repetir explícitamente la revisión real.
 
 - Prueba real C162, 29-10: sustitución preservadora completada a las 14:28:44,
