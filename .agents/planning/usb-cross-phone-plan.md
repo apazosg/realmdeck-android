@@ -223,6 +223,25 @@ consentimiento del plan real antes de adoptar o descargar.
 
 ## Open Issues
 
+- Prueba real C162, 29-10: sustitución preservadora completada a las 14:28:44,
+  mismo UID, cero servicios updater y `.owner`/diccionario de nombres-tamaños de
+  los 81 CASC (51625635891 bytes) idénticos antes/después. No es un hash completo
+  de cuerpos ni prueba de adopción. Tras abrir la app una sola vez, se corrigió
+  únicamente la captura UI del controlador y su comprobación de foreground;
+  los intentos previos sin acciones se conservan, sin reinstalar.
+  La selección normal de Unidad USB se confirmó una vez, con metadatos fuente
+  conservados y sin adopción. Una desconexión ADB interrumpió la navegación
+  posterior antes de cualquier acción; mDNS permitió reconectar el original.
+  Después se abrió Cliente y actualizaciones una sola vez. La inspección local
+  terminó mostrando Destino: Unidad USB y el botón explícito de portabilidad.
+  Se ha enviado una sola acción «Revisar descarga de otro móvil»: observador
+  independiente del servidor registra el avance, se detiene en el resumen o
+  error y nunca pulsa adopción/payload. Última observación incorporada:
+  «Consultando versión para revisar la descarga existente…»; resultado todavía
+  no incorporado. Evidencias en `usb-portability-c162-20261029/`, especialmente
+  `original-install/`, `usb-selection/`, `client-management-after-reconnect/`
+  y `partial-review/`. No repetir esos controladores por reinicios.
+
 - 29-10, candidata C162: compilación offline JDK17 Modern completada en 5m15s;
   auditoría sin relajar `PASS_SOURCE_BUILD_AND_PAYLOAD_AUDIT`, 2231 fuentes
   coincidentes con el recibo y 178 payloads. APK de 485359339 bytes, SHA-256
