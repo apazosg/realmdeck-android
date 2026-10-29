@@ -894,8 +894,10 @@ class ForeverCascTest {
             val callbackOrder = mutableListOf<String>()
             val authThreads = java.util.concurrent.ConcurrentHashMap.newKeySet<Long>()
             val allStarted = java.util.concurrent.CountDownLatch(specs.size)
+            var singleMembershipCalls = 0
+            var batchMembershipCalls = 0
             val plan = ForeverCasc.inspectForeignTarget(stage, File(root, "private/plan"), "ab".repeat(32),
-                target.size, { membership.getValue(it) }, target.asSequence(), {
+                target.size, { singleMembershipCalls++; membership.getValue(it) }, target.asSequence(), {
                     if (Thread.currentThread().name == "foreign-casc-auth" && authThreads.add(Thread.currentThread().id)) {
                         allStarted.countDown()
                         assertTrue("independent authentication workers must run concurrently",
@@ -903,7 +905,14 @@ class ForeverCascTest {
                     }
                     false
                 }, {},
+                targetMembershipBatch = { keys ->
+                    batchMembershipCalls++
+                    assertTrue(keys.size in 1..64)
+                    keys.map { membership.getValue(it) }
+                },
                 onVerifiedRecord = { spec, _, _ -> callbackOrder += spec.ekey })
+            assertEquals(1, batchMembershipCalls)
+            assertEquals("single lookups remain only for final target metadata rebinding", specs.size, singleMembershipCalls)
             assertEquals(specs.size, authThreads.size)
             assertEquals(specs.size.toLong(), plan.target.verifiedObjects)
             assertEquals(specs.map { it.ekey }, callbackOrder)
@@ -921,6 +930,13 @@ class ForeverCascTest {
             }
             assertEquals(before, directFileHashes(stage))
             assertFalse(File(root, "private/changed").exists())
+            assertThrows(IllegalArgumentException::class.java) {
+                ForeverCasc.inspectForeignStage(stage, File(root, "private/wrong-batch"), "ab".repeat(32),
+                    target.size, { error("batch path must not use single lookup") }, { false }, {},
+                    targetMembershipBatch = { keys -> keys.reversed().map { membership.getValue(it) } },
+                    onVerifiedRecord = { _, _, _ -> error("mismatched membership must not publish") })
+            }
+            assertEquals(before, directFileHashes(stage))
         } finally { delete(root) }
     }
 

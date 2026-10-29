@@ -565,6 +565,7 @@ object ForeverCasc {
         revalidateBinding: () -> Unit,
         revalidateRecordBinding: () -> Unit = revalidateBinding,
         parallelAuthentication: Boolean = false,
+        targetMembershipBatch: ((List<String>) -> List<IndexedValue<IncrementalObjectSpec>>)? = null,
         onVerifiedRecord: (IncrementalObjectSpec, Int, Long) -> Unit,
     ): ForeignStageVerification {
         require(targetCatalogDigest.matches(Regex("[0-9a-f]{64}"))) { "foreign-stage target catalog digest is invalid" }
@@ -639,6 +640,40 @@ object ForeverCasc {
                         updateForeignSegmentBindingDigest(inventory, snapshot)
                         var offset = SEGMENT_HEADER_SIZE.toLong()
                         var segmentObjects = 0
+                        data class AdmittedHeader(val offset: Long, val header: ByteArray,
+                            val member: IndexedValue<IncrementalObjectSpec>)
+                        val headers = java.util.ArrayDeque<AdmittedHeader>()
+                        fun nextAdmittedHeader(): AdmittedHeader {
+                            if (headers.isEmpty()) {
+                                val raw = ArrayList<Pair<Long, ByteArray>>(64)
+                                val keys = ArrayList<String>(64)
+                                var cursor = offset
+                                while (cursor < snapshot.size && raw.size < 64) {
+                                    checkCancelled(cancelled)
+                                    require(snapshot.size - cursor >= LOCAL_HEADER_SIZE) { "truncated foreign local header" }
+                                    val bytes = ByteArray(LOCAL_HEADER_SIZE)
+                                    readFullyAt(channel, ByteBuffer.wrap(bytes), cursor)
+                                    val fullKey = bytes.copyOfRange(0, 16).reversedArray()
+                                    val size = u32(bytes, 0x10).toLong() and 0xffffffffL
+                                    require(u16(bytes, 0x14) == 0 && size >= LOCAL_HEADER_SIZE + 4L &&
+                                        size <= ARCHIVE_LIMIT && size <= snapshot.size - cursor) { "unsupported foreign record size or flags" }
+                                    validateLocalHeader(bytes, IndexEntry(fullKey.copyOfRange(0, 9), snapshot.id, cursor, size))
+                                    raw += cursor to bytes
+                                    keys += fullKey.hex()
+                                    cursor = Math.addExact(cursor, size)
+                                }
+                                require(keys.toSet().size == keys.size) { "duplicate foreign batch key" }
+                                val members = requireNotNull(targetMembershipBatch).invoke(keys)
+                                require(members.size == keys.size) { "foreign membership batch count mismatch" }
+                                members.forEachIndexed { index, member ->
+                                    require(member.value.ekey == keys[index] && member.index in 0 until targetObjectCount) {
+                                        "foreign membership batch identity mismatch"
+                                    }
+                                    headers.addLast(AdmittedHeader(raw[index].first, raw[index].second, member))
+                                }
+                            }
+                            return headers.removeFirst().also { require(it.offset == offset) }
+                        }
                         data class PendingAuthentication(
                             val future: Future<*>, val spec: IncrementalObjectSpec,
                             val recordOffset: Long,
@@ -689,8 +724,10 @@ object ForeverCasc {
                             if (snapshot.size - offset < LOCAL_HEADER_SIZE) {
                                 throw IllegalStateException("foreign CASC segment ends in a truncated local header")
                             }
-                            val header = ByteArray(LOCAL_HEADER_SIZE)
-                            readFullyAt(channel, ByteBuffer.wrap(header), offset)
+                             val batched = if (targetMembershipBatch != null) nextAdmittedHeader() else null
+                             val header = batched?.header ?: ByteArray(LOCAL_HEADER_SIZE).also {
+                                 readFullyAt(channel, ByteBuffer.wrap(it), offset)
+                             }
                             val reversedKey = header.copyOfRange(0, 16).reversedArray()
                             val ekey = reversedKey.hex()
                             val totalSize = u32(header, 0x10).toLong() and 0xffffffffL
@@ -701,7 +738,7 @@ object ForeverCasc {
                             val entry = IndexEntry(reversedKey.copyOfRange(0, 9), snapshot.id, offset, totalSize)
                             validateLocalHeader(header, entry)
                             val encodedSize = totalSize - LOCAL_HEADER_SIZE
-                            val admitted = targetMembership(ekey)
+                             val admitted = batched?.member ?: targetMembership(ekey)
                             val spec = normalizeIncrementalSpec(admitted.value)
                             val ordinal = admitted.index
                             if (ordinal !in 0 until targetObjectCount || targetSeen.get(ordinal) || spec.ekey != ekey ||
@@ -1614,6 +1651,7 @@ object ForeverCasc {
         cancelled: () -> Boolean,
         revalidateBinding: () -> Unit,
         revalidateRecordBinding: () -> Unit = revalidateBinding,
+        targetMembershipBatch: ((List<String>) -> List<IndexedValue<IncrementalObjectSpec>>)? = null,
         onVerifiedRecord: (IncrementalObjectSpec, Int, Long) -> Unit,
     ): ForeignTargetPlan {
         validateTargetInspectionPaths(dataFiles, workDirectory)
@@ -1629,6 +1667,14 @@ object ForeverCasc {
                     }
                 }, cancelled, revalidateBinding, revalidateRecordBinding,
                 parallelAuthentication = true,
+                targetMembershipBatch = targetMembershipBatch?.let { batch ->
+                    { keys ->
+                        batch(keys).also { members ->
+                            check(admittedOrdinals.size + members.size <= 64 + FOREIGN_AUTH_WORKERS)
+                            members.forEach(admittedOrdinals::addLast)
+                        }
+                    }
+                },
             ) { spec, archive, offset ->
                 val admitted = admittedOrdinals.removeFirst()
                 require(admitted.value == spec && admitted.index in 0 until targetObjectCount)

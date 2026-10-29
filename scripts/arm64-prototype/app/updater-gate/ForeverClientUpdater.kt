@@ -4153,7 +4153,9 @@ class ForeverClientUpdater(
                     records.map { record ->
                         validateTransferBounds(record)
                         ForeverCasc.IncrementalObjectSpec(record.ekey, record.contentKey, record.encodedSize, record.decodedSize)
-                    }, cancelled, ::revalidate, ::revalidateRecord, onVerifiedRecord,
+                    }, cancelled, ::revalidate, ::revalidateRecord,
+                    targetMembershipBatch = { keys -> archiveTargetMembershipBatch(order, keys, cancelled) },
+                    onVerifiedRecord = onVerifiedRecord,
                 )
                 revalidate()
                 val review = portabilityReview(destination, markerDigest, result.verification, result.target, cancelled)

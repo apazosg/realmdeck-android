@@ -223,6 +223,17 @@ consentimiento del plan real antes de adoptar o descargar.
 
 ## Open Issues
 
+- Consultas por lotes implementadas en la revisión explícita: máximo 64
+  descriptores/cabeceras y cuatro autenticaciones pendientes; respuesta oficial
+  ligada a clave completa, ordinal y orden. Mantiene límites, auth/EOF, callbacks
+  físicos, cancelación/join y defaults de preparación/recuperación. Prueba local
+  única `batched-foreign-membership-tests`: 4 tests, cero fallos/errores/skips y
+  paridad de fuentes; incluye respuesta desordenada rechazada y fuente preservada.
+  No repetir esos checks. Revisión independiente solicitada con snapshot HTTP
+  real, pero ambos intentos fallaron por variante de proveedor no disponible;
+  no se obtuvo aprobación. Gate abierto antes de despliegue. Sin nueva mejora
+  física ni 900 s aceptados; todavía debe medirse y completarse la portabilidad.
+
 - Diagnóstico corto C165 cerrado: única revisión 21:10:19→21:13:50 UTC,
   perfil propio de 15 s capturado y cancelación/idle confirmados; ninguna adopción
   ni payload. El primer intento había fallado antes de cualquier click porque
