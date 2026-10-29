@@ -223,6 +223,16 @@ consentimiento del plan real antes de adoptar o descargar.
 
 ## Open Issues
 
+- C165 canónica (363fa76), reconstrucción/Modern offline 5m26s y auditoría sin
+  modificar `PASS_SOURCE_BUILD_AND_PAYLOAD_AUDIT`: 2231 fuentes coincidentes con
+  recibo, 178 payloads; APK 485372567 bytes, SHA256
+  `2ff5a8f1c65d6014b0a6294f90b37495890753b788ae2a9ad009189aa374a421`.
+  Reemplazo preservador C164→C165 bajo autorización vigente: preflight fresco
+  deberá confirmar revisión idle, versión/UID, ausencia updater/guest y marcador+81
+  nombres/tamaños; una sola instalación `-r`, sin clear/uninstall ni autoarranque.
+  No confirmar adopción/payload. Rendimiento de 900 s y portabilidad física
+  siguen pendientes; no deducirlos de las cinco pruebas locales ni de la auditoría.
+
 - Autenticación paralela explícita implementada: hasta cuatro rangos streaming,
   publicación de resultados en orden físico, drenaje por segmento y cancelación/
   unión de todos los workers antes de cerrar canales o limpiar. Preparación de
