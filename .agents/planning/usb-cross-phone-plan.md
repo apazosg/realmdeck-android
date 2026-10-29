@@ -223,6 +223,21 @@ consentimiento del plan real antes de adoptar o descargar.
 
 ## Open Issues
 
+- 29-10, candidata C162: compilación offline JDK17 Modern completada en 5m15s;
+  auditoría sin relajar `PASS_SOURCE_BUILD_AND_PAYLOAD_AUDIT`, 2231 fuentes
+  coincidentes con el recibo y 178 payloads. APK de 485359339 bytes, SHA-256
+  `6c7edcef8e082a6958f578816cdc6f5741648ec244fee50e3086781f220d49b3`.
+  Revisor independiente leyó el diff integrado completo y código relevante vía
+  snapshot local de fuentes reales, sin hallazgos accionables; no ejecutó tests
+  ni validó dispositivo/cobertura completa. Servidores de revisión ya cerrados.
+  Preflight fresco reconectó el original por anuncio mDNS único: modelo correcto,
+  cero servicios updater; APK instalada **162/0.2.138-wowup-addons-test**, no la
+  C160 histórica. Se prepara una única sustitución `install -r --no-streaming`
+  por C162 de portabilidad, sin desinstalar/borrar/abrir la app; se exige mismo
+  UID y metadatos del staging USB idénticos antes/después. No autoriza adopción
+  ni payload sin presentar y confirmar el plan real. Evidencia externa en
+  `usb-portability-c162-20261029/` y `c162-device-preflight/`; build no repetido.
+
 - Integración en validación (2026-10-29): la interfaz ofrece revisión explícita,
   reutilización/delta/espacio, confirmación de adopción y recuperación interrumpida;
   el payload conserva su confirmación ordinaria separada. Backend mantiene una
