@@ -223,6 +223,20 @@ consentimiento del plan real antes de adoptar o descargar.
 
 ## Open Issues
 
+- Requisito de rendimiento solicitado explícitamente por el usuario el 29-10:
+  «nuestro objetivo ahí debería ser similar al tiempo de preparación unos
+  15 minutos máximo». Criterio para la revisión previa de adopción: como máximo
+  900 s desde la acción explícita hasta el resumen confirmable de reutilización,
+  delta y espacio; no incluye instalar la APK ni descargar el payload restante.
+  Medir por separado metadatos, autenticación y planificación, sin esconder esas
+  fases fuera del tiempo total. La fixture física actual conserva 51625635891
+  bytes CASC; no extrapolar su resultado a cualquier capacidad o velocidad USB.
+  C163 no cumple: a las 19:19:59 mostraba solo 5881 objetos/411.5 MiB
+  autenticados desde una revisión iniciada antes de las 18:50:49. No adoptar
+  recuentos parciales ni eliminar EKey/BLTE/CKey o guardas para alcanzar la cota.
+  Registrar esta exigencia en la especificación y medir el cuello dominante
+  antes de aceptar otra candidata; no reiniciar la revisión ya enviada.
+
 - C163 instalada el 29-10 a las 18:45:28: sustitución confirmada, mismo UID,
   cero updater antes/después y marcador+81 nombres/tamaños CASC idénticos
   (51625635891 bytes), sin autoarranque del instalador. Después se abrió la app
