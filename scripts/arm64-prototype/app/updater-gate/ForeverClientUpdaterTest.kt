@@ -260,6 +260,11 @@ class ForeverClientUpdaterTest {
             val verified = foreign.verifyPartialPortabilitySource(foreignDestination, { false }) { spec, _, _ -> records += spec }
             assertTrue(verified.objects.objectCount > 0)
             assertEquals(records.size.toLong(), verified.objects.objectCount)
+            assertEquals(verified.objects.objectCount, verified.targetPlan.verifiedObjects)
+            assertEquals(plan.totalObjects, verified.targetPlan.totalObjects)
+            assertEquals(plan.totalObjects - verified.objects.objectCount, verified.targetPlan.missingObjects)
+            assertEquals(fixture.catalog.summary().totalEncodedBytes - verified.objects.encodedBytes,
+                verified.targetPlan.downloadBytes)
             records.forEach { spec ->
                 val admitted = fixture.catalog.objectByKey(spec.ekey)
                 assertEquals(admitted.contentKey, spec.contentKey)

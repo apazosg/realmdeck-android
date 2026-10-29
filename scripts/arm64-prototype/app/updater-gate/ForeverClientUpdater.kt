@@ -3739,6 +3739,7 @@ class ForeverClientUpdater(
         val stageId: String,
         val markerDigest: String,
         val objects: ForeverCasc.ForeignStageVerification,
+        val targetPlan: ForeverCasc.TargetScanResult,
     )
 
     /** Explicit full verification, never called by discovery. Result/rows remain
@@ -3795,13 +3796,18 @@ class ForeverClientUpdater(
         }
         withArchiveOrder(cancelled) { order ->
             val scratch = File(privateWorkDirectory, ".portability-scan-${UUID.randomUUID()}")
-            val result = ForeverCasc.inspectForeignStage(
-                stage.resolve("Data/data").toFile(), scratch, targetCatalogSha256,
-                targetSummary.objectCount.toInt(), { key -> archiveTargetMembership(order, key) },
-                cancelled, ::revalidate, onVerifiedRecord,
-            )
-            revalidate()
-            PartialPortabilityVerification(stageId, markerDigest, result)
+            order.withObjects(cancelled) { records ->
+                val result = ForeverCasc.inspectForeignTarget(
+                    stage.resolve("Data/data").toFile(), scratch, targetCatalogSha256,
+                    targetSummary.objectCount.toInt(), { key -> archiveTargetMembership(order, key) },
+                    records.map { record ->
+                        validateTransferBounds(record)
+                        ForeverCasc.IncrementalObjectSpec(record.ekey, record.contentKey, record.encodedSize, record.decodedSize)
+                    }, cancelled, ::revalidate, onVerifiedRecord,
+                )
+                revalidate()
+                PartialPortabilityVerification(stageId, markerDigest, result.verification, result.target)
+            }
         }
     }
 

@@ -1515,6 +1515,97 @@ object ForeverCasc {
         }
     }
 
+    internal data class ForeignTargetPlan(
+        val verification: ForeignStageVerification,
+        val target: TargetScanResult,
+    )
+
+    /** Explicit verification plus missing-object planning under the caller's real lease.
+     * Bodies are authenticated once, not again by an ordinary source inspector. Ordinals
+     * must refer to the supplied complete target cursor. This remains provisional and
+     * neither forces source data nor creates a checkpoint or changes ownership.
+     */
+    internal fun inspectForeignTarget(
+        dataFiles: File,
+        workDirectory: File,
+        targetCatalogDigest: String,
+        targetObjectCount: Int,
+        targetMembership: (String) -> IndexedValue<IncrementalObjectSpec>,
+        objects: Sequence<IncrementalObjectSpec>,
+        cancelled: () -> Boolean,
+        revalidateBinding: () -> Unit,
+        onVerifiedRecord: (IncrementalObjectSpec, Int, Long) -> Unit,
+    ): ForeignTargetPlan {
+        validateTargetInspectionPaths(dataFiles, workDirectory)
+        check(workDirectory.mkdir()) { "foreign target planner requires fresh private scratch" }
+        try {
+            val verified = java.util.BitSet(targetObjectCount.coerceIn(0, MAX_TOTAL_INDEX_ENTRIES))
+            var lastMembership: IndexedValue<IncrementalObjectSpec>? = null
+            val verification = inspectForeignStage(dataFiles, File(workDirectory, "verify"),
+                targetCatalogDigest, targetObjectCount, { key -> targetMembership(key).also { lastMembership = it } }, cancelled, revalidateBinding,
+            ) { spec, archive, offset ->
+                val admitted = requireNotNull(lastMembership)
+                require(admitted.value == spec && admitted.index in 0 until targetObjectCount)
+                verified.set(admitted.index)
+                onVerifiedRecord(spec, archive, offset)
+            }
+            // Starting a fresh segment is conservative: the actual writer may use free
+            // space in the last retained segment, but cannot need more than this plan.
+            val packing = TargetPlanPacking(verification.segments.last().archiveId + 1)
+            val table = DiskIndexTable(File(workDirectory, "target.bin"), targetObjectCount, cancelled)
+            table.use {
+                verification.segments.forEach { segment ->
+                    segmentIndexRecords(readSegmentPrefix(File(dataFiles, segment.name)), segment.archiveId).forEach { record ->
+                        check(table.put(record)) { "duplicate retained reconstruction record" }
+                        val bucket = computeBucket(record.entry.key, 1)
+                        packing.bucketCounts[bucket] = Math.addExact(packing.bucketCounts[bucket], 1)
+                        requireIndexCapacity(bucket, packing.bucketCounts[bucket])
+                        packing.totalRecords = Math.addExact(packing.totalRecords, 1L)
+                    }
+                }
+                var ordinal = 0
+                var reusedBytes = 0L
+                objects.forEach { original ->
+                    checkCancelled(cancelled)
+                    require(ordinal < targetObjectCount) { "target cursor exceeds admitted count" }
+                    val spec = normalizeIncrementalSpec(original)
+                    validateIncrementalSpec(spec)
+                    val key = spec.ekey.hexBytes()
+                    require(table.find(key) == null) { "target EKey duplicates or conflicts with a reconstruction record" }
+                    val bucket = computeBucket(key)
+                    if (verified[ordinal]) {
+                        // Rebind ordinal and contents: a caller cannot reorder the target
+                        // cursor and accidentally credit a different object as verified.
+                        val admitted = targetMembership(spec.ekey)
+                        require(admitted.index == ordinal && admitted.value == spec) { "verified target ordinal changed" }
+                        packing.bucketCounts[bucket] = Math.addExact(packing.bucketCounts[bucket], 1)
+                        requireIndexCapacity(bucket, packing.bucketCounts[bucket])
+                        packing.totalRecords = Math.addExact(packing.totalRecords, 1L)
+                        packing.totalObjects = Math.addExact(packing.totalObjects, 1L)
+                        reusedBytes = Math.addExact(reusedBytes, spec.encodedSize)
+                    } else {
+                        val size = packing.beginMissingObject(spec, bucket)
+                        packing.commitMissingObject(spec, bucket, size)
+                    }
+                    require(packing.totalRecords <= MAX_TOTAL_INDEX_ENTRIES)
+                    check(table.put(ExistingIndexRecord(spec.ekey,
+                        IndexEntry(key.copyOfRange(0, 9), 0, 0L, LOCAL_HEADER_SIZE.toLong() + spec.encodedSize),
+                        0, Long.MAX_VALUE, targetSeen = true)))
+                    ordinal++
+                }
+                require(ordinal == targetObjectCount && reusedBytes == verification.encodedBytes &&
+                    verified.cardinality().toLong() == verification.objectCount) { "foreign target coverage changed" }
+                revalidateBinding()
+                checkCancelled(cancelled)
+                return ForeignTargetPlan(verification, TargetScanResult(packing.totalObjects,
+                    verification.objectCount, packing.missingObjects, packing.downloadBytes, reusedBytes,
+                    packing.newSegmentBytes, packing.indexBytesUpperBound(), packing.newSegmentCount))
+            }
+        } finally {
+            deleteOwnedScratch(workDirectory)
+        }
+    }
+
     /**
      * Canonical missing-object packing shared by the generic planner and the
      * sourceless ordered planner. The 480-byte segment header, the 30-byte

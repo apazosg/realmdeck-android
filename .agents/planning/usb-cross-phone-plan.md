@@ -203,6 +203,23 @@ consentimiento del plan real antes de adoptar o descargar.
 
 ## Open Issues
 
+- Planificación integrada tras autenticación: `inspectForeignTarget` y el
+  verificador explícito de Updater devuelven reutilizados, faltantes, bytes de
+  delta y cotas CASC de segmentos/índices. Los cuerpos se verifican una sola vez;
+  la segunda pasada es sobre el catálogo, con bitset acotado y tabla privada en
+  disco. Reutiliza el packing existente, comprueba ordinales y no llama al loader
+  mutante ni crea checkpoint/propiedad. No se añade a Home o Resume ordinario.
+  La estimación conservadora empieza un segmento nuevo después de los retenidos.
+  Dos tests focales pasan (JUnit 29-10, ejecución finalizada 06:42:57 UTC): delta
+  exacto y rechazo de ordinal cambiado, más integración con el catálogo completo
+  sintético sin estado privado anterior. Evidencia externa:
+  `usb-portability-local-20261028/foreign-target-plan-retry-tests/summary.json`.
+  El primer intento falló al compilar dos líneas de tests, antes de JUnit; se
+  corrigieron solo import y llamada `summary()`, sin cambiar producción.
+  Revisión limitada al resumen suministrado, sin acceso independiente al código;
+  no constituye revisión completa. Faltan espacio privado/loose/config, plan y
+  consentimiento UI, orquestación de adopción y prueba física; no hay nuevo APK
+  ni escrituras en el USB real ni aceptación de la portabilidad completa.
 - Integración local del catálogo candidato con verificación explícita: Service
   `verifyPortabilityCandidate` abre el catálogo oficial todavía no activado,
   comprueba destino y recibo activo anterior y llama al verificador bajo el lease

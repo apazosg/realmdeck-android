@@ -14,6 +14,7 @@ import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertThrows
 import org.junit.Test
 
 class ForeverCascTest {
@@ -879,6 +880,35 @@ class ForeverCascTest {
         assertFalse(indexContainsEkey(outputData, fixture.unrequestedEkey))
         assertEquals(fixture.sourceBefore, directFileHashes(fixture.sourceData))
         delete(root)
+    }
+
+    @Test
+    fun foreignTargetPlanningCreditsAuthenticatedObjectsAndRejectsChangedOrdinalsReadOnly() {
+        val root = tempDir()
+        try {
+            val (stage, specs) = foreignStageFixture(root)
+            val missing = ForeverCasc.IncrementalObjectSpec("b7".repeat(16), "a9".repeat(16), 1234L, 2000L)
+            val target = specs + missing
+            val membership = target.withIndex().associateBy { it.value.ekey }
+            val before = directFileHashes(stage)
+            val plan = ForeverCasc.inspectForeignTarget(stage, File(root, "private/plan"), "ab".repeat(32),
+                target.size, { membership.getValue(it) }, target.asSequence(), { false }, {}, { _, _, _ -> })
+            assertEquals(specs.size.toLong(), plan.target.verifiedObjects)
+            assertEquals(target.size.toLong(), plan.target.totalObjects)
+            assertEquals(1L, plan.target.missingObjects)
+            assertEquals(1234L, plan.target.downloadBytes)
+            assertEquals(480L + 30L + 1234L, plan.target.newSegmentBytesUpperBound)
+            assertTrue(plan.target.indexBytesUpperBound > 0)
+            assertEquals(before, directFileHashes(stage))
+            assertFalse(File(root, "private/plan").exists())
+            assertThrows(IllegalArgumentException::class.java) {
+                ForeverCasc.inspectForeignTarget(stage, File(root, "private/changed"), "ab".repeat(32),
+                    target.size, { membership.getValue(it) }, (specs.reversed() + missing).asSequence(),
+                    { false }, {}, { _, _, _ -> })
+            }
+            assertEquals(before, directFileHashes(stage))
+            assertFalse(File(root, "private/changed").exists())
+        } finally { delete(root) }
     }
 
     @Test
