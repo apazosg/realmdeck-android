@@ -223,6 +223,16 @@ consentimiento del plan real antes de adoptar o descargar.
 
 ## Open Issues
 
+- C166 instalada: final 2026-10-29 21:41:42 UTC, `install -r` confirmado,
+  UID conservado, cero updater antes/después, marcador y 81 archivos/
+  51625635891 bytes sin cambios de metadatos; no lanzamiento automático ni
+  adopción/payload. Revisión real siguiente: una acción Revisar, 900 s desde
+  intención hasta resumen confirmable incluyendo metadatos/auth/plan; sin
+  perfilador ni GET auxiliar. Observador solo navega Ajustes si Management no
+  está ya abierto; nunca repite una acción enviada. Al límite cancela y confirma
+  idle. `review-calibration.json` valida sintaxis/paridad de helpers sin repetir
+  sus pruebas. No se acepta velocidad ni portabilidad antes del resultado real.
+
 - C166 canónica: `1de8a65`, Modern offline 5m31s, auditor sin cambios
   `PASS_SOURCE_BUILD_AND_PAYLOAD_AUDIT`, 2231 fuentes coincidentes con recibo,
   178 payloads. APK 485379823 bytes, SHA256
