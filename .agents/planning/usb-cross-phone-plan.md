@@ -203,6 +203,19 @@ consentimiento del plan real antes de adoptar o descargar.
 
 ## Open Issues
 
+- Integración local del catálogo candidato con verificación explícita: Service
+  `verifyPortabilityCandidate` abre el catálogo oficial todavía no activado,
+  comprueba destino y recibo activo anterior y llama al verificador bajo el lease
+  real. No importa el catálogo APK como fallback ni cambia el puntero activo.
+  El resultado/callbacks siguen siendo provisionales, no autoridad para adoptar.
+  Una prueba focal pasó el 29-10 a las 06:24:44 (1/0 fallos/errores/omitidos,
+  paridad de fuentes): cancelación antes del almacenamiento no resuelve metadatos,
+  escanea ni activa el candidato. Resultado original recuperado tras reinicio,
+  sin relanzar Gradle; evidencia externa `candidate-verification-tests/summary.json`.
+  Revisión del snapshot suministrado sin hallazgos accionables, sin acceso al
+  repositorio ni comandos. Verificación exitosa integrada, plan/consentimiento,
+  adopción/UI y prueba física siguen pendientes; no hay APK nueva ni cambios USB.
+
 - Reset obsoleto tras publicación: reproducido que un recibo privado de fuente
   vacía con `resetCasc` podía recrear su staging después de aparecer `Data/data`.
   Se rechaza ahora antes de crear staging o resetear checkpoint, mediante checks

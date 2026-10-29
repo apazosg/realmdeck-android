@@ -573,6 +573,33 @@ class ForeverClientUpdateServiceTest {
     }
 
     @Test
+    fun cancelledPortabilityVerificationNeverActivatesOrResolvesTheCandidate() {
+        Fixture().use { fixture ->
+            val admission = syntheticAdmission(fixture.root, 70_900)
+            val bytes = ForeverClientUpdateService.encodeActiveCatalogReceipt(admission)
+            val before = fixture.root.walkTopDown().filter { it.isFile }
+                .associate { it.relativeTo(fixture.root).path to sha256(it.readBytes()) }
+            ForeverClientUpdateService(
+                RuntimeEnvironment.getApplication(), admission.target,
+                { _ -> throw AssertionError("verification must not query published metadata") },
+                { _ -> throw AssertionError("verification must not resolve metadata") }, Unit,
+            ).use { service ->
+                val candidate = ForeverClientUpdateService.PortabilityCatalogCandidate(
+                    admission, "unselected-volume", fixture.root.absolutePath, null, sha256(bytes),
+                )
+                assertThrows(java.util.concurrent.CancellationException::class.java) {
+                    service.verifyPortabilityCandidate(candidate, { true }) { _, _, _ ->
+                        throw AssertionError("cancelled verification must not scan bodies")
+                    }
+                }
+            }
+            assertEquals(before, fixture.root.walkTopDown().filter { it.isFile }
+                .associate { it.relativeTo(fixture.root).path to sha256(it.readBytes()) })
+            assertFalse(File(fixture.root, "active-admission.json").exists())
+        }
+    }
+
+    @Test
     fun portabilityMetadataRejectsStaleConsentWithoutPublishingOrResolving() {
         val app = RuntimeEnvironment.getApplication()
         val target = ForeverClientTargetBuild.parse(admissionTarget(70_500, "a1".repeat(16), "b2".repeat(16)))

@@ -537,6 +537,49 @@ class ForeverClientUpdateService private constructor(
         ownedCatalog = null
     }
 
+    /** Explicit foreign-body verification against the unactivated official candidate.
+     * Does not switch the ordinary catalog, create Resume authority, or start payload.
+     * The returned verification expires with this operation's lease: adoption must
+     * revalidate its source and confirmed plan under its own uninterrupted exclusion.
+     */
+    internal fun verifyPortabilityCandidate(
+        candidate: PortabilityCatalogCandidate,
+        cancelled: () -> Boolean,
+        onVerifiedRecord: (ForeverCasc.IncrementalObjectSpec, Int, Long) -> Unit,
+    ): ForeverClientUpdater.PartialPortabilityVerification = withStorageIo(cancelled) { target ->
+        val destination = recoveryDestination(target)
+        require(candidate.storageId == destination.storageId &&
+            candidate.destinationPath == destination.root.toPath().toAbsolutePath().normalize().toString()) {
+            "portability candidate belongs to a different destination"
+        }
+        val root = dynamicCatalogRoot()
+        val receiptBytes = encodeActiveCatalogReceipt(candidate.admission)
+        require(sha256(receiptBytes) == candidate.admissionDigest) { "portability candidate receipt changed" }
+        // Keep normal receipt/file authentication; do not activate a candidate just
+        // to obtain its catalog or accidentally import the packaged fallback catalog.
+        val admission = parseActiveCatalogReceipt(receiptBytes, root)
+        fun checkPreviousAdmission() {
+            val receipt = File(root, ACTIVE_RECEIPT_NAME)
+            val bytes = if (Files.exists(receipt.toPath(), LinkOption.NOFOLLOW_LINKS)) {
+                readSmallRegularFile(receipt, MAX_ACTIVE_RECEIPT_BYTES)
+                    ?: throw IllegalStateException("active admission is unreadable")
+            } else null
+            require(bytes?.let { sha256(it) } == candidate.previousAdmissionDigest) {
+                "active admission changed since portability metadata preparation"
+            }
+        }
+        checkPreviousAdmission()
+        ForeverClientUpdateCatalog(admission.catalogFile, admission.catalogSha256,
+            admission.catalogBytes, admission.target).use { candidateCatalog ->
+            val engine = updater(candidateCatalog, includeConfigAssets = false)
+            val verified = engine.verifyPartialPortabilitySource(destination, cancelled, onVerifiedRecord)
+            storage.revalidateForUpdate(target)
+            checkPreviousAdmission()
+            checkCancelled(cancelled)
+            verified
+        }
+    }
+
     private fun <T> withStorageIo(
         cancelled: () -> Boolean,
         action: (ForeverFunctionalClientStorage.UpdateTarget) -> T,
