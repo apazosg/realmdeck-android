@@ -223,6 +223,19 @@ consentimiento del plan real antes de adoptar o descargar.
 
 ## Open Issues
 
+- C165: la única revisión real terminó el 2026-10-29 a las 20:52:13 UTC;
+  no produjo el resumen en 900 s. Última muestra a 902,065 s: 212295 objetos
+  y 13,5 GiB autenticados provisionalmente. Cancelación cooperativa e idle
+  confirmados, cero updater en la lectura posterior; sin adopción ni payload.
+  Evidencia: `usb-portability-c165-20261029/partial-review/verdict.json`.
+  El servicio systemd está inactivo; los shells/observadores perdidos están
+  cerrados y sus esperas liberadas. No repetir instalación, auditoría, tests
+  ni la prueba de 900 s. Los cuatro workers no demuestran por sí solos una
+  mejora física. Siguiente discriminante: perfil corto NUEVO de C165 durante
+  autenticación, distinguiendo productor/membership, lectura y workers BLTE;
+  después cancelar esa observación. No elegir más concurrencia ni cambiar
+  canales/guardas basándose únicamente en el resultado agregado.
+
 - C165 instalada una sola vez: fin 20:33:18 UTC, UID conservado, cero updater,
   marcador y diccionario completo de 81 archivos/51625635891 bytes sin cambios;
   no lanzamiento automático ni adopción/payload. Protocolo de prueba real:
