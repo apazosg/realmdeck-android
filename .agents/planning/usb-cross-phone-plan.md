@@ -223,6 +223,17 @@ consentimiento del plan real antes de adoptar o descargar.
 
 ## Open Issues
 
+- C163 canónica cerrada, 29-10 18:42:43: build offline 5m20s y auditoría exacta
+  `PASS_SOURCE_BUILD_AND_PAYLOAD_AUDIT`, 2231 fuentes coincidentes con el recibo,
+  178 payloads. APK 485363483 bytes, SHA-256
+  `af56d423c6cf9c06ae823dc0987a988f7477199be99e16202de8202688dcadf6`.
+  Fuente congelada `7f14bc1`; el commit posterior `9f0fb67` solo aclara comentario
+  y documentación, sin cambiar código ejecutable. Se prepara sustitución normal
+  `-r --no-streaming`, ya autorizada, exigiendo C162 previa/UID/idle real sin
+  Pausar, cero updater/guest, hash APK y marcador+81 tamaños USB antes/después.
+  Sin reinstalación destructiva, autoarranque, adopción ni payload. Una vez
+  verificada la sustitución se retomará explícitamente la revisión con contador.
+
 - Corrección de la prueba real, 29-10 17:19: el observador se había detenido
   tras un fallo al extraer XML a las 15:42, pero la app seguía autenticando.
   No debía presentarse el observador como activo sin verificarlo. Se pulsó Pausar
