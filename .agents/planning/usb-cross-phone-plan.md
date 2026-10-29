@@ -223,6 +223,28 @@ consentimiento del plan real antes de adoptar o descargar.
 
 ## Open Issues
 
+- Reutilización de índices privados implementada: solo claves solicitadas por
+  el CDN actual, cachés hermanas acotadas del mismo build/config, propietario,
+  recibo, tamaño y SHA comprobados antes de entregar el archivo al parser normal.
+  No recuperación ni borrado en la caché anterior; no reutilización de catálogo
+  terminado de otro CDN. `metadata-reuse-host-retry-tests/summary.json`: 2 tests,
+  cero fallos/errores/skips y paridad de fuentes; Gradle offline 5m34s. El primer
+  intento falló por SIGSEGV C1 del JVM host antes de JUnit: no resultado de producto.
+  Reintento desde árbol limpio con C1 desactivado solo en el host/Kotlin in-process.
+  Revisión independiente leyó diff y fuentes reales por snapshot HTTP; sin hallazgos,
+  pero test de transporte no prueba descubrimiento/parser en producción ni 900 s.
+  Servidor de revisión cerrado. Pendiente candidata auditada y prueba física;
+  no adopción, payload, modificación de USB ni nueva instalación en este paso.
+
+- 2026-10-29 22:36 UTC: lectura acotada de nombres de índices en las dos
+  cachés privadas existentes: 706 y 1412 archivos, 705 nombres coincidentes.
+  Esto no autentica contenido ni admite ubicaciones antiguas. La corrección
+  siguiente reutilizará únicamente un índice solicitado por el CDN ACTUAL,
+  con recibo de caché propietaria, tamaño y SHA verificados, y conservando el
+  parser normal del resolver. No reutilizar un catálogo terminado de otro CDN.
+  La delegación de implementación no tuvo acceso al repositorio ni hizo cambios;
+  el padre retoma directamente esos archivos. No hay trabajo de worker pendiente.
+
 - C166: revisión única 21:43:53→21:59:13 UTC, sin resumen antes de 900 s;
   cancelación cooperativa e idle confirmados y cero updater posterior. No adopción
   ni payload. Las muestras muestran preparación de metadatos (download/size/root

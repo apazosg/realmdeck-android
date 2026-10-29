@@ -1671,14 +1671,38 @@ internal class ForeverClientCatalogResolver @JvmOverloads constructor(
 
     private inner class ProductionSource(cacheRoot: File) : Source {
         private val transport = ForeverClientMetadataTransport(cacheRoot)
+        private val previousCaches: List<File> = run {
+            val prefix = cacheRoot.name.substringBeforeLast('-') + "-"
+            val candidates = ArrayList<File>()
+            Files.newDirectoryStream(cacheRoot.parentFile.toPath()).use { entries ->
+                var inspected = 0
+                for (entry in entries) {
+                    if (++inspected > 64) break
+                    val name = entry.fileName.toString()
+                    if (name != cacheRoot.name && name.startsWith(prefix) &&
+                        name.removePrefix(prefix).matches(Regex("[0-9a-f]{32}")) &&
+                        Files.isDirectory(entry, LinkOption.NOFOLLOW_LINKS) && !Files.isSymbolicLink(entry)) {
+                        candidates += entry.toFile()
+                        if (candidates.size == 8) break
+                    }
+                }
+            }
+            candidates
+        }
         override fun config(hash: String, cancelled: () -> Boolean, progress: (Long) -> Unit): File =
             transport.config(hash, cancelled, progress)
         override fun decoded(reference: ForeverTactMetadata.ObjectReference, cancelled: () -> Boolean, progress: (Long) -> Unit): File =
             transport.decoded(reference, cancelled, progress)
         override fun raw(reference: ForeverTactMetadata.ObjectReference, cancelled: () -> Boolean, progress: (Long) -> Unit): File =
             transport.objectRaw(reference, cancelled, progress)
-        override fun index(hash: String, cancelled: () -> Boolean, progress: (Long) -> Unit): File =
-            transport.index(hash, cancelled, progress)
+        override fun index(hash: String, cancelled: () -> Boolean, progress: (Long) -> Unit): File {
+            // Only keys requested by the CURRENT parsed CDN config reach here.
+            // The caller still validates the complete index structure and mappings.
+            for (cache in previousCaches) {
+                transport.cachedIndexFromSibling(cache, hash, cancelled)?.let { return it }
+            }
+            return transport.index(hash, cancelled, progress)
+        }
     }
 
     private fun childDirectory(parent: File, name: String): File {

@@ -127,6 +127,41 @@ class ForeverClientMetadataTransport internal constructor(
      * Fetch one raw CDN `.index` object. Its hash is an index name, not a raw MD5;
      * the returned file remains structurally untrusted until the caller's parser validates it.
      */
+    internal fun cachedIndexFromSibling(cache: File, hash: String, cancelled: () -> Boolean): File? = synchronized(JVM_CACHE_LOCK) {
+        checkActive(cancelled, System.nanoTime())
+        val key = normalizeHash(hash, "CDN index hash")
+        val prior = cache.toPath().toAbsolutePath().normalize()
+        require(prior != root && prior.parent == root.parent) { "metadata reuse requires a sibling cache" }
+        checkNoSymlinkPath(prior)
+        val marker = prior.resolve(OWNER_FILE)
+        val lock = prior.resolve(LOCK_FILE)
+        if (!existsNoFollow(marker) || !existsNoFollow(lock)) return@synchronized null
+        checkRegularFile(marker, "prior metadata cache owner")
+        val token = OWNER_MARKER.matchEntire(readSmallText(marker, 128))?.groupValues?.get(1)
+            ?: throw IllegalStateException("prior metadata cache owner is malformed")
+        checkRegularFile(lock, "prior metadata cache lock")
+        FileChannel.open(lock, StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS).use { channel ->
+            channel.lock().use {
+                val target = prior.resolve("index").resolve(key.take(2)).resolve("$key.index")
+                val receipt = target.resolveSibling("$key.index.receipt")
+                if (!existsNoFollow(target) || !existsNoFollow(receipt)) return@synchronized null
+                // Never recover, delete or adopt another cache's in-progress publication.
+                if (listOf(".publish", ".part", ".part.owner", ".part.owner.update").any {
+                        existsNoFollow(target.resolveSibling("$key.index$it"))
+                    }) return@synchronized null
+                checkRegularFile(receipt, "prior CDN index receipt")
+                val lines = readSmallText(receipt, 256).split('\n')
+                val size = lines.getOrNull(3)?.toLongOrNull()
+                require(lines.size == 5 && lines[0] == "forever-tact-index-v1" && lines[1] == token &&
+                    lines[2] == key && size != null && size in 1..MAX_INDEX_BYTES && lines[4].matches(HEX_SHA256)) {
+                    "prior CDN index receipt is not bound to its cache and requested key"
+                }
+                verifyIndexBytes(target, IndexProof(size, lines[4]), cancelled)
+                target.toFile()
+            }
+        }
+    }
+
     fun index(hash: String, cancelled: () -> Boolean, progress: (Long) -> Unit): File =
         withCacheLock {
             checkActive(cancelled, System.nanoTime())

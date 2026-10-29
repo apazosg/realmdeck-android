@@ -17,6 +17,33 @@ import org.junit.Test
 
 class ForeverClientMetadataTransportTest {
     @Test
+    fun siblingIndexReuseRequiresFinalOwnerBoundBytesWithoutNetworkOrMutation() {
+        Fixture().use { fixture ->
+            val key = "a1".repeat(16)
+            val body = "synthetic index; resolver must still parse it".toByteArray()
+            val source = ForeverClientMetadataTransport(fixture.cacheRoot) {
+                FakeConnection(HttpURLConnection.HTTP_OK, body)
+            }
+            val index = source.index(key, { false }, {})
+            val current = ForeverClientMetadataTransport(File(fixture.cacheRoot.parentFile, "new-cache")) {
+                throw AssertionError("cache-only reuse must not fetch")
+            }
+            assertEquals(index, current.cachedIndexFromSibling(fixture.cacheRoot, key, { false }))
+            assertEquals(null, current.cachedIndexFromSibling(fixture.cacheRoot, "b2".repeat(16), { false }))
+            assertThrows(CancellationException::class.java) {
+                current.cachedIndexFromSibling(fixture.cacheRoot, key, { true })
+            }
+            index.setWritable(true)
+            val changed = body.clone().also { it[0] = (it[0].toInt() xor 1).toByte() }
+            index.writeBytes(changed)
+            assertThrows(IllegalArgumentException::class.java) {
+                current.cachedIndexFromSibling(fixture.cacheRoot, key, { false })
+            }
+            assertArrayEquals(changed, index.readBytes())
+        }
+    }
+
+    @Test
     fun rawConfigSurvivesAParserFailureAndIsReusedAfterTransportRestart() {
         Fixture().use { fixture ->
             val raw = "build-uid = unsupported_product\n".toByteArray()
