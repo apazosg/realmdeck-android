@@ -223,6 +223,15 @@ consentimiento del plan real antes de adoptar o descargar.
 
 ## Open Issues
 
+- C165 instalada una sola vez: fin 20:33:18 UTC, UID conservado, cero updater,
+  marcador y diccionario completo de 81 archivos/51625635891 bytes sin cambios;
+  no lanzamiento automático ni adopción/payload. Protocolo de prueba real:
+  una revisión nueva, 900 s desde la intención de pulsar Revisar hasta resumen
+  confirmable (metadatos+autenticación+planificación), sin perfilador ni GET auxiliar;
+  si no termina, cancelar cooperativamente y comprobar idle. Nunca pulsar Reutilizar
+  o Descargar desde el observador. Comparación secuencial conserva límites de caché,
+  carga y temperatura; no prometer aceleración x4 ni éxito por contar workers.
+
 - C165 canónica (363fa76), reconstrucción/Modern offline 5m26s y auditoría sin
   modificar `PASS_SOURCE_BUILD_AND_PAYLOAD_AUDIT`: 2231 fuentes coincidentes con
   recibo, 178 payloads; APK 485372567 bytes, SHA256
