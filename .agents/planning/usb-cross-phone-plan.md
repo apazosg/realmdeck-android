@@ -29,6 +29,16 @@ el 28-10, sin repetir emparejamiento ni inspecciones. Al crearlo faltaba la apro
 de TC-007–013, recibida después, seguida de la autorización de crear, instalar y
 probar APKs auditadas en el dispositivo conectado. La adopción conserva su plan real.
 
+El 29-10, tras agotarse el límite, el usuario pide «por qué no se ha probado ni
+instalado nada? continua o crea un nuevo goal». Se sustituye el anterior por
+`ee5a2c15-f52b-48a0-b625-3ce59725a357`, conservando los seis criterios, aprobaciones,
+commits y evidencias. La prioridad es cerrar la integración del flujo completo,
+probarlo, auditar e instalar la candidata y validar el USB; no acumular más
+prerrequisitos aislados. Las pruebas locales anteriores sí se ejecutaron, pero
+todavía no demuestran adopción real. No se vuelve a pedir el permiso ya concedido
+para crear, instalar y probar APKs; sigue siendo necesario el consentimiento del
+coste y la adopción del plan real antes de mutar propiedad o iniciar payload.
+
 ## Content
 
 - Original: C160 cerró 19:14:11 UTC con **822.658 objetos durables**, prefix/CRC y
