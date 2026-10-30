@@ -232,7 +232,7 @@ consentimiento del plan real antes de adoptar o descargar.
   y paridad SHA-256 de 41 fuentes: `usb-portability-local-20261028/
   recovery-scan-scratch-retest-20261030T023132Z-3884381/summary.json`. Esto no
   constituye validación física ni establece que un scratch antiguo sea limpiable.
-- C168 construida y auditada, todavía no instalada. El primer build se detuvo
+- C168 construida y auditada. El primer build se detuvo
   durante reconstrucción al detectar el postimage CASC anterior; no llegó a Gradle.
   `5bd0159` fija el SHA-256 revisado y dos tests de reconstrucción pasan. El
   reintento independiente con `fc4e32c` terminó Gradle offline en 8m02s y pasó
@@ -240,10 +240,15 @@ consentimiento del plan real antes de adoptar o descargar.
   portabilidad coincidentes; certificado y permisos iguales a C167. APK de
   485401519 bytes, SHA-256 `dd08feaaa74d94934dba80060de4db7c05dc58f4488113ef5631ff3d79d31549`,
   comprobado de nuevo por separado. Evidencia `usb-portability-c168-retry-20261030/`;
-  el fallo inicial se conserva. La última instalada confirmada es C167 y no hubo
-  otra revisión física, adopción ni payload después de su ensayo de 900 s.
-- Tras una única sustitución C168 preservadora y verificaciones completas, se
-  prevé una revisión exclusivamente funcional de la fixture en el móvil original,
+  el fallo inicial se conserva.
+- Sustitución preservadora C167→C168 confirmada el 2026-10-30 02:53:22 UTC:
+  Android aceptó una única instalación de la copia auditada, con versión 168 y
+  mismo UID; cero servicios updater antes/después. El digest de `.owner` y los
+  nombres/tamaños de 81 CASC (51625635891 bytes) coinciden antes y después. No
+  se abrieron la app ni el cliente y no se adoptó ni descargó nada. Los cuerpos
+  CASC y la totalidad de los datos privados no se hashearon. Evidencia privada:
+  `usb-portability-c168-retry-20261030/original-install/summary.json`.
+- Se prevé una revisión exclusivamente funcional de la fixture en el móvil original,
   con tope global de 7200 s que reserva tiempo de cancelación e idle. La creación
   incompleta del catálogo anterior se descartó al cancelar, por lo que repetir
   mecánicamente el límite de 900 s puede detenerse antes de la autenticación; este
