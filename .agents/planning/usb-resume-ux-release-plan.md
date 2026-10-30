@@ -249,6 +249,9 @@ sus consentimientos específicos ni su objetivo de revisión de hasta 900 s.
   SHA-256 `c3e64a033fa96b3bd17d68a30f5d278012ac10da4d1d4edfe49c4bf315a45108`.
   Tras corregir la contradicción de US-009 se guardó `public-draft-with-spec-status.patch`,
   SHA-256 `9e2a938579e5170e6e5762092356ae97f32bd47be1dd1ae7b743d5f85e2e03d8`.
+  Tras sustituir los dos tests foreground fallidos se guardó
+  `public-draft-private-dispatch-tests.patch`, SHA-256
+  `b22dcdd53cad870e01e812b6d74a2666d06c5edabe70a4413fabc64072c012fe`.
   Es un checkpoint anterior a la validación final, no un artefacto de publicación;
   verificar su base y los cambios posteriores antes de recuperarlo.
   Los reinicios dejaron dos invocaciones Gradle idénticas compilando el mismo test
@@ -283,6 +286,18 @@ sus consentimientos específicos ni su objetivo de revisión de hasta 900 s.
   que el proceso wrapper, Gradle y el worker de test seguían activos; la ejecución
   ya había empezado un método. No lanzar duplicados; el wrapper tiene timeout de
   900 s y escribirá `result.txt` al terminar. Se conservó el XML anterior de 11 tests.
+- Esa ejecución terminó con 2 fallos de los 2 nuevos tests: el `mockConstruction`
+  usado era local al hilo, pero el constructor real se ejecuta en `Dispatchers.IO`.
+  Se conservó su XML junto a `foreground-dispatch-run-20261030-sh/result.txt` y se
+  sustituyeron los dos tests por pruebas de los dos caminos del despacho síncrono
+  privado con un mock normal. Verifican plan, consentimiento y la identidad de la
+  autorización, pero no cubren toda la corrutina `onStartCommand` → `run`. El archivo
+  de test local y el público coinciden, SHA-256
+  `4e48c37c94b66cdd0199ddd2b214f06c8633561d0f41666ccb057f13ddbad1ba`.
+  La validación exclusiva de esas dos pruebas está en segundo plano como
+  `sh_18e4e2928001gwl1ReSWi1q4GQ`, con timeout de 900 s, en
+  `usb-public-port-checkpoint-20261030-bYmYQW/foreground-private-dispatch-run-20261030/`.
+  Consultar su resultado atómico al terminar y no ejecutar una segunda copia.
 - Se corrigió una contradicción documental: los TC de portabilidad ya estaban
   aprobados; lo pendiente es la implementación verificada. Una comprobación focal
   del borrador público pasó frontmatter, unicidad de IDs, referencias FR/TC y enlaces
