@@ -253,6 +253,25 @@ sus consentimientos específicos ni su objetivo de revisión de hasta 900 s.
   en el mismo directorio temporal y agotando la memoria; se detuvo únicamente la
   duplicada. No usar sus resultados concurrentes como evidencia ni iniciar otra
   compilación en ese directorio mientras quede activa la primera.
+  El borrador público aún conserva `CANDIDATE_VERSION = (146, ...)`; una candidata
+  instalable sobre la C168 necesitará `versionCode` mayor que 168 y firma compatible,
+  además de alinear versión, etiqueta y adjuntos antes de compilar. Una consulta de
+  solo lectura no encontró etiquetas `c169-*` ni `c170-*` en el remoto en ese
+  momento; esto no reserva versiones y habrá que comprobarlo al publicar.
+- Una inspección independiente del borrador público confirmó que la reconstrucción
+  incluye la fuente y el test foreground y no encontró fuentes públicas ausentes;
+  no se ha compilado ese árbol. Su reconstrucción depende de herramientas y artefactos
+  externos al repositorio. La prueba que captura el traspaso del servicio al motor
+  no se añadió: montar el servicio real exige lease, cualificación, runtime y
+  verificación posterior y no existe un seam de test; añadir uno sería una
+  modificación de producción solo para la prueba. La llamada se inspeccionó de forma
+  independiente, pero esa inspección no es cobertura conductual.
+- La siguiente validación, si está en curso, ejecuta **solo** los dos métodos
+  `onStartCommandDispatches*` en la reconstrucción ya compilada
+  `/home/adrian/wowforever-artifacts/work/forever-kotlin-verification-20261030-172733`,
+  con fuentes de producción idénticas y test actualizado byte a byte. El classpath
+  usa Mockito 5.14.2. Está limitada a 900 s y guarda su log y resultado fuera del
+  repositorio: no iniciar otra instancia al reiniciarse el servidor. No toca Xaga.
   La CLI `gh` no está disponible en el PATH. No se encontró credencial
   HTTPS no interactiva, helper Git configurado ni identidad SSH habitual; aún no
   se ha demostrado acceso de escritura a GitHub. No solicitar ni incluir tokens
