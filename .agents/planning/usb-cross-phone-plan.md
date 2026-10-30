@@ -223,6 +223,13 @@ consentimiento del plan real antes de adoptar o descargar.
 
 ## Open Issues
 
+- 2026-10-30 00:43 UTC: el primer preflight C167 se detuvo al no estar el
+  endpoint ADB registrado; no hubo intención de instalación ni acción UI. Se
+  reconectó el endpoint autorizado y se confirmó `device` y modelo original.
+  Se preparó un controlador nuevo, con salida exclusiva y verificación del
+  intento anterior sin instalación, que conserva todos los controles originales;
+  no se repite el controlador cerrado ni se borra la app o el USB.
+
 - C167 (`c5720f9`): build canónica terminada 2026-10-29 23:00 UTC;
   auditoría `PASS_SOURCE_BUILD_AND_PAYLOAD_AUDIT`, 2231 fuentes y 178 payloads,
   paridad de diez fuentes y certificado/lista de permisos iguales a C166.
