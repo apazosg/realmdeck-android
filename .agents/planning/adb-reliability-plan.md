@@ -11,7 +11,12 @@ ADB Wi-Fi cuando se desactive, sin depender de facilitar reiteradamente un puert
 Esta investigación complementa el trabajo USB de `usb-cross-phone-plan.md`: no
 reanuda, cancela ni reinicia por sí misma la revisión en curso.
 El usuario pidió: «antes de continuar intentemos que sea lo más fiable posible la
-conexión». Esto no autoriza permisos amplios ni cambios de seguridad.
+conexión». Esa petición no autorizaba permisos amplios ni cambios de seguridad.
+Después, tras proponer MacroDroid y explicar el permiso amplio
+`WRITE_SECURE_SETTINGS`, pidió expresamente: «la instalamos y activamos?». La
+autorización se limita a instalar esa app, concederle ese permiso y configurar una
+automatización de recuperación; no aprueba el resto del plan ni otros cambios de
+seguridad.
 
 ## Evidencia y límites
 
@@ -86,6 +91,31 @@ conexión». Esto no autoriza permisos amplios ni cambios de seguridad.
   actuales. No instalarla ni asumir que funciona en este teléfono. No usar root,
   permisos amplios, accesibilidad privilegiada, escuchas remotas nuevas ni cambios
   de seguridad sin una decisión expresa que modifique esos límites.
+- MacroDroid, publicado por ArloSoft, permite escribir el ajuste global
+  `adb_wifi_enabled` con el permiso antes mencionado. Hay una macro comunitaria que
+  lo revisa periódicamente, pero se prefiere configurar y revisar una sola macro
+  propia en vez de importar acciones de terceros sin inspección. La autorización no
+  incluye root, accesibilidad, puerto ADB adicional, servidor web, ni modificar el
+  USB. Restringirla a una red conocida si puede hacerse sin permisos adicionales no
+  aprobados; una coincidencia de SSID por sí sola no autentica la red. Si la revisión
+  USB sigue sin estado conocido, no apagar ADB ni simular una caída para probarla.
+- Instalación física del 30-10: Google Play proponía instalar también en otro
+  dispositivo de la cuenta. Se desmarcó ese destino, se verificó que solo el teléfono
+  de desarrollo estaba seleccionado y se envió una única acción de instalación.
+  El gestor de paquetes confirma `com.arlosoft.macrodroid` 6.1.5 con Google Play
+  como instalador. No se compró la versión de pago ni se importaron plantillas.
+  La app se abrió; su interruptor general figura activado, pero no se ha creado
+  ninguna macro de recuperación ni se ha concedido `WRITE_SECURE_SETTINGS`. La
+  notificación de la app tampoco figura concedida. El USB no se manipuló y la
+  revisión anterior sigue sin estado confirmado.
+- La [documentación de la condición Wi-Fi de MacroDroid](https://wiki.macrodroid.com/wiki/index.php/Constraint:_Wifi_State)
+  indica que precisa permiso de ubicación «permitir siempre» para consultar el estado
+  o la red en segundo plano. En la comprobación actual la ubicación del dispositivo
+  ya estaba activada, pero la app no tenía ubicación precisa ni de fondo. Concederla
+  sería una decisión adicional de privacidad y no está comprendida en la autorización
+  anterior. Todavía no se ha verificado la condición física ni si intervienen otros
+  permisos o restricciones de HyperOS. Se mantiene sin conceder también el permiso
+  amplio ya autorizado hasta poder configurar la guarda de red.
 
 ## Implementation / Action Items
 
@@ -122,6 +152,16 @@ conexión». Esto no autoriza permisos amplios ni cambios de seguridad.
 - [ ] 6. Volver a las pruebas USB aprobadas, conservando el consentimiento fresco,
   exclusión y demás criterios del plan original; mantener cualquier limitación
   pendiente en la evidencia.
+- [ ] 7. Recuperación mediante MacroDroid autorizada expresamente, con la única app
+  oficial y el permiso `WRITE_SECURE_SETTINGS` explicado al usuario.
+  - [x] 7.1. Instalar y verificar la app de Google Play solo en el teléfono previsto.
+  - [ ] 7.2. Resolver si se autoriza la ubicación de fondo adicional para restringir
+    la automatización a la red conocida; no habilitarla en cualquier red por defecto.
+  - [ ] 7.3. Si se resuelve esa decisión, configurar manualmente y verificar primero
+    la condición de red y la única acción de recuperación antes de activar la macro;
+    no añadir permisos, listeners ni puertos no aprobados.
+  - [ ] 7.4. Demostrar recuperación real únicamente cuando esté confirmado que la
+    revisión USB está en reposo y sin comprometer la fixture.
 
 ## Open Issues
 
@@ -131,3 +171,11 @@ conexión». Esto no autoriza permisos amplios ni cambios de seguridad.
 - No se ha identificado un canal independiente existente que pueda encenderlo sin
   interacción. La reactivación automática no está demostrada y puede necesitar
   hardware o una excepción de seguridad que el usuario debe decidir expresamente.
+- Para restringir MacroDroid a la red conocida, la ubicación de fondo parece
+  necesaria según su documentación; falta una decisión explícita del usuario y
+  comprobar el comportamiento real del dispositivo. El SSID por sí solo no prueba
+  que la red sea auténtica. Sin la guarda, no se activa la macro por defecto.
+- MacroDroid es una candidata expresamente autorizada, no una recuperación probada.
+  Se debe verificar en el teléfono si exige confirmación del sistema, permisos extra
+  para limitar la red o alguna excepción adicional de HyperOS; no conceder permisos
+  no aprobados ni considerar demostrada la recuperación sin prueba física segura.
