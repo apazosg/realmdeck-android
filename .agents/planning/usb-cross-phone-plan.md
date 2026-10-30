@@ -223,6 +223,15 @@ consentimiento del plan real antes de adoptar o descargar.
 
 ## Open Issues
 
+- Revisión sensible independiente C167: detecta que fallos/cancelación después
+  de completar el checkpoint preparado y antes del intent pueden dejar estado
+  privado propio sin limpiar; reintentos acumularían espacio. Corrección y prueba
+  focal pendientes, sin borrar estado desconocido ni el necesario para recuperación
+  tras intent. El otro hallazgo propuesto, enumeración no acotada, no se confirma:
+  la búsqueda de stages retorna al encontrar la segunda entrada o una inválida;
+  en la raíz vacía solo se permiten dos nombres distintos y se corta en el primero
+  distinto. La revisión no es prueba física ni aprobación del flujo completo.
+
 - C167 instalada el 2026-10-30 00:45:33 UTC tras reconexión: Android confirmó
   `install -r`, versión 167 y mismo UID; cero servicios updater antes/después y
   marcador más 81 archivos CASC/51625635891 bytes sin cambios de metadatos.
