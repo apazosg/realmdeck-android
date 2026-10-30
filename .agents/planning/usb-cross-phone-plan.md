@@ -342,6 +342,26 @@ consentimiento del plan real antes de adoptar o descargar.
   observación pasiva de 120,1 s obtuvo 25/25 respuestas, sin demostrar estabilidad
   prolongada ni reconexión tras una interrupción. El diagnóstico y las limitaciones
   siguen en `adb-reliability-plan.md`; el controlador cerrado no debe relanzarse.
+- El 30-10 hacia las 16:09 UTC se recuperó ADB y se cotejaron serial físico, modelo
+  y dispositivo con la identidad privada fijada. Se trajo al frente una sola vez la
+  actividad ya existente de la app C168; se confirmaron el mismo proceso y la misma
+  actividad, sin iniciar otra revisión. La UI muestra ahora un **plan de revisión**:
+  822.658 objetos reutilizables verificados por la app, 322.320 objetos CASC
+  pendientes, descarga prevista de hasta 36,9 GiB y espacio adicional de hasta
+  39,4 GiB (2,0 GiB en la app y 37,4 GiB en el USB). La acción de adopción está
+  habilitada; no se pulsaron adopción ni descarga. No hay servicio updater activo.
+  Esto resuelve la incertidumbre anterior sobre ese intento: llegó al plan en el
+  móvil **original**, no en el segundo. Como no se observó cuándo terminó, no se
+  puede determinar su duración ni acreditar los 15 minutos solicitados.
+- Tras el plan se confirmó el USB histórico montado, marcador igual al cotejado al
+  instalar C168 y los mismos 81 nombres y tamaños CASC (51.625.635.891 bytes).
+  Esta comprobación de metadatos no es un nuevo hash completo de los cuerpos ni
+  prueba publicación, adopción o reanudación. El usuario ha reafirmado que el
+  objetivo de revisión de hasta 15 minutos sigue vigente. Para probar continuidad
+  real entre teléfonos hay que expulsar y trasladar el USB al segundo teléfono,
+  verificar su identidad y estado, y obtener allí un plan nuevo; el plan en memoria
+  del original no se traslada. Sigue siendo necesario consentimiento específico
+  para el plan real antes de adoptar y, por separado, antes de descargar payload.
 - La revisión es exclusivamente funcional de la fixture en el móvil original,
   con tope global de 7200 s que reserva tiempo de cancelación e idle. La creación
   incompleta del catálogo anterior se descartó al cancelar, por lo que repetir
@@ -355,10 +375,10 @@ consentimiento del plan real antes de adoptar o descargar.
   del catálogo, sin llegar a autenticación del USB. El controlador confirma
   cancelación cooperativa e idle; `clientOperations=[]`, sin adopción/payload.
   Evidencia `usb-portability-c167-20261029/partial-review/summary.json`.
-  El objetivo de 900 s continúa UNMET y no se reabre como optimización. Para
-  los dos casos funcionales sigue faltando una revisión que llegue al plan
-  real; no convertir esta observación ni los 822658 antiguos en progreso
-  recuperado. Primero resolver el hallazgo sensible y validar la candidata.
+  El objetivo de 900 s continúa UNMET; el usuario lo ha reafirmado posteriormente.
+  En ese corte faltaba una revisión que llegara al plan real y los 822658 antiguos
+  no acreditaban progreso recuperado. La observación C168 posterior se registra
+  arriba con sus límites y no demuestra todavía reanudación entre teléfonos.
 
 - Revisión sensible independiente C167: detectó que fallos/cancelación después
   de completar el checkpoint preparado y antes del intent pueden dejar estado
