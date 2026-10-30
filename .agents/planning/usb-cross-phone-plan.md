@@ -289,6 +289,30 @@ consentimiento del plan real antes de adoptar o descargar.
   app. No se reinició la revisión ni se pulsaron adopción o payload; es necesario
   recuperar la comunicación para observarla o verificar su parada, sin asumir que
   esté detenida ni que haya terminado.
+- Tras el nuevo endpoint facilitado por el usuario, se observó la app propia con
+  `Revisar descarga de otro móvil`, sin `Pausar` ni servicio updater activo. El
+  log de la app identifica un `SocketTimeoutException` en la descarga de metadatos
+  (`ForeverClientMetadataTransport.download`), unos 58,6 s después de la acción;
+  el transporte fija 5 s de espera de lectura. No se ha demostrado que la pérdida
+  de ADB causara el timeout. El controlador original, terminado con SIGTERM después
+  de verificar el estado de la app por separado, dejó `CONTROLLER_ERROR` y su
+  limpieza local incierta: no se sustituye ese resultado por un éxito. No se
+  observó plan ni se enviaron consentimiento de plan, adopción o payload.
+- Preflight posterior: Wi-Fi del teléfono validada y TCP 443 del CDN oficial
+  accesible, sin comprobar HTTPS ni transferencia completa; hay un parcial privado
+  de metadatos de 3.670.016 bytes. El SHA-256 del marcador del staging y los nombres
+  y tamaños de los 81 archivos CASC coinciden con la instalación previa; no se han
+  hasheado sus cuerpos. Cero procesos del servidor scrcpy del controlador anterior.
+  Evidencia externa `usb-portability-c168-retry-20261030/partial-review/summary.json`,
+  `metadata-network-diagnosis.json` y `post-timeout-usb-metadata-check.json`.
+  A las 06:55 UTC se inició un nuevo intento funcional deliberado tras el fallo de
+  red y la reconexión, con evidencia separada en
+  `usb-portability-c168-retry-20261030/partial-review-after-network-recovery/` y el
+  endpoint nuevo; no se rehacen build ni benchmark ni se relanza la actividad que
+  ya estaba en primer plano. El controlador conserva el límite de 7200 s, verifica
+  versión y ausencia de servicio y se detendrá en plan o fallo, sin consentimiento
+  de plan, adopción ni payload. Se debe consultar su resultado, sin volver a lanzarlo
+  por un reinicio; cliente completo y pruebas entre teléfonos siguen pendientes.
 - La revisión es exclusivamente funcional de la fixture en el móvil original,
   con tope global de 7200 s que reserva tiempo de cancelación e idle. La creación
   incompleta del catálogo anterior se descartó al cancelar, por lo que repetir
