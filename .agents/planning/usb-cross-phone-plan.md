@@ -223,6 +223,18 @@ consentimiento del plan real antes de adoptar o descargar.
 
 ## Open Issues
 
+- 2026-10-30: una revisión independiente adicional detectó que la primera
+  reparación del scratch de recuperación podía borrar archivos arbitrarios con
+  nombres reconocidos sin demostrar su contenido, contraviniendo el diseño
+  aprobado. También señaló la falta de validación de ancestros antes de la
+  limpieza privada y del fence. La reparación se rechaza: el trabajo en curso
+  debe conservar estado desconocido y evitar ese scratch durante la recuperación,
+  sin debilitar la autenticación. Los seis tests locales anteriores y la paridad
+  de 41 fuentes no resuelven estos hallazgos y no habilitan instalación.
+- La receta C168 está versionada como candidata de seguridad, pero todavía no hay
+  APK C168 construida ni auditada. La instalada sigue siendo C167; no se ejecutó
+  otra revisión física, adopción ni payload después del ensayo de 900 s.
+
 - C167: revisión física única 2026-10-30 00:47:12–01:02:52 UTC sin
   resumen antes de 900 s; a los 890,6 s preparaba 1077248/1144978 objetos
   del catálogo, sin llegar a autenticación del USB. El controlador confirma
