@@ -322,7 +322,9 @@ sus consentimientos específicos ni su objetivo de revisión de hasta 900 s.
   `b22dcdd53cad870e01e812b6d74a2666d06c5edabe70a4413fabc64072c012fe`.
   En el mismo directorio hay un `release-notes-draft.md` en inglés con marcadores
   sin resolver: es un borrador no publicable que debe ajustarse a la candidata,
-  a su firma, a la auditoría y a la evidencia física efectiva.
+  a su firma, a la auditoría y a la evidencia física efectiva. El borrador identifica
+  ahora las fuentes previstas como parciales y remite al manifiesto de cobertura;
+  esa advertencia no acredita todavía ningún archivo fuente de C169.
   Tras ajustar provisionalmente versión y dos tests, el diff público de 20 archivos
   se guardó como `public-draft-c169-provisional.patch`, SHA-256
   `666621cc92834220aa109869d32615b77c7e58a7c19f9694e4c7847f6f36fe0c`.
