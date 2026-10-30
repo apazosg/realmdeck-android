@@ -227,9 +227,11 @@ consentimiento del plan real antes de adoptar o descargar.
   03:18 UTC del 30-10: su existencia y duración están documentadas en `9fde647`,
   fechado el 29-10 a las 14:16:58 UTC, por lo que la ventana terminó a más tardar
   a las 02:16:58 UTC del 30-10. La construcción y la instalación C168 registradas
-  abajo ocurrieron después; este exceso no se había advertido. No iniciar la nueva
-  revisión funcional hasta aclarar la ampliación temporal; no se considera logrado
-  el objetivo y se conserva la instalación y la evidencia ya obtenida.
+  abajo ocurrieron después; este exceso no se había advertido. El usuario lo conoce
+  y respondió «ampliemos 12 horas»; la ampliación se registró hacia las 06:08 UTC
+  del 30-10. Se mantiene la revisión única sin adopción ni payload hasta obtener
+  consentimiento específico del plan real. El objetivo sigue sin lograrse y se
+  conservan la instalación y la evidencia ya obtenidas.
 
 - 2026-10-30: la primera reparación del scratch fue rechazada porque podía borrar
   archivos arbitrarios con nombres reconocidos, y faltaba validar ancestros antes
