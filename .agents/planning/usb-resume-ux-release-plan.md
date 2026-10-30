@@ -189,7 +189,18 @@ sus consentimientos específicos ni su objetivo de revisión de hasta 900 s.
   `resumeFailure` (`/tmp/opencode/overlap-34-instrumented-20261030.run1.log`); no
   llegó a ejecutar el test ni aporta nueva evidencia causal. Se encargó corregir
   solo la instrumentación de esa copia y ejecutar una vez el test focal, con log y
-  resultado externos. No lanzar duplicados tras un reinicio.
+  resultado externos. Un trabajo anterior había continuado tras el reinicio y su
+  segunda ejecución sí compiló y reprodujo el fallo; el trabajo posterior comunicó
+  que no había ejecutado Gradle y modificó solo la copia desechable. En el XML de
+  la ejecución anterior, el productor capturó 2.992 bytes, la recuperación eliminó
+  el frame FINISH y truncó a 2.920, y el productor obtuvo EOF al intentar leer ese
+  frame. La excepción `truncated CASC file` del hilo quedó enmascarada por el test.
+  Confirma la carrera en ese ensayo, no su frecuencia ni que la misma carrera sea
+  la causa del fallo de la copia base. Log, estado y XML se preservaron en
+  `usb-public-port-checkpoint-20261030-bYmYQW/overlap34-confirmed-race/`; SHA-256
+  del XML `666028034d68097fda4161d40fa24260769d86bf7569b3dfb3c12af28c9c24bb`.
+  La segunda tarea dijo no encontrar JDK 17, pero una comprobación local posterior
+  confirmó el JDK 17 de la ruta documentada. No repetir la reproducción ya lograda.
   Una revisión independiente identificó una posible carrera si la recuperación
   trunca el checkpoint durante la lectura, pero no probó que explique este test,
   cuyo checkpoint inicial estaba alineado. Las 11 pruebas focalizadas del
@@ -241,7 +252,7 @@ sus consentimientos específicos ni su objetivo de revisión de hasta 900 s.
   y 177 contenidos idénticos; solo cambió `provenance.json`. Los certificados de
   firma auditados coinciden. Eso no sustituye la auditoría de la candidata final.
   Una comparación posterior del borrador público respecto a `342ee766` encontró
-  19 archivos cambiados y ningún archivo de librería, asset, licencia o Gradle
+  entonces 19 archivos cambiados y ningún archivo de librería, asset, licencia o Gradle
   directamente modificado. El diff del reconstruidor solo cambia los tres hashes
   postimage y su comentario; los imports Kotlin añadidos son de Java y, en tests,
   JUnit/Mockito. Esto no verifica los inputs externos ni el contenido de una APK.
@@ -294,17 +305,21 @@ sus consentimientos específicos ni su objetivo de revisión de hasta 900 s.
   En el mismo directorio hay un `release-notes-draft.md` en inglés con marcadores
   sin resolver: es un borrador no publicable que debe ajustarse a la candidata,
   a su firma, a la auditoría y a la evidencia física efectiva.
+  Tras ajustar provisionalmente versión y dos tests, el diff público de 20 archivos
+  se guardó como `public-draft-c169-provisional.patch`, SHA-256
+  `666621cc92834220aa109869d32615b77c7e58a7c19f9694e4c7847f6f36fe0c`.
   Es un checkpoint anterior a la validación final, no un artefacto de publicación;
   verificar su base y los cambios posteriores antes de recuperarlo.
   Los reinicios dejaron dos invocaciones Gradle idénticas compilando el mismo test
   en el mismo directorio temporal y agotando la memoria; se detuvo únicamente la
   duplicada. No usar sus resultados concurrentes como evidencia ni iniciar otra
   compilación en ese directorio mientras quede activa la primera.
-  El borrador público aún conserva `CANDIDATE_VERSION = (146, ...)`; una candidata
-  instalable sobre la C168 necesitará `versionCode` mayor que 168 y firma compatible,
-  además de alinear versión, etiqueta y adjuntos antes de compilar. Una consulta de
-  solo lectura no encontró etiquetas `c169-*` ni `c170-*` en el remoto en ese
-  momento; esto no reserva versiones y habrá que comprobarlo al publicar.
+  El borrador público se ajustó provisionalmente a `CANDIDATE_VERSION = (169,
+  "0.2.145-usb-resume-preview")`; los dos tests focalizados de versión y metadatos
+  pasaron. Una consulta remota de solo lectura no encontró etiquetas `c169-*` ni
+  `c170-*`; esto no reserva versiones y hay que comprobarlo al publicar. Siguen
+  pendientes firma compatible y alineación de etiqueta, APK y adjuntos; todavía no
+  se ha compilado ni publicado esta candidata.
   La revisión de la receta encontró disponibles los inputs externos principales,
   pero no una receta de entorno de compilación completa en el reconstruidor. Una
   comparación de solo lectura comprobó que el certificado de la entrada
