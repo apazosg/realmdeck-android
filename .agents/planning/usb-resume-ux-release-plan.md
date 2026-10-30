@@ -344,6 +344,10 @@ sus consentimientos específicos ni su objetivo de revisión de hasta 900 s.
   `PrivateKeyEntry` debug local coincide con el firmante de la C146 publicada, que
   ya se había cotejado con C168. No se ha probado aún la firma de una candidata con
   esa clave ni auditado sus bytes; esto no autoriza por sí solo su redistribución.
+  Se encargó en paralelo una inspección de solo lectura de los adjuntos de C146 y
+  del procedimiento de auditoría de componentes/fuentes/avisos para la futura
+  candidata (`ses_e71a07d8dffeym6S5UjHA80tZM`), sin acceder al dispositivo ni
+  compilar. No sustituye la auditoría del APK definitivo.
 - Una inspección independiente del borrador público confirmó que la reconstrucción
   incluye la fuente y el test foreground y no encontró fuentes públicas ausentes;
   no se ha compilado ese árbol. Su reconstrucción depende de herramientas y artefactos
