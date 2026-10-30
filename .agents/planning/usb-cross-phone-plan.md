@@ -236,8 +236,14 @@ consentimiento del plan real antes de adoptar o descargar.
 - Revisión sensible independiente C167: detecta que fallos/cancelación después
   de completar el checkpoint preparado y antes del intent pueden dejar estado
   privado propio sin limpiar; reintentos acumularían espacio. Corrección y prueba
-  focal pendientes, sin borrar estado desconocido ni el necesario para recuperación
-  tras intent. El otro hallazgo propuesto, enumeración no acotada, no se confirma:
+  focal en curso, sin borrar estado desconocido ni el necesario para recuperación
+  tras intent. Una primera corrección eliminó accidentalmente la reautenticación
+  viva del checkpoint; la revisión independiente lo detectó y se está reparando
+  antes de aceptar esa candidata. Además, una muerte abrupta antes de intent omite
+  `catch`/`finally`: P o scratch de revisión pueden quedar huérfanos. Reintentos
+  ilimitados no están acotados; falta una política segura de bloqueo/recuperación,
+  también para el recibo que puede sobrevivir al retiro del intent ya completado.
+  El otro hallazgo propuesto, enumeración no acotada, no se confirma:
   la búsqueda de stages retorna al encontrar la segunda entrada o una inválida;
   en la raíz vacía solo se permiten dos nombres distintos y se corta en el primero
   distinto. La revisión no es prueba física ni aprobación del flujo completo.
