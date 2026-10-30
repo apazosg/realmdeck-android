@@ -278,6 +278,14 @@ consentimiento del plan real antes de adoptar o descargar.
   inicial, no evidencia de lo ocurrido después. Consultar el resultado de esa única
   ejecución en `usb-portability-c168-retry-20261030/partial-review/summary.json`;
   no volver a lanzarla automáticamente tras una interrupción o reinicio.
+- En la revisión C168, la última observación UI válida se registró el 30-10 a las
+  06:11:51 UTC, a los 36,6 s desde la intención: consultaba la versión y mostraba
+  `Pausar`. A las 06:36 el controlador seguía activo, pero acumulaba 97 lecturas
+  indisponibles desde las 06:12:19; no se puede inferir el estado actual de la app
+  ni cuándo llegó o llegará al plan. ADB dejó de responder y un intento de reconexión
+  al mismo endpoint autorizado no conectó. No se reinició la revisión ni se pulsaron
+  adopción o payload; es necesario recuperar la comunicación para observarla o
+  verificar su parada, sin asumir que esté detenida ni que haya terminado.
 - La revisión es exclusivamente funcional de la fixture en el móvil original,
   con tope global de 7200 s que reserva tiempo de cancelación e idle. La creación
   incompleta del catálogo anterior se descartó al cancelar, por lo que repetir
