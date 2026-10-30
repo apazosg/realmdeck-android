@@ -20,6 +20,13 @@ preparar las pruebas. El 28-10 aprobó también TC-007–013 para implementació
 no se declara todavía adopción implementada ni ejecutada. No se ha reiniciado el goal
 de rendimiento.
 
+Actualización del 30-10: el usuario aclara que **Xaga es el móvil donde quiere
+recuperar y continuar la descarga** y que la instalación venía de otro móvil. El
+USB permanece en Xaga; no hay que trasladarlo. En los apuntes históricos se llamó
+«original» al dispositivo usado para la fixture sin estado privado; esa etiqueta
+no debe confundirse con el destino solicitado ni establece por sí sola dónde
+empezó la descarga antes de los registros disponibles.
+
 El 28-10 el usuario pide «haz el goal o continua el que habíamos hecho».
 Se crea el goal de portabilidad `c51e88cc-70df-4253-9ab3-147edad83c37`, con margen
 máximo de seis horas y planificación persistida para ambos casos. El antiguo goal
@@ -350,19 +357,19 @@ consentimiento del plan real antes de adoptar o descargar.
   pendientes, descarga prevista de hasta 36,9 GiB y espacio adicional de hasta
   39,4 GiB (2,0 GiB en la app y 37,4 GiB en el USB). La acción de adopción está
   habilitada; no se pulsaron adopción ni descarga. No hay servicio updater activo.
-  Esto resuelve la incertidumbre anterior sobre ese intento: llegó al plan en el
-  móvil **original**, no en el segundo. Como no se observó cuándo terminó, no se
-  puede determinar su duración ni acreditar los 15 minutos solicitados.
+  Esto resuelve la incertidumbre anterior sobre ese intento: llegó al plan en
+  **Xaga**, el destino indicado por el usuario. Como no se observó cuándo terminó,
+  no se puede determinar su duración ni acreditar los 15 minutos solicitados.
 - Tras el plan se confirmó el USB histórico montado, marcador igual al cotejado al
   instalar C168 y los mismos 81 nombres y tamaños CASC (51.625.635.891 bytes).
   Esta comprobación de metadatos no es un nuevo hash completo de los cuerpos ni
   prueba publicación, adopción o reanudación. El usuario ha reafirmado que el
-  objetivo de revisión de hasta 15 minutos sigue vigente. Para probar continuidad
-  real entre teléfonos hay que expulsar y trasladar el USB al segundo teléfono,
-  verificar su identidad y estado, y obtener allí un plan nuevo; el plan en memoria
-  del original no se traslada. Sigue siendo necesario consentimiento específico
-  para el plan real antes de adoptar y, por separado, antes de descargar payload.
-- La revisión es exclusivamente funcional de la fixture en el móvil original,
+  objetivo de revisión de hasta 15 minutos sigue vigente. El usuario aclara que
+  quiere hacer la recuperación en este Xaga, sin trasladar el USB. Sigue siendo
+  necesario consentimiento específico para el plan real antes de adoptar y, por
+  separado, antes de descargar payload.
+- La revisión fue exclusivamente funcional de la fixture en Xaga, llamado
+  «original» en anotaciones anteriores,
   con tope global de 7200 s que reserva tiempo de cancelación e idle. La creación
   incompleta del catálogo anterior se descartó al cancelar, por lo que repetir
   mecánicamente el límite de 900 s puede detenerse antes de la autenticación; este

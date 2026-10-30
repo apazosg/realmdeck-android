@@ -1,5 +1,11 @@
 # USB entre dos móviles: datos parciales visibles, reanudación no demostrada
 
+**Aclaración del 30-10:** el usuario indica que la instalación venía de otro móvil
+y que quiere recuperar y continuar la descarga en el **Xaga ya conectado**, con el
+USB allí. Las etiquetas históricas «original» y «segundo» de este informe no cambian
+ese destino. El plan real observado en Xaga, sus límites y los consentimientos aún
+pendientes constan en [el plan](../.agents/planning/usb-cross-phone-plan.md).
+
 Evidencia del 27-10-2026: inspección USB cerrada 19:39:44 UTC, actualización
 expresamente aprobada de la app cerrada 19:52:23, observación de su interfaz
 cerrada 20:13:03 y corrección de selección cerrada 20:46:03. Alcance en
