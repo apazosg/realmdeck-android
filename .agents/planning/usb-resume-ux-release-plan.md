@@ -184,7 +184,12 @@ sus consentimientos específicos ni su objetivo de revisión de hasta 900 s.
   objetos sin ese frame, pero no prueban que antes hubiera 2.992 bytes ni identifican
   el truncado responsable. No se atribuye aún el fallo observado a esa carrera.
   Se inició un experimento focal instrumentado en una copia aislada, sin tocar el
-  dispositivo ni las fuentes candidatas; no lanzar duplicados tras un reinicio.
+  dispositivo ni las fuentes candidatas. Tras el reinicio se encontró su resultado:
+  falló la compilación del test instrumentado por la referencia fuera de alcance
+  `resumeFailure` (`/tmp/opencode/overlap-34-instrumented-20261030.run1.log`); no
+  llegó a ejecutar el test ni aporta nueva evidencia causal. Se encargó corregir
+  solo la instrumentación de esa copia y ejecutar una vez el test focal, con log y
+  resultado externos. No lanzar duplicados tras un reinicio.
   Una revisión independiente identificó una posible carrera si la recuperación
   trunca el checkpoint durante la lectura, pero no probó que explique este test,
   cuyo checkpoint inicial estaba alineado. Las 11 pruebas focalizadas del
@@ -300,6 +305,12 @@ sus consentimientos específicos ni su objetivo de revisión de hasta 900 s.
   además de alinear versión, etiqueta y adjuntos antes de compilar. Una consulta de
   solo lectura no encontró etiquetas `c169-*` ni `c170-*` en el remoto en ese
   momento; esto no reserva versiones y habrá que comprobarlo al publicar.
+  La revisión de la receta encontró disponibles los inputs externos principales,
+  pero no una receta de entorno de compilación completa en el reconstruidor. Una
+  comparación de solo lectura comprobó que el certificado de la entrada
+  `PrivateKeyEntry` debug local coincide con el firmante de la C146 publicada, que
+  ya se había cotejado con C168. No se ha probado aún la firma de una candidata con
+  esa clave ni auditado sus bytes; esto no autoriza por sí solo su redistribución.
 - Una inspección independiente del borrador público confirmó que la reconstrucción
   incluye la fuente y el test foreground y no encontró fuentes públicas ausentes;
   no se ha compilado ese árbol. Su reconstrucción depende de herramientas y artefactos
