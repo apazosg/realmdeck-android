@@ -277,6 +277,14 @@ sus consentimientos específicos ni su objetivo de revisión de hasta 900 s.
   segundo plano con identificador `sh_18e46cbfb001tv8s9epeSo6KRw`; deja el resultado
   atómico y el log en el directorio externo
   `usb-public-port-checkpoint-20261030-bYmYQW/foreground-dispatch-run-20261030-sh/`.
+  El servidor comunicó «cancelled» al reiniciar, pero la comprobación puntual mostró
+  que el proceso wrapper, Gradle y el worker de test seguían activos; la ejecución
+  ya había empezado un método. No lanzar duplicados; el wrapper tiene timeout de
+  900 s y escribirá `result.txt` al terminar. Se conservó el XML anterior de 11 tests.
+- Se corrigió una contradicción documental: los TC de portabilidad ya estaban
+  aprobados; lo pendiente es la implementación verificada. Una comprobación focal
+  del borrador público pasó frontmatter, unicidad de IDs, referencias FR/TC y enlaces
+  relativos de US-008 y US-009. Esto no ejecuta pruebas funcionales.
   La CLI `gh` no está disponible en el PATH. No se encontró credencial
   HTTPS no interactiva, helper Git configurado ni identidad SSH habitual; aún no
   se ha demostrado acceso de escritura a GitHub. No solicitar ni incluir tokens
