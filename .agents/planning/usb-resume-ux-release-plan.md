@@ -108,16 +108,16 @@ sus consentimientos específicos ni su objetivo de revisión de hasta 900 s.
   revisados). La media desde las 17:48:41 fue ~2,35 registros/s, equivalente a
   unas 95 horas restantes si se mantuviese el ritmo. Es una extrapolación, no una
   previsión garantizada; no acredita descarga. No se ha pausado ni reinstalado.
-   Otra consulta pasiva de metadatos a las 19:20:31 UTC encontró la app viva y un
-   checkpoint preparado con 1.754.320 bytes, 24.365 registros completos (~2,96 %),
-   actualizado un segundo antes. La media desde las 19:02 fue ~2,35 registros/s;
-   sigue siendo adopción, no payload. Dos transportes ADB correspondían al mismo
-   teléfono físico; no se envió ninguna interacción ni se leyó el contenido.
-   A las 19:41:12 UTC, una nueva consulta pasiva del paquete funcional
-   `com.wowforever.arm64probe` lo encontró vivo, con un único checkpoint preparado
-   de 1.962.904 bytes: 27.262 registros completos (~3,31 %), actualizado un segundo
-   antes. La media desde las 19:20 fue ~2,33 registros/s. Sigue siendo progreso de
-   adopción, no evidencia de descarga. No se ha interrumpido ni modificado el móvil.
+  Otra consulta pasiva de metadatos a las 19:20:31 UTC encontró la app viva y un
+  checkpoint preparado con 1.754.320 bytes, 24.365 registros completos (~2,96 %),
+  actualizado un segundo antes. La media desde las 19:02 fue ~2,35 registros/s;
+  sigue siendo adopción, no payload. Dos transportes ADB correspondían al mismo
+  teléfono físico; no se envió ninguna interacción ni se leyó el contenido.
+  A las 19:41:12 UTC, una nueva consulta pasiva del paquete funcional
+  `com.wowforever.arm64probe` lo encontró vivo, con un único checkpoint preparado
+  de 1.962.904 bytes: 27.262 registros completos (~3,31 %), actualizado un segundo
+  antes. La media desde las 19:20 fue ~2,33 registros/s. Sigue siendo progreso de
+  adopción, no evidencia de descarga. No se ha interrumpido ni modificado el móvil.
 - La inspección de código sugiere que «Pausar» durante la adopción cancela de
   forma cooperativa, no reanuda desde el checkpoint preparado parcial. Antes del
   intent durable, la limpieza normal intenta retirar los artefactos preparados;
@@ -145,8 +145,12 @@ sus consentimientos específicos ni su objetivo de revisión de hasta 900 s.
   ajeno a esta tarea: la aserción de texto de autologin no coincide con la fuente ya
   presente en HEAD. Una ejecución posterior de `test_functional_launcher_ux.py`
   obtuvo 20 aprobados y el mismo fallo preexistente; la fuente de autologin no tiene
-  diff respecto a HEAD. Las pruebas Gradle de clasificación iniciadas antes del
-  reinicio quedaron sin resultado confirmado.
+  diff respecto a HEAD. Se comprobó además que tanto la aserción obsoleta como su
+  fuente sin esa cadena también existen en el `origin/main` público; no se cambió
+  autologin fuera de alcance. La prueba nueva de ruta de almacenamiento se ejecutó
+  contra el overlay selectivo del borrador público y pasó (1 test). Las pruebas
+  Gradle de clasificación iniciadas antes del reinicio quedaron sin resultado
+  confirmado.
 - La compilación Kotlin independiente de la candidata local falló por exponer un
   tipo interno en tres API públicas, antes de ejecutar tests. Se detectó además
   que comparar directamente los contadores de la revisión y el plan reanudado
@@ -169,10 +173,10 @@ sus consentimientos específicos ni su objetivo de revisión de hasta 900 s.
   sumaron 144 tests, con 2 fallos y 1 omitido. Pasaron los tests añadidos de
   adopción, cadencia y vínculo del checkpoint. Los dos fallos afectan escenarios de
   reanudación y caché solapada. La prueba de caché pasó al ejecutarse aislada;
-   la de reanudación volvió a fallar y una ejecución diagnóstica mostró una
-   lectura concurrente de checkpoint truncado. El mismo test de reanudación
-   también falló en una copia limpia del HEAD `8addebf`, pero sin exponer la
-   excepción del hilo; la causa exacta en esa copia sigue bajo investigación.
+  la de reanudación volvió a fallar y una ejecución diagnóstica mostró una
+  lectura concurrente de checkpoint truncado. El mismo test de reanudación
+  también falló en una copia limpia del HEAD `8addebf`, pero sin exponer la
+  excepción del hilo; la causa exacta en esa copia sigue bajo investigación.
   La lectura del productor omite los frames incompletos, de modo que truncar solo
   una cola parcial no explica ese EOF. El writer también puede eliminar un frame
   completo de finalización al recuperar; eso sí podría competir con un lector que
