@@ -108,6 +108,13 @@ sus consentimientos específicos ni su objetivo de revisión de hasta 900 s.
   revisados). La media desde las 17:48:41 fue ~2,35 registros/s, equivalente a
   unas 95 horas restantes si se mantuviese el ritmo. Es una extrapolación, no una
   previsión garantizada; no acredita descarga. No se ha pausado ni reinstalado.
+- La inspección de código sugiere que «Pausar» durante la adopción cancela de
+  forma cooperativa, no reanuda desde el checkpoint preparado parcial. Antes del
+  intent durable, la limpieza normal intenta retirar los artefactos preparados;
+  una salida abrupta puede dejar huérfanos que bloquean el siguiente intento. La
+  revisión también reside en memoria. No se ha probado en el dispositivo activo
+  una pausa, limpieza o reanudación de esta adopción. No interrumpirla basándose
+  solo en la mejora todavía no medida de la candidata.
 - Tras el reinicio, el 30-10 hacia las 17:02 UTC, se verificaron de nuevo la
   identidad del Xaga y la app C168 en primer plano. La UI mostraba «Verificando y
   recuperando la descarga existente…» y «Pausar»; no aparecía un servicio updater
@@ -185,6 +192,9 @@ sus consentimientos específicos ni su objetivo de revisión de hasta 900 s.
   a las 19:02 UTC encontró 18 archivos modificados sin preparar en ese árbol;
   todavía hay que cerrar dependencias, incorporar la candidata final validada,
   revisar, reconstruir y auditar sin trasladar automáticamente los commits locales.
+  Los tres postimages fijados de CASC/BLTE coinciden con los archivos de ese árbol
+  provisional; hay que volver a fijarlos cuando se congele la candidata. La prueba
+  local nueva de traspaso por el servicio foreground todavía no está portada allí.
   La CLI `gh` no está disponible en el PATH. No se encontró credencial
   HTTPS no interactiva, helper Git configurado ni identidad SSH habitual; aún no
   se ha demostrado acceso de escritura a GitHub. No solicitar ni incluir tokens
