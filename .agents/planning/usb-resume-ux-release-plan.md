@@ -347,7 +347,16 @@ sus consentimientos específicos ni su objetivo de revisión de hasta 900 s.
   Se encargó en paralelo una inspección de solo lectura de los adjuntos de C146 y
   del procedimiento de auditoría de componentes/fuentes/avisos para la futura
   candidata (`ses_e71a07d8dffeym6S5UjHA80tZM`), sin acceder al dispositivo ni
-  compilar. No sustituye la auditoría del APK definitivo.
+  compilar. Concluyó que hay que inventariar y comparar **todos** los miembros del
+  APK definitivo contra C146, explicar cambios, altas y bajas, y revisar por separado
+  firma, manifiesto/permisos, privacidad y derechos. `audit_functional_ui_apk.py` es
+  una referencia, pero sus identificadores/pins históricos no constituyen una
+  auditoría C169. Los adjuntos C146 incluyen `SOURCE-COVERAGE.json` dentro de su
+  archivo de fuentes; el README reconoce fuentes parciales y los notices no son
+  exhaustivos. No afirmar fuentes completas ni autorización para nuevos componentes.
+  Conservar APK, commit y recibo exactos, auditar los adjuntos y verificar metadatos
+  y hashes de cada descarga pública. Nada de esto sustituye la auditoría del APK
+  definitivo, aún inexistente.
 - Una inspección independiente del borrador público confirmó que la reconstrucción
   incluye la fuente y el test foreground y no encontró fuentes públicas ausentes;
   no se ha compilado ese árbol. Su reconstrucción depende de herramientas y artefactos
