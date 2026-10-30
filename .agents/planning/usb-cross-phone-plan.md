@@ -223,6 +223,16 @@ consentimiento del plan real antes de adoptar o descargar.
 
 ## Open Issues
 
+- C167: revisión física única 2026-10-30 00:47:12–01:02:52 UTC sin
+  resumen antes de 900 s; a los 890,6 s preparaba 1077248/1144978 objetos
+  del catálogo, sin llegar a autenticación del USB. El controlador confirma
+  cancelación cooperativa e idle; `clientOperations=[]`, sin adopción/payload.
+  Evidencia `usb-portability-c167-20261029/partial-review/summary.json`.
+  El objetivo de 900 s continúa UNMET y no se reabre como optimización. Para
+  los dos casos funcionales sigue faltando una revisión que llegue al plan
+  real; no convertir esta observación ni los 822658 antiguos en progreso
+  recuperado. Primero resolver el hallazgo sensible y validar la candidata.
+
 - Revisión sensible independiente C167: detecta que fallos/cancelación después
   de completar el checkpoint preparado y antes del intent pueden dejar estado
   privado propio sin limpiar; reintentos acumularían espacio. Corrección y prueba
