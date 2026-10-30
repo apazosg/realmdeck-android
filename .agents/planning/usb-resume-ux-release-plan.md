@@ -216,6 +216,15 @@ sus consentimientos específicos ni su objetivo de revisión de hasta 900 s.
   son bytes autenticados, no una medición de lectura física USB ni un límite inferior
   de tiempo. No repetir la prueba cerrada: si otra revisión es necesaria, medir sus
   fases y tiempo total sin añadir lecturas USB o perfilado a ese ensayo.
+  Una inspección posterior distingue la revisión de otras rutas: C167 seguía en
+  catálogo a los 890,6 s y no había empezado la autenticación USB; los 39,750 s
+  atribuidos a consultas individuales en `docs/download-resume-baseline-review.md`
+  corresponden a reanudación, no a esta revisión. El microbenchmark Python/SQLite
+  allí citado tampoco mide Kotlin ni el dispositivo. Para una futura fixture segura
+  y separada, medir tiempo total monotónico y por fases de catálogo, autenticación
+  de la etapa y preparación del resumen; no debilitar verificaciones ni presentar
+  mediciones locales como prueba de la meta física. No hay aún datos para elegir
+  otra optimización de revisión con fundamento.
 - La auditoría inicial de publicación encontró que C168 es una APK de prueba con
   firma debug, no una candidata de publicación. C146 ya se publicó como prerelease
   debug-signed y el usuario confirmó el 25-10 la redistribución de los componentes
