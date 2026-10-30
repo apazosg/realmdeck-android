@@ -333,6 +333,15 @@ consentimiento del plan real antes de adoptar o descargar.
   sin dispositivos registrados y el único anuncio TLS en la dirección anterior no
   aceptaba TCP. No repetir la revisión; recuperar el acceso al dispositivo y
   comprobar su estado real antes de cualquier otra acción sobre la fixture.
+- El usuario comunicó que el teléfono estaba de nuevo disponible y pidió mejorar
+  primero la fiabilidad de la conexión. Durante la inspección posterior se verificó
+  la identidad emparejada, la app C168 y que la depuración inalámbrica estaba
+  activada. El servicio updater no aparecía activo, pero la app no estaba en primer
+  plano: el estado de la revisión no quedó confirmado y no se reabrió ni se envió
+  ninguna acción UI. Dos alias TLS correspondían a la identidad comprobada; una
+  observación pasiva de 120,1 s obtuvo 25/25 respuestas, sin demostrar estabilidad
+  prolongada ni reconexión tras una interrupción. El diagnóstico y las limitaciones
+  siguen en `adb-reliability-plan.md`; el controlador cerrado no debe relanzarse.
 - La revisión es exclusivamente funcional de la fixture en el móvil original,
   con tope global de 7200 s que reserva tiempo de cancelación e idle. La creación
   incompleta del catálogo anterior se descartó al cancelar, por lo que repetir
