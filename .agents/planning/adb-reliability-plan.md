@@ -116,6 +116,36 @@ seguridad.
   anterior. Todavía no se ha verificado la condición física ni si intervienen otros
   permisos o restricciones de HyperOS. Se mantiene sin conceder también el permiso
   amplio ya autorizado hasta poder configurar la guarda de red.
+- Tras explicar que el permiso permitiría a la app acceder a la ubicación precisa
+  también en segundo plano, el usuario eligió «Permitir ubicación». Esto autoriza
+  los permisos de ubicación necesarios para la guarda; no autoriza automáticamente
+  accesibilidad, nuevos puertos, excepciones de batería ni otros permisos distintos.
+  La autorización no demuestra que el SSID identifique de forma segura una red.
+- La concesión inicial por `pm grant` fue rechazada con `SecurityException` por el
+  teléfono; no se modificó la seguridad de depuración. Usando los ajustes normales
+  de Android se seleccionó una vez «Permitir siempre» para MacroDroid y el sistema
+  mostró «Ubicación precisa» activada. `dumpsys package` confirmó ubicación gruesa,
+  precisa y de fondo concedidas. `WRITE_SECURE_SETTINGS` seguía sin conceder y la
+  macro todavía no se había configurado; reactivación y guarda siguen sin probar.
+- En el editor se preparó, sin guardar todavía una macro, la conjunción de dos
+  restricciones: Wi-Fi conectada al SSID exacto de la red actualmente conectada y
+  `Global(adb_wifi_enabled) != 1` como entero. Se comprobó que ese SSID coincidía
+  con el leído de la conexión actual; no se versiona y no autentica la red. El editor
+  muestra dos restricciones, ningún disparador y ninguna acción. Esto no prueba que
+  la guarda funcione en segundo plano ni que la app pueda reactivar ADB.
+- El disparador «Intervalo regular» solicitó permiso para alarmas exactas antes de
+  permitir configurarlo; se canceló el aviso sin concederlo. Al intentar añadir la
+  acción «Configuración del sistema», la app solicitó además permitirle modificar
+  configuraciones de sistema; también se canceló el aviso. Es un acceso adicional
+  distinto de `WRITE_SECURE_SETTINGS`, que el usuario ya había autorizado. La consulta
+  posterior mostró `WRITE_SETTINGS` sin conceder y su app-op en `ignore`,
+  `SCHEDULE_EXACT_ALARM` sin conceder y su app-op en `default`; no se concedió
+  tampoco `WRITE_SECURE_SETTINGS`. El interruptor de depuración inalámbrica seguía
+  activado. Se dejó el borrador visible y se cerró el control UHID temporal.
+- Al abrir el editor apareció un diálogo publicitario sobre compartir datos; se
+  seleccionó «Manage options», no «Consent», y el diálogo desapareció después. Se
+  desconoce qué estado de consentimiento publicitario quedó guardado; no se
+  considera probado ni el rechazo ni la aceptación de ese tratamiento.
 
 ## Implementation / Action Items
 
@@ -155,11 +185,11 @@ seguridad.
 - [ ] 7. Recuperación mediante MacroDroid autorizada expresamente, con la única app
   oficial y el permiso `WRITE_SECURE_SETTINGS` explicado al usuario.
   - [x] 7.1. Instalar y verificar la app de Google Play solo en el teléfono previsto.
-  - [ ] 7.2. Resolver si se autoriza la ubicación de fondo adicional para restringir
-    la automatización a la red conocida; no habilitarla en cualquier red por defecto.
-  - [ ] 7.3. Si se resuelve esa decisión, configurar manualmente y verificar primero
-    la condición de red y la única acción de recuperación antes de activar la macro;
-    no añadir permisos, listeners ni puertos no aprobados.
+  - [x] 7.2. El usuario autorizó la ubicación de fondo adicional para intentar
+    restringir la automatización a la red conocida; no habilitarla en cualquier red.
+  - [ ] 7.3. Resolver las nuevas solicitudes de permisos y configurar y verificar
+    manualmente la condición de red y la única acción de recuperación antes de
+    activar la macro; no añadir permisos, listeners ni puertos no aprobados.
   - [ ] 7.4. Demostrar recuperación real únicamente cuando esté confirmado que la
     revisión USB está en reposo y sin comprometer la fixture.
 
@@ -172,9 +202,14 @@ seguridad.
   interacción. La reactivación automática no está demostrada y puede necesitar
   hardware o una excepción de seguridad que el usuario debe decidir expresamente.
 - Para restringir MacroDroid a la red conocida, la ubicación de fondo parece
-  necesaria según su documentación; falta una decisión explícita del usuario y
-  comprobar el comportamiento real del dispositivo. El SSID por sí solo no prueba
-  que la red sea auténtica. Sin la guarda, no se activa la macro por defecto.
+  necesaria según su documentación y el usuario la autorizó. Falta comprobar el
+  comportamiento real del dispositivo. El SSID por sí solo no prueba que la red
+  sea auténtica. Sin la guarda, no se activa la macro por defecto.
+- MacroDroid requiere decidir si se autoriza el acceso adicional a modificar
+  configuraciones del sistema y, para el disparador periódico, a alarmas exactas.
+  Sin el primero no permitió siquiera configurar la acción; sin el segundo no
+  permitió configurar el intervalo. Una alternativa por eventos sin alarma sigue
+  sin verificarse y no aporta el mismo control periódico.
 - MacroDroid es una candidata expresamente autorizada, no una recuperación probada.
   Se debe verificar en el teléfono si exige confirmación del sistema, permisos extra
   para limitar la red o alguna excepción adicional de HyperOS; no conceder permisos
