@@ -97,8 +97,11 @@ sus consentimientos específicos ni su objetivo de revisión de hasta 900 s.
   pasiva de CPU del proceso, ~5 s, dio ~59 % de un núcleo y no separa costes.
   Otra lectura pasiva a las 17:33:24 UTC mostró ~9.260 registros preparados,
   aún actualizándose; entre las 17:24:38 y las 17:33:24 la media fue ~2,38/s.
-  A las 17:38:48 UTC se observaron ~10.021 registros, con actualización un
-  segundo antes y el proceso vivo; sigue sin ser descarga de payload.
+   A las 17:38:48 UTC se observaron ~10.021 registros, con actualización un
+   segundo antes y el proceso vivo. A las 17:48:41 UTC había ~11.427 registros;
+   la media entre estas dos muestras fue ~2,37 objetos/s. Son registros de
+   adopción, no descarga de payload; una extrapolación al resto de los 822.658
+   objetos revisados sería de unos cuatro días si el ritmo no cambiase.
 - Tras el reinicio, el 30-10 hacia las 17:02 UTC, se verificaron de nuevo la
   identidad del Xaga y la app C168 en primer plano. La UI mostraba «Verificando y
   recuperando la descarga existente…» y «Pausar»; no aparecía un servicio updater
@@ -140,9 +143,14 @@ sus consentimientos específicos ni su objetivo de revisión de hasta 900 s.
 - La compilación Kotlin posterior sí llegó a ejecutarse: las dos clases focalizadas
   sumaron 144 tests, con 2 fallos y 1 omitido. Pasaron los tests añadidos de
   adopción, cadencia y vínculo del checkpoint. Los dos fallos afectan escenarios de
-  reanudación y caché solapada; se está investigando si son regresiones de esta
-  candidata o fallos previos. No se debe dar la candidata por validada mientras
-  no se resuelva esa clasificación y se pruebe el handoff del servicio.
+   reanudación y caché solapada. La prueba de caché pasó al ejecutarse aislada;
+   la de reanudación volvió a fallar y una ejecución diagnóstica mostró una
+   lectura concurrente de checkpoint truncado. El código de ese recorrido ya
+   estaba en HEAD, pero se está comprobando si el fallo reproduce en HEAD limpio
+   y cuál es su impacto real. Las 11 pruebas focalizadas del servicio pasaron,
+   incluida la entrega y limpieza de la autorización pendiente; queda por probar
+   que la misma autorización llega al ejecutor. No dar la candidata por validada
+   mientras no se resuelvan esas comprobaciones.
 - El perfil existente señala la preparación del catálogo como parte significativa
   del coste, pero no separa sus fases ni justifica todavía otra optimización segura.
   C168 no demuestra el objetivo de 900 s; los tests sintéticos de optimizaciones ya
@@ -166,7 +174,9 @@ sus consentimientos específicos ni su objetivo de revisión de hasta 900 s.
   funcional desde `origin/main`, incluidos componentes ajenos al flujo USB. Hay que
   seleccionar y auditar su cierre de dependencias, reconstruir desde el árbol
   público resultante y no trasladar automáticamente esos 199 commits. La CLI `gh`
-  no está disponible en el PATH; no se ha comprobado todavía acceso de escritura.
+   no está disponible en el PATH. No se encontró credencial HTTPS no interactiva,
+   helper Git configurado ni identidad SSH habitual; aún no se ha demostrado
+   acceso de escritura a GitHub. No solicitar ni incluir tokens en el repositorio.
 - La optimización concreta y su ganancia se decidirán con el perfil y las pruebas;
   no se promete que el límite de 900 s se logre antes de medirlo.
 - La revisión actual está en memoria: instalar otra APK antes de adoptar puede
