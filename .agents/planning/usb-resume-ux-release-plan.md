@@ -114,7 +114,9 @@ sus consentimientos específicos ni su objetivo de revisión de hasta 900 s.
   una salida abrupta puede dejar huérfanos que bloquean el siguiente intento. La
   revisión también reside en memoria. No se ha probado en el dispositivo activo
   una pausa, limpieza o reanudación de esta adopción. No interrumpirla basándose
-  solo en la mejora todavía no medida de la candidata.
+  solo en la mejora todavía no medida de la candidata. A las 19:06 UTC el teléfono
+  estaba alimentado, con batería al 100 % y despierto; es una lectura puntual, no
+  una garantía de ejecución durante los días estimados.
 - Tras el reinicio, el 30-10 hacia las 17:02 UTC, se verificaron de nuevo la
   identidad del Xaga y la app C168 en primer plano. La UI mostraba «Verificando y
   recuperando la descarga existente…» y «Pausar»; no aparecía un servicio updater
@@ -167,10 +169,24 @@ sus consentimientos específicos ni su objetivo de revisión de hasta 900 s.
   servicio pasaron, incluida la entrega y limpieza de la autorización pendiente;
   queda por probar que la misma autorización llega al ejecutor. No dar la
   candidata por validada mientras no se resuelvan esas comprobaciones.
+- Revisión independiente posterior del vínculo de autorización UI → servicio →
+  ejecutor: sin defectos concretos y sin cambios concurrentes durante la lectura.
+  SHA-256 revisados, respectivamente `ForeverClientManagement.kt`:
+  `ddeab26be27ad9a1125637dc40e913c22e22259e89e3b0b0be75f57b33c86c08`,
+  `ForeverClientUpdateForegroundService.kt`:
+  `dc692888b4356cbd06b837225c66e176521a75908b926fbd2cef0bd21ffeb62d`,
+  `ForeverClientUpdateService.kt`:
+  `a98bc9bed47812d10039bebc2f6303b97d88ab8310a122c0732886545d8fadd8`, y
+  `ForeverClientUpdater.kt`:
+  `29b7f97390b62288f8bc599660de6c4760bb6d9972a237697c25543a275ab957`.
+  La revisión no sustituye la prueba conductual pendiente del servicio al ejecutor.
 - El perfil existente señala la preparación del catálogo como parte significativa
   del coste, pero no separa sus fases ni justifica todavía otra optimización segura.
   C168 no demuestra el objetivo de 900 s; los tests sintéticos de optimizaciones ya
-  implementadas no son una medición física de ese objetivo.
+  implementadas no son una medición física de ese objetivo. Las muestras anteriores
+  son bytes autenticados, no una medición de lectura física USB ni un límite inferior
+  de tiempo. No repetir la prueba cerrada: si otra revisión es necesaria, medir sus
+  fases y tiempo total sin añadir lecturas USB o perfilado a ese ensayo.
 - La auditoría inicial de publicación encontró que C168 es una APK de prueba con
   firma debug, no una candidata de publicación. C146 ya se publicó como prerelease
   debug-signed y el usuario confirmó el 25-10 la redistribución de los componentes
