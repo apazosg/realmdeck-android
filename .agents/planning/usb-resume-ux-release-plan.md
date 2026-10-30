@@ -359,6 +359,12 @@ sus consentimientos específicos ni su objetivo de revisión de hasta 900 s.
   Conservar APK, commit y recibo exactos, auditar los adjuntos y verificar metadatos
   y hashes de cada descarga pública. Nada de esto sustituye la auditoría del APK
   definitivo, aún inexistente.
+  Como referencia operativa, el script histórico externo
+  `public-performance-port-20261025/build-commit-group-145.sh` reconstruye un árbol
+  aislado, usa JDK 17/SDK 36 y `:app:assembleModernDebug` offline con un worker,
+  luego verifica firma y ejecuta `audit_functional_ui_apk.py` contra el receipt.
+  Para C169 habría que adaptar las rutas al árbol público **ya congelado**, registrar
+  su commit y generar un receipt nuevo; no ejecutar ni reutilizar el artefacto C145.
 - Una inspección independiente del borrador público confirmó que la reconstrucción
   incluye la fuente y el test foreground y no encontró fuentes públicas ausentes;
   no se ha compilado ese árbol. Su reconstrucción depende de herramientas y artefactos
