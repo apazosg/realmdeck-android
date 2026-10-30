@@ -213,6 +213,12 @@ sus consentimientos específicos ni su objetivo de revisión de hasta 900 s.
   trabajando. No debe debilitar el rechazo de frames OBJECT dañados, identidad,
   cancelación ni límites de memoria. La solución aún requiere revisión independiente
   por afectar concurrencia y durabilidad, antes de portarla al árbol público.
+  El primer diff capturaba FINISH en `size - 72`, posición incorrecta si hay bytes
+  finales incompletos; se devolvió al mismo trabajador para alinear el último frame
+  completo y añadir ese caso al test. El primer informe no ejecutó tests por un
+  supuesto Gradle activo; el log muestra que ese daemon terminó su último build a
+  las 19:03:41 UTC y no había otro build activo, por lo que se aclaró que podía
+  ejecutar una sola vez la validación focal acordada. La reparación sigue en curso.
   Una revisión independiente identificó una posible carrera si la recuperación
   trunca el checkpoint durante la lectura, pero no probó que explique este test,
   cuyo checkpoint inicial estaba alineado. Las 11 pruebas focalizadas del
