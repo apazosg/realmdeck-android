@@ -272,6 +272,11 @@ sus consentimientos específicos ni su objetivo de revisión de hasta 900 s.
   con fuentes de producción idénticas y test actualizado byte a byte. El classpath
   usa Mockito 5.14.2. Está limitada a 900 s y guarda su log y resultado fuera del
   repositorio: no iniciar otra instancia al reiniciarse el servidor. No toca Xaga.
+  El primer intento no ejecutó Gradle porque `gradlew` no tenía permiso de ejecución
+  (estado 126); se corrigió invocándolo con `sh`. La ejecución corregida se lanzó en
+  segundo plano con identificador `sh_18e46cbfb001tv8s9epeSo6KRw`; deja el resultado
+  atómico y el log en el directorio externo
+  `usb-public-port-checkpoint-20261030-bYmYQW/foreground-dispatch-run-20261030-sh/`.
   La CLI `gh` no está disponible en el PATH. No se encontró credencial
   HTTPS no interactiva, helper Git configurado ni identidad SSH habitual; aún no
   se ha demostrado acceso de escritura a GitHub. No solicitar ni incluir tokens
