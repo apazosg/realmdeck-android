@@ -14,16 +14,16 @@ sus consentimientos específicos ni su objetivo de revisión de hasta 900 s.
 
 ## Content
 
-- C168 ya mostró en Xaga una revisión confirmable de 822.658 objetos reutilizables,
+- C168 mostró en Xaga una revisión confirmable de 822.658 objetos reutilizables,
   322.320 objetos CASC pendientes, hasta 36,9 GiB de descarga y hasta 39,4 GiB de
   espacio adicional (hasta 2,0 GiB en la app y 37,4 GiB en el USB). Se desconoce la
-  duración total de la revisión. No se ha confirmado la adopción ni la descarga.
+  duración total de la revisión. La adopción se ha solicitado una vez; su finalización
+  y el inicio de la descarga aún no están acreditados.
 - Priorizar aprovechar ese plan, no perderlo innecesariamente instalando otra APK
-  o repitiendo la revisión. Comprobar que sigue vigente y solicitar el consentimiento
-  específico de adopción con los costes reales. La adopción crea estado propio y
-  puede actualizar el marcador; no inicia payload. El plan posterior de descarga
-  requiere su confirmación separada. Ante cambios o fallos, no inventar el resultado
-  ni relajar las guardas.
+  o repitiendo la revisión. La adopción crea estado propio y puede actualizar el
+  marcador. En la C168 ya instalada, la descarga posterior requiere su confirmación
+  separada; se ha autorizado enviarla una sola vez si el plan conserva identidad y
+  costes. Ante cambios o fallos, no inventar el resultado ni relajar las guardas.
 - Revisar el recorrido de almacenamiento y de gestión del cliente para que el
   usuario distinga una descarga parcial, la verificación, el resultado, la
   recuperación y la descarga pendiente. Simplificar textos, navegación y acciones
@@ -31,8 +31,11 @@ sus consentimientos específicos ni su objetivo de revisión de hasta 900 s.
   un cliente parcial como instalado o listo para jugar.
   Actualmente el destino se selecciona en Almacenamiento y la revisión se inicia
   aparte en Cliente y actualizaciones; las acciones de revisión y de recuperación
-  interrumpida aparecen juntas. Facilitar el acceso y hacer visible el destino
-  concreto antes de revisar o recuperar, sin iniciar operaciones automáticamente.
+  interrumpida aparecen juntas. Por petición posterior del usuario, integrar la
+  detección y recuperación en el flujo normal con el mínimo de clics: un solo
+  consentimiento explícito sobre costes puede autorizar adopción y descarga, con
+  revalidación antes de transferir. Seleccionar o abrir sigue sin iniciar red ni
+  mutación; ante cambios se requiere revisar el plan nuevo.
 - Mejorar el tiempo de revisión hasta el resumen confirmable; el objetivo solicitado
   es 900 s en la fixture física documentada, no una garantía universal. En C167 el
   catálogo seguía preparándose a los 890,6 s; en C168 no se observó el tiempo total.
@@ -54,11 +57,10 @@ sus consentimientos específicos ni su objetivo de revisión de hasta 900 s.
 
 ## Implementation / Action Items
 
-- [ ] 1. Acordar este plan y el momento de la adopción real; confirmar que el
-  resumen C168 en Xaga sigue siendo el mismo y que hay espacio.
-- [ ] 2. Con consentimiento específico, recuperar el parcial mediante la app, sin
-  iniciar payload; verificar el nuevo estado. Mostrar el plan actualizado y pedir
-  la confirmación separada antes de comenzar o reanudar su descarga.
+- [x] 1. Confirmar el resumen C168 en Xaga y solicitar la adopción una sola vez.
+- [ ] 2. Verificar la finalización de la adopción. En C168, confirmar una vez el
+  plan actualizado únicamente si coincide con el destino y los costes autorizados;
+  comprobar después si la descarga realmente ha comenzado.
 - [ ] 3. Analizar el recorrido real y el perfil de costes; realizar los cambios
   mínimos de interfaz y rendimiento dentro de los criterios aprobados, con pruebas
   focalizadas de mensajes, navegación y seguridad de la recuperación.
