@@ -108,6 +108,11 @@ sus consentimientos específicos ni su objetivo de revisión de hasta 900 s.
   revisados). La media desde las 17:48:41 fue ~2,35 registros/s, equivalente a
   unas 95 horas restantes si se mantuviese el ritmo. Es una extrapolación, no una
   previsión garantizada; no acredita descarga. No se ha pausado ni reinstalado.
+  Otra consulta pasiva de metadatos a las 19:20:31 UTC encontró la app viva y un
+  checkpoint preparado con 1.754.320 bytes, 24.365 registros completos (~2,96 %),
+  actualizado un segundo antes. La media desde las 19:02 fue ~2,35 registros/s;
+  sigue siendo adopción, no payload. Dos transportes ADB correspondían al mismo
+  teléfono físico; no se envió ninguna interacción ni se leyó el contenido.
 - La inspección de código sugiere que «Pausar» durante la adopción cancela de
   forma cooperativa, no reanuda desde el checkpoint preparado parcial. Antes del
   intent durable, la limpieza normal intenta retirar los artefactos preparados;
@@ -217,7 +222,11 @@ sus consentimientos específicos ni su objetivo de revisión de hasta 900 s.
   revisar, reconstruir y auditar sin trasladar automáticamente los commits locales.
   Los tres postimages fijados de CASC/BLTE coinciden con los archivos de ese árbol
   provisional; hay que volver a fijarlos cuando se congele la candidata. La prueba
-  local nueva de traspaso por el servicio foreground todavía no está portada allí.
+  local de traspaso por el servicio foreground se portó allí byte a byte (SHA-256
+  `913875fe926a55a3613f4d967c4b7082664a1e68d6ddb0a0b0c1038d35c4e467`). Las 11
+  pruebas del informe anterior no incluyen las dos pruebas de despacho añadidas
+  después; aún deben ejecutarse antes de dar validez a ese traspaso. También queda
+  pendiente la prueba del servicio al ejecutor.
   El overlay de actividad del árbol local también contiene código de addons ajeno a
   esta tarea que no está en el `main` público; su diferencia completa es intencional.
   El cambio de esta tarea (`initialMissingStorageRoute`) ya está aplicado por separado
@@ -238,6 +247,10 @@ sus consentimientos específicos ni su objetivo de revisión de hasta 900 s.
   `50280faff952da8dd90e35b72756788f01b1d5f52516a1b0dac1ce4a57430a90`.
   Es un checkpoint anterior a la validación final, no un artefacto de publicación;
   verificar su base y los cambios posteriores antes de recuperarlo.
+  Los reinicios dejaron dos invocaciones Gradle idénticas compilando el mismo test
+  en el mismo directorio temporal y agotando la memoria; se detuvo únicamente la
+  duplicada. No usar sus resultados concurrentes como evidencia ni iniciar otra
+  compilación en ese directorio mientras quede activa la primera.
   La CLI `gh` no está disponible en el PATH. No se encontró credencial
   HTTPS no interactiva, helper Git configurado ni identidad SSH habitual; aún no
   se ha demostrado acceso de escritura a GitHub. No solicitar ni incluir tokens
