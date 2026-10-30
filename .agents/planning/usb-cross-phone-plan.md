@@ -232,6 +232,16 @@ consentimiento del plan real antes de adoptar o descargar.
   del 30-10. Se mantiene la revisión única sin adopción ni payload hasta obtener
   consentimiento específico del plan real. El objetivo sigue sin lograrse y se
   conservan la instalación y la evidencia ya obtenidas.
+- Al reanudar el objetivo hacia las 06:31 UTC del 30-10, el mensaje actual fija un
+  máximo de 24 horas; esto no amplía el límite propio de 7200 s de la revisión en
+  curso. El usuario confirma que no dispone actualmente de otro cliente completo
+  preparado y decide: «cuando descarguemos este cliente completo, lo volvemos a
+  probar». Si la continuación autorizada llega a publicar un cliente completo,
+  podrá servir para probar después su reutilización en el segundo móvil, tras el
+  traslado seguro. No se presupone que vaya a completarse: siguen siendo necesarios
+  el plan real y los consentimientos separados para adopción y payload, reutilizando
+  lo autenticado y sin copia ni redescarga completa como alternativa. Hasta entonces
+  el caso de cliente completo permanece sin prueba física.
 
 - 2026-10-30: la primera reparación del scratch fue rechazada porque podía borrar
   archivos arbitrarios con nombres reconocidos, y faltaba validar ancestros antes
