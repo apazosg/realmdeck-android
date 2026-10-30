@@ -118,6 +118,10 @@ sus consentimientos específicos ni su objetivo de revisión de hasta 900 s.
   de 1.962.904 bytes: 27.262 registros completos (~3,31 %), actualizado un segundo
   antes. La media desde las 19:20 fue ~2,33 registros/s. Sigue siendo progreso de
   adopción, no evidencia de descarga. No se ha interrumpido ni modificado el móvil.
+  A las 19:51:29 UTC, otra lectura solo de metadatos encontró el proceso vivo y el
+  checkpoint preparado con 2.067.592 bytes: 28.716 registros (~3,49 %), con mtime
+  de esa misma observación. La media desde las 19:41 fue ~2,36 registros/s. No se
+  ha enviado ninguna interacción, ni se ha observado el contenido del checkpoint.
 - La inspección de código sugiere que «Pausar» durante la adopción cancela de
   forma cooperativa, no reanuda desde el checkpoint preparado parcial. Antes del
   intent durable, la limpieza normal intenta retirar los artefactos preparados;
