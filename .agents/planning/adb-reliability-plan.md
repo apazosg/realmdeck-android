@@ -249,7 +249,9 @@ seguridad.
   activó la opción. Usar una SIM, desactivar la vigilancia de permisos o añadir cuentas
   no está autorizado por los permisos anteriores. Sin el permiso protegido no se
   activa una macro que aparentaría funcionar. Una alternativa sin este permiso no
-  se ha demostrado.
+  se ha demostrado. El usuario indicó «no vamos a tener una sim nunca»: descartar
+  las vías que dependan de una SIM y detener esta vía si no existe una alternativa
+  viable sin ella.
 - MacroDroid es una candidata expresamente autorizada, no una recuperación probada.
   Se debe verificar en el teléfono si exige confirmación del sistema, permisos extra
   para limitar la red o alguna excepción adicional de HyperOS; no conceder permisos
