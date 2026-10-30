@@ -294,10 +294,12 @@ sus consentimientos específicos ni su objetivo de revisión de hasta 900 s.
   autorización, pero no cubren toda la corrutina `onStartCommand` → `run`. El archivo
   de test local y el público coinciden, SHA-256
   `4e48c37c94b66cdd0199ddd2b214f06c8633561d0f41666ccb057f13ddbad1ba`.
-  La validación exclusiva de esas dos pruebas está en segundo plano como
-  `sh_18e4e2928001gwl1ReSWi1q4GQ`, con timeout de 900 s, en
-  `usb-public-port-checkpoint-20261030-bYmYQW/foreground-private-dispatch-run-20261030/`.
-  Consultar su resultado atómico al terminar y no ejecutar una segunda copia.
+  La validación exclusiva de esas dos pruebas terminó correctamente: 2 tests,
+  0 fallos, 0 errores y 0 omitidos. El resultado y XML se conservaron en
+  `usb-public-port-checkpoint-20261030-bYmYQW/foreground-private-dispatch-run-20261030/`;
+  SHA-256 del XML `382e8d2e754b922504a470ec6639b9039f5c4d32347ebc4a5c644978c3da0ba5`.
+  El reinicio del servidor informó «cancelled», pero el wrapper sobrevivió y generó
+  el resultado. No repetir esa ejecución ni inferir cobertura end-to-end.
 - Se corrigió una contradicción documental: los TC de portabilidad ya estaban
   aprobados; lo pendiente es la implementación verificada. Una comprobación focal
   del borrador público pasó frontmatter, unicidad de IDs, referencias FR/TC y enlaces
