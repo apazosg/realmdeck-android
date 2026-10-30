@@ -323,6 +323,16 @@ consentimiento del plan real antes de adoptar o descargar.
   ADB no aceptaba TCP. La causa y el estado actual de la app se desconocen. No
   reiniciar el controlador ni asumir que el trabajo del móvil se ha detenido; hace
   falta recuperar la conexión autorizada para observar o parar con seguridad.
+- El mismo intento terminó a las 08:51:22 UTC con `CONTROLLER_ERROR` y
+  `AssertionError` tras 6960 s; acumuló 455 observaciones no disponibles y no
+  obtuvo ninguna UI posterior a las 06:57:32. El informe final indica
+  `localReviewIdleConfirmed=false`, `cleanupUncertain=true` y
+  `safe-cancel-or-idle-verification-failed`: no se ha demostrado que la revisión
+  del móvil esté parada. `planConsentSent=false` y
+  `adoptionOrReuseSelected=false`; no se observó plan. Después del fin, ADB seguía
+  sin dispositivos registrados y el único anuncio TLS en la dirección anterior no
+  aceptaba TCP. No repetir la revisión; recuperar el acceso al dispositivo y
+  comprobar su estado real antes de cualquier otra acción sobre la fixture.
 - La revisión es exclusivamente funcional de la fixture en el móvil original,
   con tope global de 7200 s que reserva tiempo de cancelación e idle. La creación
   incompleta del catálogo anterior se descartó al cancelar, por lo que repetir
