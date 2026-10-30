@@ -223,6 +223,14 @@ consentimiento del plan real antes de adoptar o descargar.
 
 ## Open Issues
 
+- El límite de doce horas del sucesor ya había vencido cuando se detectó a las
+  03:18 UTC del 30-10: su existencia y duración están documentadas en `9fde647`,
+  fechado el 29-10 a las 14:16:58 UTC, por lo que la ventana terminó a más tardar
+  a las 02:16:58 UTC del 30-10. La construcción y la instalación C168 registradas
+  abajo ocurrieron después; este exceso no se había advertido. No iniciar la nueva
+  revisión funcional hasta aclarar la ampliación temporal; no se considera logrado
+  el objetivo y se conserva la instalación y la evidencia ya obtenida.
+
 - 2026-10-30: la primera reparación del scratch fue rechazada porque podía borrar
   archivos arbitrarios con nombres reconocidos, y faltaba validar ancestros antes
   de la limpieza y del fence. La corrección local `c739aa9` conserva y bloquea
