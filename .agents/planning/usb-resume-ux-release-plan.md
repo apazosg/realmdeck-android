@@ -102,6 +102,12 @@ sus consentimientos específicos ni su objetivo de revisión de hasta 900 s.
   la media entre estas dos muestras fue ~2,37 objetos/s. Son registros de
   adopción, no descarga de payload; una extrapolación al resto de los 822.658
   objetos revisados sería de unos cuatro días si el ritmo no cambiase.
+  Tras el reinicio del servidor, una lectura pasiva a las 19:02:16 UTC encontró
+  el proceso de la app vivo, en primer plano, y el checkpoint preparado actualizado
+  un segundo antes, con 1.568.920 bytes: ~21.790 registros (~2,65 % de los objetos
+  revisados). La media desde las 17:48:41 fue ~2,35 registros/s, equivalente a
+  unas 95 horas restantes si se mantuviese el ritmo. Es una extrapolación, no una
+  previsión garantizada; no acredita descarga. No se ha pausado ni reinstalado.
 - Tras el reinicio, el 30-10 hacia las 17:02 UTC, se verificaron de nuevo la
   identidad del Xaga y la app C168 en primer plano. La UI mostraba «Verificando y
   recuperando la descarga existente…» y «Pausar»; no aparecía un servicio updater
@@ -175,9 +181,11 @@ sus consentimientos específicos ni su objetivo de revisión de hasta 900 s.
   No se ha establecido una secuencia atómica de commits segura para trasladar toda
   la funcionalidad: el árbol local incluye 31 cambios de archivos bajo el prototipo
   funcional desde `origin/main`, incluidos componentes ajenos al flujo USB. Se ha
-  iniciado una integración aislada y selectiva desde ese árbol público; debe
-  revisarse, reconstruirse y auditarse sin trasladar automáticamente los commits
-  locales. La CLI `gh` no está disponible en el PATH. No se encontró credencial
+  iniciado una integración aislada y selectiva desde ese árbol público. La lectura
+  a las 19:02 UTC encontró 18 archivos modificados sin preparar en ese árbol;
+  todavía hay que cerrar dependencias, incorporar la candidata final validada,
+  revisar, reconstruir y auditar sin trasladar automáticamente los commits locales.
+  La CLI `gh` no está disponible en el PATH. No se encontró credencial
   HTTPS no interactiva, helper Git configurado ni identidad SSH habitual; aún no
   se ha demostrado acceso de escritura a GitHub. No solicitar ni incluir tokens
   en el repositorio.
