@@ -235,6 +235,14 @@ sus consentimientos específicos ni su objetivo de revisión de hasta 900 s.
   de los 178 archivos `lib/` y `assets/` de C146 y C168 encontró los mismos nombres
   y 177 contenidos idénticos; solo cambió `provenance.json`. Los certificados de
   firma auditados coinciden. Eso no sustituye la auditoría de la candidata final.
+  Una comparación posterior del borrador público respecto a `342ee766` encontró
+  19 archivos cambiados y ningún archivo de librería, asset, licencia o Gradle
+  directamente modificado. El diff del reconstruidor solo cambia los tres hashes
+  postimage y su comentario; los imports Kotlin añadidos son de Java y, en tests,
+  JUnit/Mockito. Esto no verifica los inputs externos ni el contenido de una APK.
+  Los 13 archivos Kotlin modificados de `updater-gate` y los dos tests Python del
+  borrador público coinciden byte a byte con los del árbol local; el overlay se
+  portó selectivamente y no se pretende que coincida con el local completo.
   Faltan asimismo la revisión final de privacidad
   y la integración pública de la candidata. El 30-10 la consulta remota de solo
   lectura confirmó que `main` público coincide con `origin/main` local en
@@ -278,6 +286,9 @@ sus consentimientos específicos ni su objetivo de revisión de hasta 900 s.
   Tras sustituir los dos tests foreground fallidos se guardó
   `public-draft-private-dispatch-tests.patch`, SHA-256
   `b22dcdd53cad870e01e812b6d74a2666d06c5edabe70a4413fabc64072c012fe`.
+  En el mismo directorio hay un `release-notes-draft.md` en inglés con marcadores
+  sin resolver: es un borrador no publicable que debe ajustarse a la candidata,
+  a su firma, a la auditoría y a la evidencia física efectiva.
   Es un checkpoint anterior a la validación final, no un artefacto de publicación;
   verificar su base y los cambios posteriores antes de recuperarlo.
   Los reinicios dejaron dos invocaciones Gradle idénticas compilando el mismo test
