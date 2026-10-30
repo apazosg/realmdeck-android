@@ -258,7 +258,17 @@ consentimiento del plan real antes de adoptar o descargar.
   se abrieron la app ni el cliente y no se adoptó ni descargó nada. Los cuerpos
   CASC y la totalidad de los datos privados no se hashearon. Evidencia privada:
   `usb-portability-c168-retry-20261030/original-install/summary.json`.
-- Se prevé una revisión exclusivamente funcional de la fixture en el móvil original,
+- Tras la ampliación de plazo, el 30-10 hacia las 06:09 UTC se inició una sola vez
+  el controlador de revisión funcional C168. Antes se comprobó que el SHA-256 del
+  APK actualmente instalado coincide con el auditado y que el dispositivo estaba
+  conectado, despierto y alimentado. La revisión independiente final del controlador
+  no encontró defectos concretos adicionales; seis pruebas simuladas y compilación
+  Python pasaron, sin inferir por ello el resultado físico. El primer checkpoint
+  tenía `IN_PROGRESS` y aún no registraba la intención de revisión; es una muestra
+  inicial, no evidencia de lo ocurrido después. Consultar el resultado de esa única
+  ejecución en `usb-portability-c168-retry-20261030/partial-review/summary.json`;
+  no volver a lanzarla automáticamente tras una interrupción o reinicio.
+- La revisión es exclusivamente funcional de la fixture en el móvil original,
   con tope global de 7200 s que reserva tiempo de cancelación e idle. La creación
   incompleta del catálogo anterior se descartó al cancelar, por lo que repetir
   mecánicamente el límite de 900 s puede detenerse antes de la autenticación; este
