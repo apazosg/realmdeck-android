@@ -553,7 +553,9 @@ object ForeverCasc {
      * [workDirectory] must be fresh, private caller-owned scratch outside the
      * stage. It is removed on every exit. The catalog is queried one EKey at a
      * time; only its bounded ordinal bitset and disk-backed duplicate table are
-     * retained here.
+     * retained here. Recovery may supply [expectedInventoryDigest] to scan without
+     * creating scratch; in that mode the prior digest binds this scan to the exact
+     * inventory already checked for short-EKey-prefix collisions.
      */
     internal fun inspectForeignStage(
         dataFiles: File,
@@ -566,9 +568,13 @@ object ForeverCasc {
         revalidateRecordBinding: () -> Unit = revalidateBinding,
         parallelAuthentication: Boolean = false,
         targetMembershipBatch: ((List<String>) -> List<IndexedValue<IncrementalObjectSpec>>)? = null,
+        expectedInventoryDigest: String? = null,
         onVerifiedRecord: (IncrementalObjectSpec, Int, Long) -> Unit,
     ): ForeignStageVerification {
         require(targetCatalogDigest.matches(Regex("[0-9a-f]{64}"))) { "foreign-stage target catalog digest is invalid" }
+        require(expectedInventoryDigest == null || expectedInventoryDigest.matches(Regex("[0-9a-f]{64}"))) {
+            "foreign-stage expected inventory digest is invalid"
+        }
         require(targetObjectCount in 1..MAX_TOTAL_INDEX_ENTRIES) { "foreign-stage target count exceeds its bound" }
         checkCancelled(cancelled)
         revalidateBinding()
@@ -577,7 +583,8 @@ object ForeverCasc {
         if (!Files.isDirectory(dataPath, LinkOption.NOFOLLOW_LINKS)) {
             throw IllegalStateException("foreign CASC stage is not a regular data directory")
         }
-        if (!workDirectory.mkdir()) throw IllegalStateException("foreign-stage work directory must be fresh")
+        val scratchCreated = expectedInventoryDigest == null
+        if (scratchCreated && !workDirectory.mkdir()) throw IllegalStateException("foreign-stage work directory must be fresh")
         return try {
             checkCancelled(cancelled)
             revalidateBinding()
@@ -621,7 +628,9 @@ object ForeverCasc {
             inventory.update("FW-FOREIGN-CASC-INVENTORY-v1\u0000".toByteArray(Charsets.US_ASCII))
             inventory.update(targetCatalogDigest.hexBytes())
             updateForeignDigestText(inventory, canonicalPath)
-            val duplicateTable = DiskIndexTable(File(workDirectory, "duplicate-ekeys.bin"), 0, cancelled)
+            val duplicateTable = if (expectedInventoryDigest == null) {
+                DiskIndexTable(File(workDirectory, "duplicate-ekeys.bin"), 0, cancelled)
+            } else null
             var count = 0L
             var encodedBytes = 0L
             var decodedBytes = 0L
@@ -746,7 +755,9 @@ object ForeverCasc {
                             ) throw IllegalStateException("foreign CASC record is duplicate or not an exact official target member")
                             validateIncrementalSpec(spec)
                             val prior = ExistingIndexRecord(ekey, entry, 0, 0)
-                            if (!duplicateTable.put(prior)) throw IllegalStateException("foreign CASC stage contains a duplicate full EKey")
+                             if (duplicateTable != null && !duplicateTable.put(prior)) {
+                                 throw IllegalStateException("foreign CASC stage contains a duplicate full EKey")
+                             }
                             val bodyStart = Math.addExact(offset, LOCAL_HEADER_SIZE.toLong())
                             val bounded = object : InputStream() {
                                 private var position = bodyStart
@@ -822,6 +833,9 @@ object ForeverCasc {
                 checkCancelled(cancelled)
                 revalidateBinding()
                 val digest = inventory.digest().joinToString("") { "%02x".format(it.toInt() and 0xff) }
+                require(expectedInventoryDigest == null || digest == expectedInventoryDigest) {
+                    "foreign CASC inventory does not match the durable recovery binding"
+                }
                 ForeignStageVerification(
                     canonicalPath, targetCatalogDigest, count, encodedBytes, decodedBytes, digest,
                     snapshots.map { snapshot ->
@@ -834,11 +848,13 @@ object ForeverCasc {
                     }.let { java.util.Collections.unmodifiableList(it) },
                 )
             } finally {
-                duplicateTable.close()
-                Files.deleteIfExists(File(workDirectory, "duplicate-ekeys.bin").toPath())
+                duplicateTable?.let {
+                    it.close()
+                    Files.deleteIfExists(File(workDirectory, "duplicate-ekeys.bin").toPath())
+                }
             }
         } finally {
-            deleteOwnedScratch(workDirectory)
+            if (scratchCreated) deleteOwnedScratch(workDirectory)
         }
     }
 

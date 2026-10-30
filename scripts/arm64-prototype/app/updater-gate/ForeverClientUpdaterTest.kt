@@ -327,10 +327,190 @@ class ForeverClientUpdaterTest {
     }
 
     @Test
-    fun confirmedPartialAdoptionCreatesFreshPrivateCheckpointAndOrdinaryResumeFetchesOnlyMissingObjects() {
+    fun partialAdoptionRejectsCheckpointMutationBeforeIntentAndPreservesChangedCheckpoint() {
         val assets = configAssetsOrSkip()
-        for (cut in listOf<String?>(null, "new-workspace-renamed")) {
         Fixture(cascObjectCount = 4, contiguousRangeObjectCount = 3).use { fixture ->
+            val paths = fixture.makePaths()
+            val destination = fixture.destination(paths)
+            val sourceUpdater = fixture.updater(paths, assets) { record, work, _, progress ->
+                File(work, "${record.ekey}.blte").also { it.writeBytes(fixture.rawFor(record)); progress(it.length()) }
+            }
+            val initial = sourceUpdater.plan(destination)
+            val privateBase = File(paths.work, ".forever-client-update-work")
+            assertThrows(java.util.concurrent.CancellationException::class.java) {
+                sourceUpdater.execute(destination, initial, consentFor(initial), {
+                    privateBase.listFiles().orEmpty().any { File(it, ".forever-casc-resume-checkpoint").length() > 40L }
+                })
+            }
+
+            val foreignPaths = fixture.makePaths("checkpoint-mutation").copy(client = paths.client)
+            val fetched = LinkedHashSet<String>()
+            val adopter = fixture.updater(foreignPaths, assets) { record, work, _, progress ->
+                fetched += record.ekey
+                File(work, "${record.ekey}.blte").also { it.writeBytes(fixture.rawFor(record)); progress(it.length()) }
+            }
+            val review = adopter.verifyPartialPortabilitySource(destination, { false }) { _, _, _ -> }
+            val marker = File(File(paths.client, ".forever-update-staging/${review.stageId}"), ".owner")
+            assertEquals(review.markerDigest, sha256(marker.readBytes()))
+            val receipt = JSONObject().put("payload", JSONObject().put("catalogSha256",
+                fixture.catalog.verifiedSha256).toString()).toString().toByteArray()
+            var pointer: ByteArray? = null
+            var mutatedCheckpoint: File? = null
+            var checkpointDigestBeforeMutation: String? = null
+            val adoptionPrivateBase = File(foreignPaths.work, ".forever-client-update-work")
+            adopter.portabilityBoundaryForTests = { boundary ->
+                if (boundary == "checkpoint-prepared") {
+                    val prepared = adoptionPrivateBase.listFiles().orEmpty().single { it.name.contains(".prepared-") }
+                    val checkpoint = File(prepared, ".forever-casc-resume-checkpoint")
+                    checkpointDigestBeforeMutation = sha256(checkpoint.readBytes())
+                    checkpoint.appendBytes(byteArrayOf(0))
+                    mutatedCheckpoint = checkpoint
+                }
+            }
+
+            assertThrows(IllegalArgumentException::class.java) {
+                adopter.confirmAndAdoptPartialPortability(destination, review, review.review.digest, null,
+                    sha256(receipt), receipt, { pointer?.let(::sha256) }, { pointer = receipt.copyOf() })
+            }
+            adopter.portabilityBoundaryForTests = null
+
+            val changedCheckpoint = requireNotNull(mutatedCheckpoint)
+            assertTrue(requireNotNull(checkpointDigestBeforeMutation) != sha256(changedCheckpoint.readBytes()))
+            assertTrue("changed checkpoint must not be removed as owned cleanup", changedCheckpoint.isFile)
+            assertFalse(File(foreignPaths.work, ".forever-portability-intent.json").exists())
+            assertTrue(foreignPaths.work.listFiles().orEmpty().none { it.name.endsWith(".admission") || it.name.endsWith(".old-workspace") })
+            assertTrue("canonical workspace must not be published",
+                adoptionPrivateBase.listFiles().orEmpty().none { !it.name.contains(".prepared-") && File(it, ".owner").isFile })
+            assertEquals(review.markerDigest, sha256(marker.readBytes()))
+            assertTrue("payload fetch must not start", fetched.isEmpty())
+        }
+    }
+
+    @Test
+    fun partialAdoptionReauthenticatesLiveOldWorkspaceImmediatelyBeforeIntent() {
+        val assets = configAssetsOrSkip()
+        Fixture(cascObjectCount = 4, contiguousRangeObjectCount = 3).use { fixture ->
+            val paths = fixture.makePaths()
+            val destination = fixture.destination(paths)
+            val sourceUpdater = fixture.updater(paths, assets) { record, work, _, progress ->
+                File(work, "${record.ekey}.blte").also { it.writeBytes(fixture.rawFor(record)); progress(it.length()) }
+            }
+            val initial = sourceUpdater.plan(destination)
+            val workspaceBase = File(paths.work, ".forever-client-update-work")
+            assertThrows(java.util.concurrent.CancellationException::class.java) {
+                sourceUpdater.execute(destination, initial, consentFor(initial), {
+                    workspaceBase.listFiles().orEmpty().any {
+                        File(it, ".forever-casc-resume-checkpoint").length() > 40L
+                    }
+                })
+            }
+            val canonical = workspaceBase.listFiles()!!.single()
+            val foreignPaths = fixture.makePaths("live-workspace-mutation").copy(client = paths.client, work = paths.work)
+            val adopter = fixture.updater(foreignPaths, assets) { _, _, _, _ -> error("adoption must not fetch") }
+            val review = adopter.verifyPartialPortabilitySource(destination, { false }) { _, _, _ -> }
+            val oldOwner = File(canonical, ".owner")
+            val originalOwner = oldOwner.readBytes()
+            val marker = File(File(paths.client, ".forever-update-staging/${review.stageId}"), ".owner")
+            val originalMarker = marker.readBytes()
+            val receipt = JSONObject().put("payload", JSONObject().put("catalogSha256", fixture.catalog.verifiedSha256).toString())
+                .toString().toByteArray()
+            var pointer: ByteArray? = null
+            var beforeIntentReached = false
+            adopter.portabilityBoundaryForTests = { boundary ->
+                if (boundary == "before-intent") {
+                    beforeIntentReached = true
+                    oldOwner.writeBytes(originalOwner + byteArrayOf(0))
+                }
+            }
+            try {
+                assertThrows(IllegalStateException::class.java) {
+                    adopter.confirmAndAdoptPartialPortability(destination, review, review.review.digest, null,
+                        sha256(receipt), receipt, { pointer?.let(::sha256) }, { pointer = receipt.copyOf() })
+                }
+                assertTrue("revalidation reached the pre-intent boundary", beforeIntentReached)
+                assertTrue("mutated old workspace is preserved", oldOwner.readBytes().contentEquals(originalOwner + byteArrayOf(0)))
+                assertArrayEquals(originalMarker, marker.readBytes())
+                assertFalse(File(foreignPaths.work, ".forever-portability-intent.json").exists())
+                assertTrue("no intent publication temporary survives", foreignPaths.work.listFiles().orEmpty().none {
+                    it.name.startsWith("..forever-portability-intent.json.portability-")
+                })
+                assertTrue("no payload fetch starts", pointer == null)
+            } finally {
+                adopter.portabilityBoundaryForTests = null
+                oldOwner.writeBytes(originalOwner)
+            }
+        }
+    }
+
+    @Test
+    fun orphanPortabilityArtifactsBlockFreshReviewAndAdoptionWithoutCleanup() {
+        val assets = configAssetsOrSkip()
+        for (orphan in listOf("review-scratch", "prepared-workspace", "manifest-publication-temp")) {
+            Fixture(cascObjectCount = 4, contiguousRangeObjectCount = 3).use { fixture ->
+                val paths = fixture.makePaths()
+                val destination = fixture.destination(paths)
+                val sourceUpdater = fixture.updater(paths, assets) { record, work, _, progress ->
+                    File(work, "${record.ekey}.blte").also { it.writeBytes(fixture.rawFor(record)); progress(it.length()) }
+                }
+                val initial = sourceUpdater.plan(destination)
+                val workspaceBase = File(paths.work, ".forever-client-update-work")
+                assertThrows(java.util.concurrent.CancellationException::class.java) {
+                    sourceUpdater.execute(destination, initial, consentFor(initial), {
+                        workspaceBase.listFiles().orEmpty().any { File(it, ".forever-casc-resume-checkpoint").length() > 40L }
+                    })
+                }
+                val foreignPaths = fixture.makePaths("orphan-$orphan").copy(client = paths.client)
+                val adopter = fixture.updater(foreignPaths, assets) { _, _, _, _ -> error("blocked portability operation must not fetch") }
+                val privateBase = File(foreignPaths.work, ".forever-client-update-work")
+                val review = if (orphan == "review-scratch") null else
+                    adopter.verifyPartialPortabilitySource(destination, { false }) { _, _, _ -> }
+                val orphanFile = when (orphan) {
+                    "review-scratch" -> File(foreignPaths.work, ".portability-scan-${UUID.randomUUID()}")
+                    "prepared-workspace" -> File(privateBase, "${"a".repeat(64)}.prepared-${UUID.randomUUID()}")
+                    else -> File(foreignPaths.work,
+                        "..forever-portability-${UUID.randomUUID()}.old-workspace.portability-${UUID.randomUUID()}.tmp")
+                }.apply { parentFile!!.mkdirs(); writeText("preserve orphan") }
+                val bytesBefore = orphanFile.readBytes()
+                val privateRootBefore = foreignPaths.work.listFiles().orEmpty().map { it.name }.toSet()
+                if (orphan == "review-scratch") {
+                    assertThrows(IllegalStateException::class.java) {
+                        adopter.verifyPartialPortabilitySource(destination, { false }) { _, _, _ -> }
+                    }
+                } else {
+                    val approvedReview = requireNotNull(review)
+                    val receipt = JSONObject().put("payload", JSONObject().put("catalogSha256", fixture.catalog.verifiedSha256).toString())
+                        .toString().toByteArray()
+                    var pointer: ByteArray? = null
+                    assertThrows(IllegalStateException::class.java) {
+                        adopter.confirmAndAdoptPartialPortability(destination, approvedReview, approvedReview.review.digest, null,
+                            sha256(receipt), receipt, { pointer?.let(::sha256) }, { pointer = receipt.copyOf() })
+                    }
+                    assertEquals("blocked before catalog publication", null, pointer)
+                }
+                assertArrayEquals(bytesBefore, orphanFile.readBytes())
+                assertFalse(File(foreignPaths.work, ".forever-portability-intent.json").exists())
+                assertTrue("no new prepared payload is created", privateBase.listFiles().orEmpty().none { it.name.contains(".prepared-") && it != orphanFile })
+                assertEquals("no new private artifacts", privateRootBefore,
+                    foreignPaths.work.listFiles().orEmpty().map { it.name }.toSet())
+            }
+        }
+    }
+
+    @Test
+    fun confirmedPartialAdoptionCreatesFreshPrivateCheckpointAndOrdinaryResumeFetchesOnlyMissingObjects() {
+        runConfirmedPartialAdoptionScenarios(listOf(null, "new-workspace-renamed", "intent-removed"))
+    }
+
+    @Test
+    fun portabilityRecoveryRequiresBoundInventoryAndPreservesLegacyScratch() {
+        runConfirmedPartialAdoptionScenarios(listOf("recovery-interrupted"))
+    }
+
+    private fun runConfirmedPartialAdoptionScenarios(cuts: List<String?>) {
+        val assets = configAssetsOrSkip()
+        for (cut in cuts) {
+        Fixture(cascObjectCount = 4, contiguousRangeObjectCount = 3).use { fixture ->
+            val cutBoundary = if (cut == "recovery-interrupted") "intent-durable" else cut
             val paths = fixture.makePaths()
             val destination = fixture.destination(paths)
             val sourceUpdater = fixture.updater(paths, assets) { record, work, _, progress ->
@@ -361,15 +541,99 @@ class ForeverClientUpdaterTest {
                 adopter.confirmAndAdoptPartialPortability(destination, review, "00".repeat(32), null,
                     sha256(receipt), receipt, { pointer?.let(::sha256) }, { pointer = receipt.copyOf() })
             }
-            if (cut != null) adopter.portabilityBoundaryForTests = { if (it == cut) throw java.io.IOException("synthetic cut") }
+            val unknown = File(foreignPaths.work, ".unowned-cleanup-sentinel")
+            adopter.portabilityBoundaryForTests = {
+                if (it == "admission-durable") {
+                    unknown.writeText("must not be removed by operation cleanup")
+                    throw java.io.IOException("synthetic post-admission failure")
+                }
+            }
+            assertThrows(java.io.IOException::class.java) { adopter.confirmAndAdoptPartialPortability(destination, review,
+                review.review.digest, null, sha256(receipt), receipt, { pointer?.let(::sha256) }, { pointer = receipt.copyOf() }) }
+            assertFalse(File(foreignPaths.work, ".forever-portability-intent.json").exists())
+            assertTrue(File(foreignPaths.work, ".forever-client-update-work").listFiles().orEmpty().none { it.name.contains(".prepared-") })
+            assertTrue(File(foreignPaths.work, ".forever-client-update-work").listFiles().orEmpty().none { it.name.contains(".reserved-") })
+            assertTrue(foreignPaths.work.listFiles().orEmpty().none { it.name.endsWith(".admission") || it.name.endsWith(".old-workspace") })
+            assertTrue(unknown.isFile)
+            unknown.delete()
+            adopter.portabilityBoundaryForTests = null
+            if (cutBoundary != null) adopter.portabilityBoundaryForTests = { if (it == cutBoundary) throw java.io.IOException("synthetic cut") }
             fun adopt() = adopter.confirmAndAdoptPartialPortability(destination, review, review.review.digest,
                 null, sha256(receipt), receipt, { pointer?.let(::sha256) }, { pointer = receipt.copyOf() })
             if (cut == null) {
                 assertEquals(review.objects.inventoryDigest, adopt().verification.objects.inventoryDigest)
+            } else if (cut == "intent-removed") {
+                adopter.portabilityBoundaryForTests = { if (it == cut) throw java.io.IOException("synthetic cut") }
+                assertThrows(java.io.IOException::class.java) { adopt() }
+                assertFalse("durable intent is already gone", File(foreignPaths.work, ".forever-portability-intent.json").exists())
+                assertEquals("completed adoption's stale admission is retained", 1,
+                    foreignPaths.work.listFiles().orEmpty().count { it.name.endsWith(".admission") })
             } else {
                 assertThrows(java.io.IOException::class.java) { adopt() }
+                assertTrue(File(foreignPaths.work, ".forever-portability-intent.json").isFile)
+                assertEquals(1, foreignPaths.work.listFiles().orEmpty().count { it.name.endsWith(".admission") })
                 assertEquals(ForeverClientUpdater.ResumeGuardState.BLOCKED, adopter.resumeGuardState(destination))
                 val recovered = fixture.updater(foreignPaths, assets) { _, _, _, _ -> error("recovery must not fetch") }
+                if (cut == "recovery-interrupted") {
+                    val intentFile = File(foreignPaths.work, ".forever-portability-intent.json")
+                    val intentBytes = intentFile.readBytes()
+                    val operationId = JSONObject(JSONObject(String(intentBytes, Charsets.UTF_8)).getString("payload"))
+                        .getString("operationId")
+                    val adopterPrivateBase = File(foreignPaths.work, ".forever-client-update-work")
+                    val prepared = requireNotNull(adopterPrivateBase.listFiles().single { it.name.contains(".prepared-") })
+                    val scratch = File(prepared, ".recovery-scan-$operationId")
+                    assertFalse(scratch.exists())
+                    val markerBefore = File(File(paths.client, ".forever-update-staging/${review.stageId}"), ".owner").readBytes()
+                    val recover = {
+                        recovered.recoverPendingPortabilityTransition(destination, receipt,
+                            { pointer?.let(::sha256) }, { pointer = receipt.copyOf() })
+                    }
+                    fun assertBlockedWithoutMutation() {
+                        assertThrows(RuntimeException::class.java) { recover() }
+                        assertArrayEquals(intentBytes, intentFile.readBytes())
+                        assertArrayEquals(markerBefore, File(File(paths.client, ".forever-update-staging/${review.stageId}"), ".owner").readBytes())
+                        assertEquals(sourceBefore, sourceData.listFiles()!!.filter { it.name.startsWith("data.") }.associate { it.name to sha256(it.readBytes()) })
+                    }
+
+                    val binding = recovered.decodePortabilityIntent(destination, fixture.catalog.verifiedSha256, intentBytes)
+                    val badIntent = recovered.encodePortabilityIntent(destination, binding.copy(inventoryDigest = "00".repeat(32)))
+                    val inventoryMismatch = assertThrows(IllegalArgumentException::class.java) {
+                        intentFile.writeBytes(badIntent)
+                        recover()
+                    }
+                    assertTrue("changed inventory is rejected by the final scanner digest check",
+                        inventoryMismatch.message.orEmpty().contains("foreign CASC inventory does not match the durable recovery binding"))
+                    assertArrayEquals(badIntent, intentFile.readBytes())
+                    assertArrayEquals(markerBefore, File(File(paths.client, ".forever-update-staging/${review.stageId}"), ".owner").readBytes())
+                    assertEquals(sourceBefore, sourceData.listFiles()!!.filter { it.name.startsWith("data.") }.associate { it.name to sha256(it.readBytes()) })
+                    assertFalse(scratch.exists())
+                    intentFile.writeBytes(intentBytes)
+
+                    var firstRecoveryRecordVerified = false
+                    recovered.portabilityBoundaryForTests = { boundary ->
+                        if (boundary == "recovery-record-verified") {
+                            firstRecoveryRecordVerified = true
+                            throw java.io.IOException("synthetic recovery interruption after verified record")
+                        }
+                    }
+                    try {
+                        assertThrows(java.io.IOException::class.java) { recover() }
+                    } finally {
+                        recovered.portabilityBoundaryForTests = null
+                    }
+                    assertTrue("recovery interruption hook ran after scanner verified a record", firstRecoveryRecordVerified)
+                    assertArrayEquals(intentBytes, intentFile.readBytes())
+                    assertArrayEquals(markerBefore, File(File(paths.client, ".forever-update-staging/${review.stageId}"), ".owner").readBytes())
+                    assertEquals(sourceBefore, sourceData.listFiles()!!.filter { it.name.startsWith("data.") }.associate { it.name to sha256(it.readBytes()) })
+                    assertFalse("interrupted recovery scan creates no scratch", scratch.exists())
+
+                    assertTrue(scratch.mkdir())
+                    val unexpected = File(scratch, "duplicate-ekeys.bin").also { it.writeBytes(byteArrayOf(1, 2, 3)) }
+                    assertBlockedWithoutMutation()
+                    assertEquals(listOf(unexpected), scratch.listFiles()!!.toList())
+                    assertTrue(unexpected.delete())
+                    assertTrue(scratch.delete())
+                }
                 recovered.recoverPendingPortabilityTransition(destination, receipt,
                     { pointer?.let(::sha256) }, { pointer = receipt.copyOf() })
             }

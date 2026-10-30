@@ -3420,13 +3420,6 @@ class ForeverClientUpdater(
             require(!exists(reserved)) { "unexpected reserved workspace" }
             require(catalogReceiptDigest() == binding.oldCatalogReceiptDigest) { "old active admission changed" }
             validateCandidate(prepared, false)
-            if (binding.oldWorkspaceDigest == null) {
-                require(!exists(canonical) && !exists(manifest)) { "unexpected previous workspace" }
-            } else {
-                val bytes = portabilityWorkspaceManifest(destination, canonical)
-                require(sha256(bytes) == binding.oldWorkspaceDigest) { "previous private workspace changed" }
-                publishPortabilityFile(manifest, bytes, binding.operationId)
-            }
             // P's checkpoint and all its files must already be durable before the intent can fence
             // ordinary entry. Source-data forces belong to the authenticated preparation helper.
             boundedPortabilityWorkspaceNodes(prepared).forEach { path ->
@@ -3434,6 +3427,14 @@ class ForeverClientUpdater(
             }
             forceDirectory(prepared.toPath())
             forceDirectory(workBase.toPath()) // Persist P's directory entry before the durable intent.
+            boundary("before-intent")
+            if (binding.oldWorkspaceDigest == null) {
+                require(!exists(canonical) && !exists(manifest)) { "unexpected previous workspace" }
+            } else {
+                val bytes = portabilityWorkspaceManifest(destination, canonical)
+                require(sha256(bytes) == binding.oldWorkspaceDigest) { "previous private workspace changed before portability intent" }
+                publishPortabilityFile(manifest, bytes, binding.operationId)
+            }
             publishPortabilityFile(intent, intentBytes, binding.operationId)
             boundary("intent-durable")
         }
@@ -3559,6 +3560,7 @@ class ForeverClientUpdater(
         cancelled: () -> Boolean = { false },
     ): PortabilityAdoptionResult = withLease(destination, allowRootPending = true) { leaseHeld ->
         check(leaseHeld())
+        rejectOrphanPortabilityArtifacts()
         require(confirmedReviewDigest == reviewed.review.digest) { "partial continuation plan was not confirmed" }
         require(reviewed.review.hasEnoughSpace) { "partial continuation plan does not have enough space" }
         require(reviewed.objects.targetCatalogDigest == targetCatalogSha256 &&
@@ -3633,6 +3635,18 @@ class ForeverClientUpdater(
                 cancelled, { revalidateSource() },
             )
         }
+        val cleanupFiles = LinkedHashMap<File, String>()
+        val checkpoint = File(prepared, CASC_RESUME_CHECKPOINT_NAME)
+        val checkpointIdentityDigest = sha256(checkpointIdentity.toByteArray(Charsets.UTF_8))
+        var admissionArtifact: File? = null
+        var manifestArtifact: File? = null
+        var manifestBytes: ByteArray? = null
+        try {
+        val checkpointDigest = sha256File(checkpoint)
+        cleanupFiles[checkpoint] = checkpointDigest
+        cleanupFiles[File(prepared, CASC_RESUME_OWNER_NAME)] = sha256(
+            "FWCASCR1".toByteArray(Charsets.US_ASCII) + checkpointIdentityDigest.chunked(2).map { it.toInt(16).toByte() }.toByteArray())
+        portabilityBoundaryForTests?.invoke("checkpoint-prepared")
         require(freshVerification.targetCatalogDigest == reviewed.objects.targetCatalogDigest &&
             freshVerification.inventoryDigest == reviewed.objects.inventoryDigest &&
             freshVerification.objectCount == reviewed.objects.objectCount &&
@@ -3648,42 +3662,123 @@ class ForeverClientUpdater(
             destination.storageId, destination.root.toPath().toAbsolutePath().normalize().toString())
         val workspaceOwner = workspaceOwnerBytes(destination, EMPTY_SOURCE_REVISION)
         writeDurableNewFile(File(prepared, WORKSPACE_OWNER_NAME), workspaceOwner)
-        writeDurableNewFile(File(prepared, STAGE_RECEIPT_NAME), encodeStageReceipt(receipt))
+        cleanupFiles[File(prepared, WORKSPACE_OWNER_NAME)] = sha256(workspaceOwner)
+        val stageReceiptBytes = encodeStageReceipt(receipt)
+        writeDurableNewFile(File(prepared, STAGE_RECEIPT_NAME), stageReceiptBytes)
+        cleanupFiles[File(prepared, STAGE_RECEIPT_NAME)] = sha256(stageReceiptBytes)
         forceDirectory(prepared.toPath())
         forceDirectory(workBase.toPath())
         revalidateSource()
         require(catalogReceiptDigest() == oldCatalogReceiptDigest)
         require(newCatalogReceiptBytes.size in 1..MAX_PORTABILITY_ADMISSION_BYTES &&
             sha256(newCatalogReceiptBytes) == newCatalogReceiptDigest) { "official receipt bytes do not match their bound digest" }
-        val admissionArtifact = File(privateWorkDirectory, ".forever-portability-$operationId.admission")
-        writeDurableNewFile(admissionArtifact, newCatalogReceiptBytes)
+        val admissionPath = File(privateWorkDirectory, ".forever-portability-$operationId.admission")
+        admissionArtifact = admissionPath
+        writeDurableNewFile(admissionPath, newCatalogReceiptBytes)
         forceDirectory(privateWorkDirectory.toPath())
-        val checkpoint = File(prepared, CASC_RESUME_CHECKPOINT_NAME)
-        val checkpointIdentityDigest = sha256(checkpointIdentity.toByteArray(Charsets.UTF_8))
+        portabilityBoundaryForTests?.invoke("admission-durable")
         val oldCanonical = resumableWorkspacePath(destination)
-        val oldWorkspaceDigest = if (Files.exists(oldCanonical.toPath(), LinkOption.NOFOLLOW_LINKS)) {
-            sha256(portabilityWorkspaceManifest(destination, oldCanonical))
-        } else null
+        val oldWorkspaceManifest = oldCanonical.takeIf { Files.exists(it.toPath(), LinkOption.NOFOLLOW_LINKS) }
+            ?.let { portabilityWorkspaceManifest(destination, it) }
+        val oldWorkspaceDigest = oldWorkspaceManifest?.let(::sha256)
         val binding = PortabilityIntentBinding(
             operationId, generation, reviewed.stageId, targetCatalogSha256, confirmedReviewDigest,
-            freshVerification.inventoryDigest, sha256File(checkpoint), checkpointIdentityDigest,
+            freshVerification.inventoryDigest, checkpointDigest, checkpointIdentityDigest,
             reviewed.markerDigest, markerDigest, oldWorkspaceDigest, oldCatalogReceiptDigest, newCatalogReceiptDigest,
         )
+        val manifestPath = File(privateWorkDirectory, ".forever-portability-$operationId.old-workspace")
+        manifestArtifact = manifestPath
+        manifestBytes = oldWorkspaceManifest
         val validatePreparedAndSource: (File, Boolean) -> Unit = { candidate, forwardOnly ->
             revalidateSource(if (forwardOnly) binding.newMarkerDigest else binding.oldMarkerDigest,
                 inventory = true, forwardOnly = forwardOnly)
             requireExactFile(File(candidate, WORKSPACE_OWNER_NAME).toPath(), workspaceOwner, "prepared workspace owner")
             requireExactFile(File(candidate, STAGE_RECEIPT_NAME).toPath(), encodeStageReceipt(receipt), "prepared stage receipt")
-            require(sha256File(File(candidate, CASC_RESUME_CHECKPOINT_NAME)) == binding.checkpointDigest)
             requireExactFile(File(candidate, CASC_RESUME_OWNER_NAME).toPath(),
                 "FWCASCR1".toByteArray(Charsets.US_ASCII) + checkpointIdentityDigest.chunked(2).map { it.toInt(16).toByte() }.toByteArray(),
                 "prepared checkpoint identity")
         }
         finishPortabilityTransitionHeld(destination, binding, confirmedReviewDigest,
             validatePreparedAndSource, catalogReceiptDigest, publishCatalogReceipt, cancelled, leaseHeld)
-        Files.deleteIfExists(admissionArtifact.toPath())
+        Files.deleteIfExists(admissionPath.toPath())
         forceDirectory(privateWorkDirectory.toPath())
         PortabilityAdoptionResult(reviewed.copy(objects = freshVerification, review = freshReview), binding)
+        } catch (failure: Exception) {
+            // Once an intent may have been published, all operation state is recovery state.
+            val intent = File(privateWorkDirectory, ".forever-portability-intent.json")
+            val intentTemporary = File(privateWorkDirectory, ".${intent.name}.portability-$operationId.tmp")
+            val safeToClean = runCatching {
+                requireSafeAncestors(privateWorkDirectory.toPath())
+                require(!Files.isSymbolicLink(privateWorkDirectory.toPath()) &&
+                    Files.isDirectory(privateWorkDirectory.toPath(), LinkOption.NOFOLLOW_LINKS))
+                requireSafeAncestors(intent.toPath())
+                requireSafeAncestors(intentTemporary.toPath())
+                requireSafeAncestors(marker.toPath())
+                !Files.exists(intent.toPath(), LinkOption.NOFOLLOW_LINKS) &&
+                    !Files.exists(intentTemporary.toPath(), LinkOption.NOFOLLOW_LINKS) &&
+                    sha256(readPortabilityFile(marker, 4096)) == oldMarkerDigest &&
+                    catalogReceiptDigest() == oldCatalogReceiptDigest
+            }.getOrDefault(false)
+            if (safeToClean) {
+                runCatching {
+                    requireSafeAncestors(workBase.toPath())
+                    require(!Files.isSymbolicLink(workBase.toPath()) && Files.isDirectory(workBase.toPath(), LinkOption.NOFOLLOW_LINKS))
+                    requireSafeAncestors(prepared.toPath())
+                    if (Files.exists(prepared.toPath(), LinkOption.NOFOLLOW_LINKS)) {
+                        require(!Files.isSymbolicLink(prepared.toPath()) && Files.isDirectory(prepared.toPath(), LinkOption.NOFOLLOW_LINKS))
+                        val expected = cleanupFiles.keys.map { it.name }.toSet()
+                        val children = ArrayList<Path>(expected.size)
+                        Files.newDirectoryStream(prepared.toPath()).use { stream ->
+                            for (child in stream) {
+                                require(children.size < expected.size) { "prepared workspace contains unexpected cleanup entries" }
+                                children.add(child)
+                            }
+                        }
+                        require(children.map { it.fileName.toString() }.toSet() == expected)
+                        cleanupFiles.forEach { (file, digest) ->
+                            requireSafeAncestors(file.toPath())
+                            require(!Files.isSymbolicLink(file.toPath()) && Files.isRegularFile(file.toPath(), LinkOption.NOFOLLOW_LINKS))
+                            require(sha256File(file) == digest) { "owned prepared checkpoint artifact changed" }
+                        }
+                        requireSafeAncestors(workBase.toPath())
+                        requireSafeAncestors(prepared.toPath())
+                        require(!Files.isSymbolicLink(workBase.toPath()) && Files.isDirectory(workBase.toPath(), LinkOption.NOFOLLOW_LINKS))
+                        cleanupFiles.keys.forEach { file ->
+                            requireSafeAncestors(file.toPath())
+                            Files.delete(file.toPath())
+                        }
+                        Files.delete(prepared.toPath())
+                        forceDirectory(workBase.toPath())
+                    }
+                }
+                runCatching {
+                    val path = admissionArtifact
+                    requireSafeAncestors(privateWorkDirectory.toPath())
+                    require(!Files.isSymbolicLink(privateWorkDirectory.toPath()) &&
+                        Files.isDirectory(privateWorkDirectory.toPath(), LinkOption.NOFOLLOW_LINKS))
+                    if (path != null && Files.exists(path.toPath(), LinkOption.NOFOLLOW_LINKS)) {
+                        requireSafeAncestors(path.toPath())
+                        requireExactFile(path.toPath(), newCatalogReceiptBytes, "owned portability admission")
+                        Files.delete(path.toPath())
+                        forceDirectory(privateWorkDirectory.toPath())
+                    }
+                }
+                runCatching {
+                    val path = manifestArtifact
+                    val bytes = manifestBytes
+                    requireSafeAncestors(privateWorkDirectory.toPath())
+                    require(!Files.isSymbolicLink(privateWorkDirectory.toPath()) &&
+                        Files.isDirectory(privateWorkDirectory.toPath(), LinkOption.NOFOLLOW_LINKS))
+                    if (path != null && bytes != null && Files.exists(path.toPath(), LinkOption.NOFOLLOW_LINKS)) {
+                        requireSafeAncestors(path.toPath())
+                        requireExactFile(path.toPath(), bytes, "owned previous-workspace manifest")
+                        Files.delete(path.toPath())
+                        forceDirectory(privateWorkDirectory.toPath())
+                    }
+                }
+            }
+            throw failure
+        }
     }
 
     /** Forward-only completion of a durable intent; no ordinary plan or payload is started. */
@@ -3713,6 +3808,10 @@ class ForeverClientUpdater(
         val prepared = portabilityPreparedWorkspace(destination, binding)
         val canonical = resumableWorkspacePath(destination)
         val candidate = if (Files.exists(prepared.toPath(), LinkOption.NOFOLLOW_LINKS)) prepared else canonical
+        requireSafeAncestors(candidate.toPath())
+        require(!Files.isSymbolicLink(candidate.toPath()) && Files.isDirectory(candidate.toPath(), LinkOption.NOFOLLOW_LINKS)) {
+            "pending portability workspace is not a regular directory"
+        }
         val receiptBytes = readPortabilityFile(File(candidate, STAGE_RECEIPT_NAME), MAX_STAGE_RECEIPT_BYTES)
         val stageReceipt = decodePortabilityStageReceipt(destination, receiptBytes)
         require(stageReceipt.stageId == binding.stageId && stageReceipt.markerHash == binding.newMarkerDigest &&
@@ -3727,7 +3826,9 @@ class ForeverClientUpdater(
                 { ekey -> archiveTargetMembership(order, ekey) }, cancelled, {
                     check(leaseHeld()); destination.revalidate(); verifyStorageMarker(destination)
                     require(sha256(readPortabilityFile(marker, 4096)) in setOf(binding.oldMarkerDigest, binding.newMarkerDigest))
-                }) { _, _, _ -> }
+                }, expectedInventoryDigest = binding.inventoryDigest) { _, _, _ ->
+                    portabilityBoundaryForTests?.invoke("recovery-record-verified")
+                }
         }
         require(refreshed.inventoryDigest == binding.inventoryDigest && refreshed.targetCatalogDigest == binding.catalogDigest)
         val validate: (File, Boolean) -> Unit = { root, _ ->
@@ -3743,6 +3844,10 @@ class ForeverClientUpdater(
         finishPortabilityTransitionHeld(destination, binding, binding.planDigest, validate,
             catalogReceiptDigest, publishCatalogReceipt, cancelled, leaseHeld)
         val artifact = File(privateWorkDirectory, ".forever-portability-${binding.operationId}.admission")
+        requireSafeAncestors(privateWorkDirectory.toPath())
+        require(!Files.isSymbolicLink(privateWorkDirectory.toPath()) &&
+            Files.isDirectory(privateWorkDirectory.toPath(), LinkOption.NOFOLLOW_LINKS))
+        requireSafeAncestors(artifact.toPath())
         Files.deleteIfExists(artifact.toPath())
         forceDirectory(privateWorkDirectory.toPath())
         binding
@@ -4074,6 +4179,7 @@ class ForeverClientUpdater(
         cancelled: () -> Boolean,
         onVerifiedRecord: (ForeverCasc.IncrementalObjectSpec, Int, Long) -> Unit,
     ): PartialPortabilityVerification = withLease(destination, allowRootPending = true) {
+        rejectOrphanPortabilityArtifacts()
         checkCancelled(cancelled)
         require(inspectPortabilitySourceMetadata(destination) == PortabilitySourceKind.PARTIAL_CANDIDATE) {
             "partial portability verification requires one unambiguous stage"
@@ -4170,6 +4276,38 @@ class ForeverClientUpdater(
         File(privateWorkDirectory, ".forever-portability-intent.json").toPath(),
         LinkOption.NOFOLLOW_LINKS,
     )
+
+    /** Name-only bounded fence for pre-intent artifacts; recovery state is never cleaned here. */
+    private fun rejectOrphanPortabilityArtifacts() {
+        val uuid = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+        val patterns = listOf(
+            Regex("[0-9a-f]{64}\\.(?:prepared|reserved)-$uuid"),
+            Regex("\\.portability-scan-$uuid"),
+            Regex("\\.forever-portability-$uuid\\.(?:admission|old-workspace)"),
+            Regex("\\.\\.forever-portability-(?:$uuid\\.(?:admission|old-workspace)|intent\\.json)\\.portability-$uuid\\.tmp"),
+        )
+        val roots = listOf(workBase, privateWorkDirectory)
+        for (root in roots) {
+            val path = root.toPath()
+            requireSafeAncestors(path)
+            if (!Files.exists(path, LinkOption.NOFOLLOW_LINKS)) continue
+            require(!Files.isSymbolicLink(path) && Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS)) {
+                "private portability artifact directory is unsafe: ${root.name}"
+            }
+            requireSafeAncestors(path)
+            Files.newDirectoryStream(path).use { children ->
+                var count = 0
+                val iterator = children.iterator()
+                while (iterator.hasNext()) {
+                    val name = iterator.next().fileName.toString()
+                    require(++count <= 4096) { "private portability artifact enumeration exceeds its 4096-entry bound" }
+                    if (patterns.any { it.matches(name) }) {
+                        throw IllegalStateException("unresolved private portability artifact '$name'; preserve it and investigate before retrying")
+                    }
+                }
+            }
+        }
+    }
 
     /** Reject any root stage that is not the exact UUID/hash pair in private updater state. */
     private fun cleanupOrphanTransactionStaging(destination: ForeverClientUpdateDestination) {
