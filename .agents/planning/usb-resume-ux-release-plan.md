@@ -29,6 +29,10 @@ sus consentimientos específicos ni su objetivo de revisión de hasta 900 s.
   recuperación y la descarga pendiente. Simplificar textos, navegación y acciones
   confusas sin ocultar costes ni eliminar los consentimientos vigentes. No presentar
   un cliente parcial como instalado o listo para jugar.
+  Actualmente el destino se selecciona en Almacenamiento y la revisión se inicia
+  aparte en Cliente y actualizaciones; las acciones de revisión y de recuperación
+  interrumpida aparecen juntas. Facilitar el acceso y hacer visible el destino
+  concreto antes de revisar o recuperar, sin iniciar operaciones automáticamente.
 - Mejorar el tiempo de revisión hasta el resumen confirmable; el objetivo solicitado
   es 900 s en la fixture física documentada, no una garantía universal. En C167 el
   catálogo seguía preparándose a los 890,6 s; en C168 no se observó el tiempo total.
