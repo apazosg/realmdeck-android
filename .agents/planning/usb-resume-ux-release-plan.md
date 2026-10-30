@@ -245,6 +245,8 @@ sus consentimientos específicos ni su objetivo de revisión de hasta 900 s.
   `0919453af04c9d5af5f1b07bfe7d7eb9c84df7d0ce91ba7f87c88ddbbe2a6c50`;
   de `manual-tests.py`:
   `50280faff952da8dd90e35b72756788f01b1d5f52516a1b0dac1ce4a57430a90`.
+  Tras portar el test foreground se guardó también `public-draft-with-foreground.patch`,
+  SHA-256 `c3e64a033fa96b3bd17d68a30f5d278012ac10da4d1d4edfe49c4bf315a45108`.
   Es un checkpoint anterior a la validación final, no un artefacto de publicación;
   verificar su base y los cambios posteriores antes de recuperarlo.
   Los reinicios dejaron dos invocaciones Gradle idénticas compilando el mismo test
