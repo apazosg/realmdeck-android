@@ -232,12 +232,24 @@ consentimiento del plan real antes de adoptar o descargar.
   y paridad SHA-256 de 41 fuentes: `usb-portability-local-20261028/
   recovery-scan-scratch-retest-20261030T023132Z-3884381/summary.json`. Esto no
   constituye validación física ni establece que un scratch antiguo sea limpiable.
-- La receta C168 está versionada como candidata de seguridad, pero todavía no hay
-  APK C168 construida ni auditada. La instalada sigue siendo C167; no se ejecutó
-  otra revisión física, adopción ni payload después del ensayo de 900 s.
-  El primer build C168 se detuvo durante reconstrucción al detectar el postimage
-  CASC anterior; no llegó a Gradle. `5bd0159` fija el SHA-256 revisado y dos tests
-  de reconstrucción pasan; el reintento usa otro directorio y conserva ese fallo.
+- C168 construida y auditada, todavía no instalada. El primer build se detuvo
+  durante reconstrucción al detectar el postimage CASC anterior; no llegó a Gradle.
+  `5bd0159` fija el SHA-256 revisado y dos tests de reconstrucción pasan. El
+  reintento independiente con `fc4e32c` terminó Gradle offline en 8m02s y pasó
+  `PASS_SOURCE_BUILD_AND_PAYLOAD_AUDIT`: 2231 fuentes, 178 payloads y 42 fuentes de
+  portabilidad coincidentes; certificado y permisos iguales a C167. APK de
+  485401519 bytes, SHA-256 `dd08feaaa74d94934dba80060de4db7c05dc58f4488113ef5631ff3d79d31549`,
+  comprobado de nuevo por separado. Evidencia `usb-portability-c168-retry-20261030/`;
+  el fallo inicial se conserva. La última instalada confirmada es C167 y no hubo
+  otra revisión física, adopción ni payload después de su ensayo de 900 s.
+- Tras una única sustitución C168 preservadora y verificaciones completas, se
+  prevé una revisión exclusivamente funcional de la fixture en el móvil original,
+  con tope global de 7200 s que reserva tiempo de cancelación e idle. La creación
+  incompleta del catálogo anterior se descartó al cancelar, por lo que repetir
+  mecánicamente el límite de 900 s puede detenerse antes de la autenticación; este
+  ensayo no vuelve a abrir ni acredita el objetivo de rendimiento. Detenerse en
+  el plan real o fallo, sin pulsar adopción ni payload. No acredita por sí solo la
+  portabilidad entre teléfonos distintos; esos casos siguen pendientes.
 
 - C167: revisión física única 2026-10-30 00:47:12–01:02:52 UTC sin
   resumen antes de 900 s; a los 890,6 s preparaba 1077248/1144978 objetos
