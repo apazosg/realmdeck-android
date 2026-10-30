@@ -283,9 +283,12 @@ consentimiento del plan real antes de adoptar o descargar.
   `Pausar`. A las 06:36 el controlador seguía activo, pero acumulaba 97 lecturas
   indisponibles desde las 06:12:19; no se puede inferir el estado actual de la app
   ni cuándo llegó o llegará al plan. ADB dejó de responder y un intento de reconexión
-  al mismo endpoint autorizado no conectó. No se reinició la revisión ni se pulsaron
-  adopción o payload; es necesario recuperar la comunicación para observarla o
-  verificar su parada, sin asumir que esté detenida ni que haya terminado.
+  al mismo endpoint autorizado no conectó. Después, el servidor ADB local respondía
+  sin dispositivos registrados; la IP previa respondía a ICMP, pero el puerto ADB
+  previo rechazaba TCP. Esto no identifica la causa ni demuestra el estado de la
+  app. No se reinició la revisión ni se pulsaron adopción o payload; es necesario
+  recuperar la comunicación para observarla o verificar su parada, sin asumir que
+  esté detenida ni que haya terminado.
 - La revisión es exclusivamente funcional de la fixture en el móvil original,
   con tope global de 7200 s que reserva tiempo de cancelación e idle. La creación
   incompleta del catálogo anterior se descartó al cancelar, por lo que repetir
