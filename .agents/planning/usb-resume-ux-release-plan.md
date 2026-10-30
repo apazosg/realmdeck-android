@@ -1,6 +1,6 @@
 ---
 id: usb-resume-ux-release-2026-10-30
-state: draft
+state: in-progress
 date: 2026-10-30
 ---
 
@@ -75,6 +75,22 @@ sus consentimientos específicos ni su objetivo de revisión de hasta 900 s.
 
 ## Open Issues
 
+- Tras el reinicio, el 30-10 hacia las 17:02 UTC, se verificaron de nuevo la
+  identidad del Xaga y la app C168 en primer plano. La UI mostraba «Verificando y
+  recuperando la descarga existente…» y «Pausar»; no aparecía un servicio updater
+  en la consulta. No se envió ninguna acción, se reinstaló ni se repitió la revisión.
+  La ausencia de ese servicio no demuestra que la operación local haya terminado:
+  la finalización de la adopción y el inicio de payload continúan sin acreditar.
+- La implementación local de continuación unificada está sin terminar y sin
+  validar; la revisión independiente identificó que el resumen de consentimiento
+  debe mostrar también la versión. Falta revisar que la identidad y la revisión del
+  plan posterior queden ligadas íntegramente al consentimiento, no solo a sus costes
+  agregados, según US-008-TC-010. No instalar ni publicar esa implementación hasta
+  resolverlo y ejecutar las pruebas pertinentes.
+- El perfil existente señala la preparación del catálogo como parte significativa
+  del coste, pero no separa sus fases ni justifica todavía otra optimización segura.
+  C168 no demuestra el objetivo de 900 s; los tests sintéticos de optimizaciones ya
+  implementadas no son una medición física de ese objetivo.
 - La optimización concreta y su ganancia se decidirán con el perfil y las pruebas;
   no se promete que el límite de 900 s se logre antes de medirlo.
 - La revisión actual está en memoria: instalar otra APK antes de adoptar puede
