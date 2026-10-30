@@ -223,6 +223,16 @@ consentimiento del plan real antes de adoptar o descargar.
 
 ## Open Issues
 
+- C167 (`c5720f9`): build canónica terminada 2026-10-29 23:00 UTC;
+  auditoría `PASS_SOURCE_BUILD_AND_PAYLOAD_AUDIT`, 2231 fuentes y 178 payloads,
+  paridad de diez fuentes y certificado/lista de permisos iguales a C166.
+  APK 485385195 bytes, SHA256
+  `1d89a5928d4a0e21fb63515ccb01712fce08af6c7ecb300beb09ffa241af0d00`,
+  rehash comprobado. Próximo paso autorizado: un único reemplazo preservador
+  C166→C167, condicionado a dispositivo, versión, updater/Wine inactivos,
+  revisión idle y metadatos del USB; sin borrar, lanzar app ni iniciar cliente.
+  La auditoría no demuestra portabilidad ni cumplimiento del límite de 900 s.
+
 - Reutilización de índices privados implementada: solo claves solicitadas por
   el CDN actual, cachés hermanas acotadas del mismo build/config, propietario,
   recibo, tamaño y SHA comprobados antes de entregar el archivo al parser normal.
