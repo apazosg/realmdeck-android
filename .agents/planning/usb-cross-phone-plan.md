@@ -223,6 +223,15 @@ consentimiento del plan real antes de adoptar o descargar.
 
 ## Open Issues
 
+- C167 instalada el 2026-10-30 00:45:33 UTC tras reconexión: Android confirmó
+  `install -r`, versión 167 y mismo UID; cero servicios updater antes/después y
+  marcador más 81 archivos CASC/51625635891 bytes sin cambios de metadatos.
+  No lanzamiento, adopción ni payload; no se cotejaron todos los cuerpos. Próxima
+  revisión real única: 900 s desde intención hasta resumen de reutilización/delta/
+  espacio, incluyendo metadatos y autenticación; sin perfilador ni GET auxiliar.
+  Al límite cancelar cooperativamente y confirmar idle. No pulsar Reutilizar ni
+  Descargar: propiedad/payload siguen sujetos al consentimiento del plan real.
+
 - 2026-10-30 00:43 UTC: el primer preflight C167 se detuvo al no estar el
   endpoint ADB registrado; no hubo intención de instalación ni acción UI. Se
   reconectó el endpoint autorizado y se confirmó `device` y modelo original.
