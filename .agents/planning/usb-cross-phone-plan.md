@@ -223,14 +223,15 @@ consentimiento del plan real antes de adoptar o descargar.
 
 ## Open Issues
 
-- 2026-10-30: una revisión independiente adicional detectó que la primera
-  reparación del scratch de recuperación podía borrar archivos arbitrarios con
-  nombres reconocidos sin demostrar su contenido, contraviniendo el diseño
-  aprobado. También señaló la falta de validación de ancestros antes de la
-  limpieza privada y del fence. La reparación se rechaza: el trabajo en curso
-  debe conservar estado desconocido y evitar ese scratch durante la recuperación,
-  sin debilitar la autenticación. Los seis tests locales anteriores y la paridad
-  de 41 fuentes no resuelven estos hallazgos y no habilitan instalación.
+- 2026-10-30: la primera reparación del scratch fue rechazada porque podía borrar
+  archivos arbitrarios con nombres reconocidos, y faltaba validar ancestros antes
+  de la limpieza y del fence. La corrección local `c739aa9` conserva y bloquea
+  scratch anterior desconocido; para intents durables nuevos vuelve a autenticar
+  sin crearlo y exige el digest de inventario de la verificación previa. Revisión
+  independiente final sin hallazgos. Seis tests focales sin fallos/errores/skips
+  y paridad SHA-256 de 41 fuentes: `usb-portability-local-20261028/
+  recovery-scan-scratch-retest-20261030T023132Z-3884381/summary.json`. Esto no
+  constituye validación física ni establece que un scratch antiguo sea limpiable.
 - La receta C168 está versionada como candidata de seguridad, pero todavía no hay
   APK C168 construida ni auditada. La instalada sigue siendo C167; no se ejecutó
   otra revisión física, adopción ni payload después del ensayo de 900 s.
@@ -245,16 +246,14 @@ consentimiento del plan real antes de adoptar o descargar.
   real; no convertir esta observación ni los 822658 antiguos en progreso
   recuperado. Primero resolver el hallazgo sensible y validar la candidata.
 
-- Revisión sensible independiente C167: detecta que fallos/cancelación después
+- Revisión sensible independiente C167: detectó que fallos/cancelación después
   de completar el checkpoint preparado y antes del intent pueden dejar estado
-  privado propio sin limpiar; reintentos acumularían espacio. Corrección y prueba
-  focal en curso, sin borrar estado desconocido ni el necesario para recuperación
-  tras intent. Una primera corrección eliminó accidentalmente la reautenticación
-  viva del checkpoint; la revisión independiente lo detectó y se está reparando
-  antes de aceptar esa candidata. Además, una muerte abrupta antes de intent omite
-  `catch`/`finally`: P o scratch de revisión pueden quedar huérfanos. Reintentos
-  ilimitados no están acotados; falta una política segura de bloqueo/recuperación,
-  también para el recibo que puede sobrevivir al retiro del intent ya completado.
+  privado propio sin limpiar; reintentos acumularían espacio. `c739aa9` limpia
+  solo artefactos propios verificados cuando no hay intent, reautentica el
+  checkpoint vivo y bloquea huérfanos reconocidos sin eliminarlos; se conserva
+  todo estado necesario para recuperación tras intent. Una muerte abrupta antes
+  del intent o un recibo posterior a su retiro pueden dejar huérfanos bloqueantes:
+  la política segura es conservarlos, no forzar un reintento o borrado.
   El otro hallazgo propuesto, enumeración no acotada, no se confirma:
   la búsqueda de stages retorna al encontrar la segunda entrada o una inválida;
   en la raíz vacía solo se permiten dos nombres distintos y se corta en el primero
@@ -263,11 +262,10 @@ consentimiento del plan real antes de adoptar o descargar.
 - C167 instalada el 2026-10-30 00:45:33 UTC tras reconexión: Android confirmó
   `install -r`, versión 167 y mismo UID; cero servicios updater antes/después y
   marcador más 81 archivos CASC/51625635891 bytes sin cambios de metadatos.
-  No lanzamiento, adopción ni payload; no se cotejaron todos los cuerpos. Próxima
-  revisión real única: 900 s desde intención hasta resumen de reutilización/delta/
-  espacio, incluyendo metadatos y autenticación; sin perfilador ni GET auxiliar.
-  Al límite cancelar cooperativamente y confirmar idle. No pulsar Reutilizar ni
-  Descargar: propiedad/payload siguen sujetos al consentimiento del plan real.
+  No lanzamiento, adopción ni payload; no se cotejaron todos los cuerpos. El ensayo
+  único posterior de 900 s y su cancelación se registran arriba; no repetirlo como
+  prueba de rendimiento. Propiedad/payload siguen sujetos al consentimiento del
+  plan real, que aún no se ha mostrado.
 
 - 2026-10-30 00:43 UTC: el primer preflight C167 se detuvo al no estar el
   endpoint ADB registrado; no hubo intención de instalación ni acción UI. Se
