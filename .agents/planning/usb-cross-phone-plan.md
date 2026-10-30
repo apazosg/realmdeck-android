@@ -313,6 +313,16 @@ consentimiento del plan real antes de adoptar o descargar.
   versión y ausencia de servicio y se detendrá en plan o fallo, sin consentimiento
   de plan, adopción ni payload. Se debe consultar su resultado, sin volver a lanzarlo
   por un reinicio; cliente completo y pruebas entre teléfonos siguen pendientes.
+- A las 07:55 UTC el controlador del nuevo intento seguía `IN_PROGRESS` con latido
+  07:55:48, pero acumulaba 233 observaciones no disponibles. La última UI visible,
+  06:57:32, mostraba `Leyendo lista de descarga: 679936 registros` y `Pausar`:
+  son registros de metadatos, no objetos del USB autenticados ni progreso C160
+  recuperado. En ese checkpoint no se había enviado consentimiento de plan ni
+  seleccionado adopción/reutilización. El servidor ADB local respondía sin
+  dispositivos registrados; la dirección autorizada respondía a ICMP, pero su puerto
+  ADB no aceptaba TCP. La causa y el estado actual de la app se desconocen. No
+  reiniciar el controlador ni asumir que el trabajo del móvil se ha detenido; hace
+  falta recuperar la conexión autorizada para observar o parar con seguridad.
 - La revisión es exclusivamente funcional de la fixture en el móvil original,
   con tope global de 7200 s que reserva tiempo de cancelación e idle. La creación
   incompleta del catálogo anterior se descartó al cancelar, por lo que repetir
