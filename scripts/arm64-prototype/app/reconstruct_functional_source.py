@@ -110,10 +110,11 @@ PINNED_UPDATER_CASC_PREIMAGES = {
     "ForeverCasc.kt": "b482531fb4970ba279448fac22ea69c470093fc8b09917c5b1ec0dd7a9ad57e4",
     "ForeverCascTest.kt": "19cb155b99ea60b3620259974e0fa40694ccd170149b7ce48287ada34c63194f",
 }
-# Locally reviewed foreign-stage verification/planning and checkpoint preparation;
-# checkpoint frames unchanged. Independent whole-feature review remains a release gate.
+# Locally reviewed foreign-stage verification, checkpoint preparation and
+# digest-bound recovery; checkpoint frames unchanged. Independent whole-feature
+# review remains a release gate.
 PINNED_UPDATER_CASC_POSTIMAGES = {
-    "ForeverCasc.kt": "abefaca10fa709edae7bf2c4336b666c5a152ccfdc4f3d5b076ee1d5e1c66880",
+    "ForeverCasc.kt": "86b1f2147c4fe6eaf7ec38838eb4eac5b95cddb4cccab73208c0673398534f55",
     "ForeverCascTest.kt": "8fcbca92499e8f4e84dbe44ccac53393dfe8723d744b34e483ed7114b378acc6",
 }
 # Reviewed reconstruction edit (2026-10-18): TACT-encrypted ('E') BLTE frames are
