@@ -75,14 +75,38 @@ sus consentimientos específicos ni su objetivo de revisión de hasta 900 s.
 
 ## Open Issues
 
+- El 30-10 a las 17:19–17:21 UTC se encontró el Xaga mediante el transporte
+  ADB inalámbrico descubierto (el nombre puede contener espacios). La app funcional
+  estaba viva y la UI seguía en adopción, sin servicio de descarga ni payload
+  acreditados. El checkpoint privado **preparado** pasó de 524.992 bytes
+  (~7.291 registros) a 545.080 bytes (~7.570 registros) entre aproximadamente
+  las 17:19:41 y las 17:21:34 UTC; el formato observado usa cabecera de 40 bytes
+  y registros de 72. Esto es progreso de adopción, no progreso de descarga. A ese
+  ritmo de muestra (~2,5 objetos/s), extrapolar los 822.658 objetos revisados da
+  varios días; la mezcla de objetos y el ritmo pueden variar. La UI ya mostraba
+  adopción a las 17:02 UTC; posteriormente el mtime del directorio privado
+  preparado indicó creación de sus entradas hacia las 16:28:01 UTC (aproximación
+  del comienzo del escaneo, no hora exacta del clic). A las 17:24:38 UTC el mismo
+  checkpoint contenía ~8.010 registros y se había actualizado un segundo antes.
+  No se ha pausado, reinstalado ni repetido el proceso. Se investiga por separado
+  el coste repetido y los riesgos de reducir comprobaciones antes de proponer
+  cambios. La consulta por lotes del catálogo en la adopción es un candidato
+  de bajo riesgo, aún sin perfil ni ganancia física demostrada. La fuente
+  reconstruida de la C168 confirma que usa búsqueda individual y revalidación
+  completa por objeto; eso no demuestra cuál domina el tiempo. Una muestra
+  pasiva de CPU del proceso, ~5 s, dio ~59 % de un núcleo y no separa costes.
+  Otra lectura pasiva a las 17:33:24 UTC mostró ~9.260 registros preparados,
+  aún actualizándose; entre las 17:24:38 y las 17:33:24 la media fue ~2,38/s.
+  A las 17:38:48 UTC se observaron ~10.021 registros, con actualización un
+  segundo antes y el proceso vivo; sigue sin ser descarga de payload.
 - Tras el reinicio, el 30-10 hacia las 17:02 UTC, se verificaron de nuevo la
   identidad del Xaga y la app C168 en primer plano. La UI mostraba «Verificando y
   recuperando la descarga existente…» y «Pausar»; no aparecía un servicio updater
   en la consulta. No se envió ninguna acción, se reinstaló ni se repitió la revisión.
   La ausencia de ese servicio no demuestra que la operación local haya terminado:
   la finalización de la adopción y el inicio de payload continúan sin acreditar.
-- La implementación local de continuación unificada está sin terminar y sin
-  validar; la revisión independiente identificó que el resumen de consentimiento
+- La implementación local de continuación unificada aún no ha pasado todas las
+  pruebas Android; una revisión independiente identificó que el resumen de consentimiento
   debe mostrar también la versión. Se añadió la versión con una comprobación local
   (6 tests de `test_client_management_manual_check.py` aprobados). Se confirmó que
   comparar solo identidad superficial y costes agregados no liga la revisión al
@@ -91,18 +115,58 @@ sus consentimientos específicos ni su objetivo de revisión de hasta 900 s.
   y ejecutar las pruebas pertinentes.
 - La ejecución de ambos archivos Python de UI obtuvo 26 aprobados y un fallo previo,
   ajeno a esta tarea: la aserción de texto de autologin no coincide con la fuente ya
-  presente en HEAD. Las pruebas Gradle de clasificación iniciadas antes del reinicio
-  quedaron sin resultado confirmado; hay procesos y logs externos existentes y no
-  deben duplicarse mientras sigan en curso.
+  presente en HEAD. Una ejecución posterior de `test_functional_launcher_ux.py`
+  obtuvo 20 aprobados y el mismo fallo preexistente; la fuente de autologin no tiene
+  diff respecto a HEAD. Las pruebas Gradle de clasificación iniciadas antes del
+  reinicio quedaron sin resultado confirmado.
+- La compilación Kotlin independiente de la candidata local falló por exponer un
+  tipo interno en tres API públicas, antes de ejecutar tests. Se detectó además
+  que comparar directamente los contadores de la revisión y el plan reanudado
+  rechaza una adopción normal: el segundo cuenta los objetos frente a la fuente
+  publicada y acredita el checkpoint en bytes. Se aplicaron ambas correcciones;
+  el test del vínculo pasó, pero hay otros fallos sin clasificar. No instalar ni
+  publicar hasta resolver la validación.
+- Para explorar una aceleración segura sin tocar el Xaga se añadió localmente el
+  paso de consultas de catálogo por lotes y se preparó la posibilidad de reutilizar
+  las comprobaciones de identidad agrupadas y la autenticación paralela de la
+  revisión. La integración candidata ya usa esas comprobaciones en adopción con
+  ambas pruebas dirigidas; amplía la ventana de detección de un cambio transitorio
+  del USB hasta 16 registros o 250 ms entre registros. Se
+  conservan las comprobaciones completas en los límites de segmento, alrededor del
+  `force` y antes de la transición, y la autenticación individual de cada objeto.
+  La revisión independiente no encontró defectos accionables, pero señaló que falta
+  una prueba integrada de la transferencia de autorización entre interfaz y servicio.
+  No se ha medido ninguna mejora física ni se ha instalado la candidata.
+- La compilación Kotlin posterior sí llegó a ejecutarse: las dos clases focalizadas
+  sumaron 144 tests, con 2 fallos y 1 omitido. Pasaron los tests añadidos de
+  adopción, cadencia y vínculo del checkpoint. Los dos fallos afectan escenarios de
+  reanudación y caché solapada; se está investigando si son regresiones de esta
+  candidata o fallos previos. No se debe dar la candidata por validada mientras
+  no se resuelva esa clasificación y se pruebe el handoff del servicio.
 - El perfil existente señala la preparación del catálogo como parte significativa
   del coste, pero no separa sus fases ni justifica todavía otra optimización segura.
   C168 no demuestra el objetivo de 900 s; los tests sintéticos de optimizaciones ya
   implementadas no son una medición física de ese objetivo.
 - La auditoría inicial de publicación encontró que C168 es una APK de prueba con
-  firma debug, no una candidata de publicación. Quedan sin acreditar los derechos y
-  fuentes completas correspondientes de sus componentes, además de la revisión de
-  privacidad y del `main` público actual. La referencia remota local podría estar
-  desactualizada; no se hizo ninguna consulta o acción pública.
+  firma debug, no una candidata de publicación. C146 ya se publicó como prerelease
+  debug-signed y el usuario confirmó el 25-10 la redistribución de los componentes
+  propietarios identificados en los avisos heredados; esa confirmación no equivale
+  a una auditoría legal ni cubre automáticamente nuevos componentes. Hay que ligar
+  el inventario, derechos, avisos y alcance de fuentes a la candidata exacta, sin
+  llamar completas a fuentes parciales. Como orientación, la comparación SHA-256
+  de los 178 archivos `lib/` y `assets/` de C146 y C168 encontró los mismos nombres
+  y 177 contenidos idénticos; solo cambió `provenance.json`. Los certificados de
+  firma auditados coinciden. Eso no sustituye la auditoría de la candidata final.
+  Faltan asimismo la revisión de privacidad
+  y la integración pública de la candidata. El 30-10 la consulta remota de solo
+  lectura confirmó que `main` público coincide con `origin/main` local en
+  `342ee76605e03091de2131f1b5dad477536a9973`; no se publicó ningún cambio.
+  No se ha establecido una secuencia atómica de commits segura para trasladar toda
+  la funcionalidad: el árbol local incluye 31 cambios de archivos bajo el prototipo
+  funcional desde `origin/main`, incluidos componentes ajenos al flujo USB. Hay que
+  seleccionar y auditar su cierre de dependencias, reconstruir desde el árbol
+  público resultante y no trasladar automáticamente esos 199 commits. La CLI `gh`
+  no está disponible en el PATH; no se ha comprobado todavía acceso de escritura.
 - La optimización concreta y su ganancia se decidirán con el perfil y las pruebas;
   no se promete que el límite de 900 s se logre antes de medirlo.
 - La revisión actual está en memoria: instalar otra APK antes de adoptar puede
