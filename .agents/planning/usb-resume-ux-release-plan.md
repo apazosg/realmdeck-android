@@ -83,14 +83,26 @@ sus consentimientos específicos ni su objetivo de revisión de hasta 900 s.
   la finalización de la adopción y el inicio de payload continúan sin acreditar.
 - La implementación local de continuación unificada está sin terminar y sin
   validar; la revisión independiente identificó que el resumen de consentimiento
-  debe mostrar también la versión. Falta revisar que la identidad y la revisión del
-  plan posterior queden ligadas íntegramente al consentimiento, no solo a sus costes
-  agregados, según US-008-TC-010. No instalar ni publicar esa implementación hasta
-  resolverlo y ejecutar las pruebas pertinentes.
+  debe mostrar también la versión. Se añadió la versión con una comprobación local
+  (6 tests de `test_client_management_manual_check.py` aprobados). Se confirmó que
+  comparar solo identidad superficial y costes agregados no liga la revisión al
+  plan posterior: hay que resolverlo conforme a US-008-TC-010 antes de entregar el
+  plan automáticamente. No instalar ni publicar esa implementación hasta resolverlo
+  y ejecutar las pruebas pertinentes.
+- La ejecución de ambos archivos Python de UI obtuvo 26 aprobados y un fallo previo,
+  ajeno a esta tarea: la aserción de texto de autologin no coincide con la fuente ya
+  presente en HEAD. Las pruebas Gradle de clasificación iniciadas antes del reinicio
+  quedaron sin resultado confirmado; hay procesos y logs externos existentes y no
+  deben duplicarse mientras sigan en curso.
 - El perfil existente señala la preparación del catálogo como parte significativa
   del coste, pero no separa sus fases ni justifica todavía otra optimización segura.
   C168 no demuestra el objetivo de 900 s; los tests sintéticos de optimizaciones ya
   implementadas no son una medición física de ese objetivo.
+- La auditoría inicial de publicación encontró que C168 es una APK de prueba con
+  firma debug, no una candidata de publicación. Quedan sin acreditar los derechos y
+  fuentes completas correspondientes de sus componentes, además de la revisión de
+  privacidad y del `main` público actual. La referencia remota local podría estar
+  desactualizada; no se hizo ninguna consulta o acción pública.
 - La optimización concreta y su ganancia se decidirán con el perfil y las pruebas;
   no se promete que el límite de 900 s se logre antes de medirlo.
 - La revisión actual está en memoria: instalar otra APK antes de adoptar puede
