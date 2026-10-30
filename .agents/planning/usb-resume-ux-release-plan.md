@@ -182,10 +182,11 @@ sus consentimientos específicos ni su objetivo de revisión de hasta 900 s.
   La revisión no sustituye la prueba conductual pendiente del servicio al ejecutor.
 - Durante esa prueba pendiente se observó que cinco tests preexistentes del candidato
   desaparecieron de `tests/test_client_management_manual_check.py` al retirar un
-  test nuevo. Siguen conservados en el árbol provisional público
-  `/tmp/opencode/usb-public-port-20261030/tests/test_client_management_manual_check.py`;
-  se ha solicitado restaurarlos. Verificar su restauración exacta antes de cerrar o
-  incorporar la candidata; no confundir su borrado con una decisión de alcance.
+  test nuevo. Se restauraron y el archivo coincide byte a byte con la copia anterior
+  del árbol público; los nueve tests del archivo pasan. En el entorno reiniciado `uv`
+  no estaba en el PATH, por lo que se usó `~/.local/bin/uv run pytest
+  tests/test_client_management_manual_check.py -q`. Su borrado no fue una decisión
+  de alcance. La prueba conductual de traspaso al ejecutor sigue pendiente.
 - El perfil existente señala la preparación del catálogo como parte significativa
   del coste, pero no separa sus fases ni justifica todavía otra optimización segura.
   C168 no demuestra el objetivo de 900 s; los tests sintéticos de optimizaciones ya
@@ -203,7 +204,7 @@ sus consentimientos específicos ni su objetivo de revisión de hasta 900 s.
   de los 178 archivos `lib/` y `assets/` de C146 y C168 encontró los mismos nombres
   y 177 contenidos idénticos; solo cambió `provenance.json`. Los certificados de
   firma auditados coinciden. Eso no sustituye la auditoría de la candidata final.
-  Faltan asimismo la revisión de privacidad
+  Faltan asimismo la revisión final de privacidad
   y la integración pública de la candidata. El 30-10 la consulta remota de solo
   lectura confirmó que `main` público coincide con `origin/main` local en
   `342ee76605e03091de2131f1b5dad477536a9973`; no se publicó ningún cambio.
@@ -217,6 +218,26 @@ sus consentimientos específicos ni su objetivo de revisión de hasta 900 s.
   Los tres postimages fijados de CASC/BLTE coinciden con los archivos de ese árbol
   provisional; hay que volver a fijarlos cuando se congele la candidata. La prueba
   local nueva de traspaso por el servicio foreground todavía no está portada allí.
+  El overlay de actividad del árbol local también contiene código de addons ajeno a
+  esta tarea que no está en el `main` público; su diferencia completa es intencional.
+  El cambio de esta tarea (`initialMissingStorageRoute`) ya está aplicado por separado
+  en el árbol público. No sobrescribir el overlay público entero con el archivo local.
+  Una auditoría independiente preliminar de privacidad de los 18 archivos no
+  encontró credenciales, identificadores de dispositivo ni binarios añadidos, pero
+  señaló historial operativo innecesario en US-009. En el árbol público provisional
+  se sustituyó por estado neutral sin alterar requisitos y se eliminaron dos enlaces
+  a documentos privados no portados; los enlaces de US-008 y US-009 ahora resuelven
+  localmente. Quedan sin auditar los cambios posteriores, el APK final, las licencias,
+  avisos y firma; repetir solo la revisión incremental sobre la candidata congelada.
+  Para preservar el trabajo provisional ante la pérdida de `/tmp`, se guardó fuera
+  del repositorio el diff público y copia de los tests en
+  `/home/adrian/wowforever-artifacts/work/usb-public-port-checkpoint-20261030-bYmYQW/`.
+  SHA-256 de `public-draft.patch`:
+  `0919453af04c9d5af5f1b07bfe7d7eb9c84df7d0ce91ba7f87c88ddbbe2a6c50`;
+  de `manual-tests.py`:
+  `50280faff952da8dd90e35b72756788f01b1d5f52516a1b0dac1ce4a57430a90`.
+  Es un checkpoint anterior a la validación final, no un artefacto de publicación;
+  verificar su base y los cambios posteriores antes de recuperarlo.
   La CLI `gh` no está disponible en el PATH. No se encontró credencial
   HTTPS no interactiva, helper Git configurado ni identidad SSH habitual; aún no
   se ha demostrado acceso de escritura a GitHub. No solicitar ni incluir tokens
