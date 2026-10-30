@@ -108,11 +108,16 @@ sus consentimientos específicos ni su objetivo de revisión de hasta 900 s.
   revisados). La media desde las 17:48:41 fue ~2,35 registros/s, equivalente a
   unas 95 horas restantes si se mantuviese el ritmo. Es una extrapolación, no una
   previsión garantizada; no acredita descarga. No se ha pausado ni reinstalado.
-  Otra consulta pasiva de metadatos a las 19:20:31 UTC encontró la app viva y un
-  checkpoint preparado con 1.754.320 bytes, 24.365 registros completos (~2,96 %),
-  actualizado un segundo antes. La media desde las 19:02 fue ~2,35 registros/s;
-  sigue siendo adopción, no payload. Dos transportes ADB correspondían al mismo
-  teléfono físico; no se envió ninguna interacción ni se leyó el contenido.
+   Otra consulta pasiva de metadatos a las 19:20:31 UTC encontró la app viva y un
+   checkpoint preparado con 1.754.320 bytes, 24.365 registros completos (~2,96 %),
+   actualizado un segundo antes. La media desde las 19:02 fue ~2,35 registros/s;
+   sigue siendo adopción, no payload. Dos transportes ADB correspondían al mismo
+   teléfono físico; no se envió ninguna interacción ni se leyó el contenido.
+   A las 19:41:12 UTC, una nueva consulta pasiva del paquete funcional
+   `com.wowforever.arm64probe` lo encontró vivo, con un único checkpoint preparado
+   de 1.962.904 bytes: 27.262 registros completos (~3,31 %), actualizado un segundo
+   antes. La media desde las 19:20 fue ~2,33 registros/s. Sigue siendo progreso de
+   adopción, no evidencia de descarga. No se ha interrumpido ni modificado el móvil.
 - La inspección de código sugiere que «Pausar» durante la adopción cancela de
   forma cooperativa, no reanuda desde el checkpoint preparado parcial. Antes del
   intent durable, la limpieza normal intenta retirar los artefactos preparados;
@@ -164,10 +169,18 @@ sus consentimientos específicos ni su objetivo de revisión de hasta 900 s.
   sumaron 144 tests, con 2 fallos y 1 omitido. Pasaron los tests añadidos de
   adopción, cadencia y vínculo del checkpoint. Los dos fallos afectan escenarios de
   reanudación y caché solapada. La prueba de caché pasó al ejecutarse aislada;
-  la de reanudación volvió a fallar y una ejecución diagnóstica mostró una
-  lectura concurrente de checkpoint truncado. El mismo test de reanudación
-  también falló en una copia limpia del HEAD `8addebf`, pero sin exponer la
-  excepción del hilo; la causa exacta en esa copia sigue bajo investigación.
+   la de reanudación volvió a fallar y una ejecución diagnóstica mostró una
+   lectura concurrente de checkpoint truncado. El mismo test de reanudación
+   también falló en una copia limpia del HEAD `8addebf`, pero sin exponer la
+   excepción del hilo; la causa exacta en esa copia sigue bajo investigación.
+  La lectura del productor omite los frames incompletos, de modo que truncar solo
+  una cola parcial no explica ese EOF. El writer también puede eliminar un frame
+  completo de finalización al recuperar; eso sí podría competir con un lector que
+  capturó el tamaño anterior. Los 2.920 bytes congelados son compatibles con 40
+  objetos sin ese frame, pero no prueban que antes hubiera 2.992 bytes ni identifican
+  el truncado responsable. No se atribuye aún el fallo observado a esa carrera.
+  Se inició un experimento focal instrumentado en una copia aislada, sin tocar el
+  dispositivo ni las fuentes candidatas; no lanzar duplicados tras un reinicio.
   Una revisión independiente identificó una posible carrera si la recuperación
   trunca el checkpoint durante la lectura, pero no probó que explique este test,
   cuyo checkpoint inicial estaba alineado. Las 11 pruebas focalizadas del
