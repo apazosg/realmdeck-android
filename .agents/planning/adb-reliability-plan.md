@@ -167,6 +167,23 @@ seguridad.
   No se modificó esa opción ni se utilizó root; la acción aún muestra la advertencia
   de permiso. La depuración inalámbrica seguía activada. Evidencia del diagnóstico
   privada en `/tmp/opencode/macro-secure-grant-diagnostic.log`.
+- Tras explicar que la opción de Xiaomi amplía temporalmente las facultades de los
+  equipos ADB autorizados y que puede no resolver el bloqueo, el usuario eligió
+  «Permitir temporalmente»: se autoriza intentar habilitar solo «Depuración USB
+  (ajustes de seguridad)» para conceder el permiso a MacroDroid y restaurar y
+  verificar inmediatamente el estado anterior. Si exige cuenta, SIM u otro cambio,
+  detenerse; no crear cuentas, usar root ni cambiar opciones ajenas. Esta autorización
+  no convierte la recuperación automática en probada ni autoriza probar una caída.
+- Se comprobó en los ajustes que la opción estaba apagada y se hizo un único intento
+  de activación, atravesando los avisos de Xiaomi. La respuesta registrada por su
+  componente fue `Insert your SIM card`; la opción continuó apagada tanto en la UI
+  como en `persist.security.adbinput=0`. Se detuvo el intento sin insertar ninguna
+  SIM ni cambiar otra opción, y no se intentó de nuevo la concesión protegida. La app
+  seguía sin `WRITE_SECURE_SETTINGS`, Wi-Fi ADB seguía encendido y los dos app-ops
+  autorizados (`WRITE_SETTINGS`, `SCHEDULE_EXACT_ALARM`) seguían en `allow`. El control
+  UHID temporal se cerró. El editor sin guardar seguía teniendo un registro de
+  actividad en segundo plano, lo que no garantiza que su borrador sobreviva; no hay
+  una macro guardada o activa. No se ha probado recuperación real.
 
 ## Implementation / Action Items
 
@@ -227,9 +244,9 @@ seguridad.
   comportamiento real del dispositivo. El SSID por sí solo no prueba que la red
   sea auténtica. Sin la guarda, no se activa la macro por defecto.
 - Los accesos adicionales a modificar ajustes y a alarmas exactas fueron autorizados
-  y concedidos, pero el sistema rechazó `WRITE_SECURE_SETTINGS`. Aún hay que decidir
-  si se investiga la opción de seguridad de depuración de Xiaomi y comprobar que se
-  pueda restaurar; activarla, desactivar la vigilancia de permisos o añadir cuentas
+  y concedidos, pero el sistema rechazó `WRITE_SECURE_SETTINGS`. El intento temporal
+  de activar la opción de seguridad de Xiaomi respondió que se inserte una SIM y no
+  activó la opción. Usar una SIM, desactivar la vigilancia de permisos o añadir cuentas
   no está autorizado por los permisos anteriores. Sin el permiso protegido no se
   activa una macro que aparentaría funcionar. Una alternativa sin este permiso no
   se ha demostrado.
