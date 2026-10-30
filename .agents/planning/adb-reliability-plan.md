@@ -146,6 +146,27 @@ seguridad.
   seleccionó «Manage options», no «Consent», y el diálogo desapareció después. Se
   desconoce qué estado de consentimiento publicitario quedó guardado; no se
   considera probado ni el rechazo ni la aceptación de ese tratamiento.
+- Tras informar de los dos permisos adicionales, de sus efectos y de la incertidumbre
+  publicitaria, el usuario eligió «Permitir ambos»: autoriza el acceso de MacroDroid
+  a modificar ajustes del sistema y a alarmas exactas para la revisión periódica.
+  Esta autorización no amplía los límites sobre root, accesibilidad, otros permisos,
+  nuevos puertos, el USB ni la prueba de caída con la revisión todavía incierta.
+- Se establecieron solo para MacroDroid en el usuario Android 0 los app-ops
+  `WRITE_SETTINGS` y `SCHEDULE_EXACT_ALARM` en `allow` y se verificaron. En el editor,
+  aún sin guardar, figura un intervalo fijo de cinco minutos con «Usar alarma», una
+  única acción entera `[Global] adb_wifi_enabled = 1` sin aplicación auxiliar y la
+  conjunción de las dos restricciones descritas arriba. Tras cerrar el control UHID,
+  el editor y sus contenidos seguían visibles. No hay macro guardada ni activada.
+- Se intentó conceder el `WRITE_SECURE_SETTINGS` previamente autorizado y Android lo
+  rechazó. Una segunda ejecución, únicamente para conservar el diagnóstico exacto,
+  mostró `SecurityException: grantRuntimePermission: Neither user 2000 nor current
+  process has android.permission.GRANT_RUNTIME_PERMISSIONS`; el paquete seguía sin
+  ese permiso. La propiedad leída `persist.security.adbinput` era `0`: referencias de
+  terceros sobre MIUI/HyperOS la relacionan con «Depuración USB (ajustes de seguridad)»,
+  pero no se ha confirmado el interruptor en la UI ni demostrado que cambiarlo lo resuelva.
+  No se modificó esa opción ni se utilizó root; la acción aún muestra la advertencia
+  de permiso. La depuración inalámbrica seguía activada. Evidencia del diagnóstico
+  privada en `/tmp/opencode/macro-secure-grant-diagnostic.log`.
 
 ## Implementation / Action Items
 
@@ -187,9 +208,9 @@ seguridad.
   - [x] 7.1. Instalar y verificar la app de Google Play solo en el teléfono previsto.
   - [x] 7.2. El usuario autorizó la ubicación de fondo adicional para intentar
     restringir la automatización a la red conocida; no habilitarla en cualquier red.
-  - [ ] 7.3. Resolver las nuevas solicitudes de permisos y configurar y verificar
-    manualmente la condición de red y la única acción de recuperación antes de
-    activar la macro; no añadir permisos, listeners ni puertos no aprobados.
+  - [ ] 7.3. Resolver el rechazo del permiso protegido y verificar manualmente la
+    condición de red y la única acción de recuperación antes de activar la macro;
+    no añadir permisos, listeners ni puertos no aprobados.
   - [ ] 7.4. Demostrar recuperación real únicamente cuando esté confirmado que la
     revisión USB está en reposo y sin comprometer la fixture.
 
@@ -205,11 +226,13 @@ seguridad.
   necesaria según su documentación y el usuario la autorizó. Falta comprobar el
   comportamiento real del dispositivo. El SSID por sí solo no prueba que la red
   sea auténtica. Sin la guarda, no se activa la macro por defecto.
-- MacroDroid requiere decidir si se autoriza el acceso adicional a modificar
-  configuraciones del sistema y, para el disparador periódico, a alarmas exactas.
-  Sin el primero no permitió siquiera configurar la acción; sin el segundo no
-  permitió configurar el intervalo. Una alternativa por eventos sin alarma sigue
-  sin verificarse y no aporta el mismo control periódico.
+- Los accesos adicionales a modificar ajustes y a alarmas exactas fueron autorizados
+  y concedidos, pero el sistema rechazó `WRITE_SECURE_SETTINGS`. Aún hay que decidir
+  si se investiga la opción de seguridad de depuración de Xiaomi y comprobar que se
+  pueda restaurar; activarla, desactivar la vigilancia de permisos o añadir cuentas
+  no está autorizado por los permisos anteriores. Sin el permiso protegido no se
+  activa una macro que aparentaría funcionar. Una alternativa sin este permiso no
+  se ha demostrado.
 - MacroDroid es una candidata expresamente autorizada, no una recuperación probada.
   Se debe verificar en el teléfono si exige confirmación del sistema, permisos extra
   para limitar la red o alguna excepción adicional de HyperOS; no conceder permisos
