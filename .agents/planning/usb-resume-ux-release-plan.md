@@ -201,6 +201,14 @@ sus consentimientos específicos ni su objetivo de revisión de hasta 900 s.
   del XML `666028034d68097fda4161d40fa24260769d86bf7569b3dfb3c12af28c9c24bb`.
   La segunda tarea dijo no encontrar JDK 17, pero una comprobación local posterior
   confirmó el JDK 17 de la ruta documentada. No repetir la reproducción ya lograda.
+  Se encargó una corrección acotada de esta carrera, con test determinista y
+  repetición del test de integración solo después del cambio, al trabajador
+  `ses_e71a35648ffeLwhyxo9VlAKinz`. Tiene propiedad exclusiva de `ForeverCasc.kt`,
+  `ForeverCascTest.kt` y, solo si hace falta, `ForeverClientUpdaterTest.kt` en el
+  árbol local; no lanzar otro escritor ni compilación equivalente mientras siga
+  trabajando. No debe debilitar el rechazo de frames OBJECT dañados, identidad,
+  cancelación ni límites de memoria. La solución aún requiere revisión independiente
+  por afectar concurrencia y durabilidad, antes de portarla al árbol público.
   Una revisión independiente identificó una posible carrera si la recuperación
   trunca el checkpoint durante la lectura, pero no probó que explique este test,
   cuyo checkpoint inicial estaba alineado. Las 11 pruebas focalizadas del
