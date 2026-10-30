@@ -180,6 +180,12 @@ sus consentimientos específicos ni su objetivo de revisión de hasta 900 s.
   `ForeverClientUpdater.kt`:
   `29b7f97390b62288f8bc599660de6c4760bb6d9972a237697c25543a275ab957`.
   La revisión no sustituye la prueba conductual pendiente del servicio al ejecutor.
+- Durante esa prueba pendiente se observó que cinco tests preexistentes del candidato
+  desaparecieron de `tests/test_client_management_manual_check.py` al retirar un
+  test nuevo. Siguen conservados en el árbol provisional público
+  `/tmp/opencode/usb-public-port-20261030/tests/test_client_management_manual_check.py`;
+  se ha solicitado restaurarlos. Verificar su restauración exacta antes de cerrar o
+  incorporar la candidata; no confundir su borrado con una decisión de alcance.
 - El perfil existente señala la preparación del catálogo como parte significativa
   del coste, pero no separa sus fases ni justifica todavía otra optimización segura.
   C168 no demuestra el objetivo de 900 s; los tests sintéticos de optimizaciones ya
