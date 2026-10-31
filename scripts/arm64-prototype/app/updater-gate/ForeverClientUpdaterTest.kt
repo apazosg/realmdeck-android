@@ -514,8 +514,168 @@ class ForeverClientUpdaterTest {
         runConfirmedPartialAdoptionScenarios(listOf(null, "new-workspace-renamed", "intent-removed"))
     }
 
+    @Test(timeout = 120_000)
+    fun adoptedPlanReportsMissingOnlyCostsAndFailsClosedOnTamperedBinding() {
+        val assets = configAssetsOrSkip()
+        Fixture(cascObjectCount = 4, contiguousRangeObjectCount = 3).use { fixture ->
+            val paths = fixture.makePaths()
+            val destination = fixture.destination(paths)
+            val sourceUpdater = fixture.updater(paths, assets) { record, work, _, progress ->
+                File(work, "${record.ekey}.blte").also { it.writeBytes(fixture.rawFor(record)); progress(it.length()) }
+            }
+            val initial = sourceUpdater.plan(destination)
+            val privateBase = File(paths.work, ".forever-client-update-work")
+            assertThrows(java.util.concurrent.CancellationException::class.java) {
+                sourceUpdater.execute(destination, initial, consentFor(initial), {
+                    privateBase.listFiles().orEmpty().any { File(it, ".forever-casc-resume-checkpoint").length() > 40L }
+                })
+            }
+            val foreignPaths = fixture.makePaths("adopted-binding").copy(client = paths.client)
+            val adopter = fixture.updater(foreignPaths, assets) { record, work, _, progress ->
+                File(work, "${record.ekey}.blte").also { it.writeBytes(fixture.rawFor(record)); progress(it.length()) }
+            }
+            val review = adopter.verifyPartialPortabilitySource(destination, { false }) { _, _, _ -> }
+            val receipt = JSONObject().put("payload", JSONObject().put("catalogSha256",
+                fixture.catalog.verifiedSha256).toString()).toString().toByteArray()
+            var publishedReceipt: ByteArray? = null
+            adopter.confirmAndAdoptPartialPortability(destination, review, review.review.digest, null,
+                sha256(receipt), receipt, { publishedReceipt?.let(::sha256) }, { publishedReceipt = receipt.copyOf() })
+
+            // The adopted plan hands off the reviewed delta within its
+            // ceilings instead of the full sourceless costs.
+            val resumed = adopter.plan(destination)
+            assertEquals(review.review.missingObjects, resumed.missingObjects)
+            assertEquals(review.review.reusableObjects, resumed.reusableObjects)
+            assertEquals(review.review.reusableObjects, resumed.candidateObjects)
+            assertEquals(review.review.downloadBytes, resumed.downloadBytes)
+            assertEquals(review.review.payloadCeilingBytes, resumed.payloadCeilingBytes)
+            assertTrue(resumed.destinationBytes <= review.review.destinationAdditionalBytes)
+            assertTrue(resumed.privateWorkBytes <= review.review.privateAdditionalBytes)
+            assertTrue(resumed.peakAdditionalBytes <= review.review.peakAdditionalBytes)
+            assertTrue(resumed.hasEnoughSpace)
+
+            // A tampered candidate bitset must fail closed, never plan as if
+            // the candidates were absent.
+            val workspace = requireNotNull(workspaceRoot(foreignPaths))
+            val ordinals = File(workspace, ".forever-casc-candidate-ordinals")
+            assertTrue(ordinals.isFile)
+            val pristineOrdinals = ordinals.readBytes()
+            try {
+                val tampered = pristineOrdinals.copyOf()
+                tampered[tampered.size / 2] = (tampered[tampered.size / 2].toInt() xor 0x01).toByte()
+                ordinals.writeBytes(tampered)
+                assertThrows(IllegalArgumentException::class.java) { adopter.plan(destination) }
+            } finally {
+                ordinals.writeBytes(pristineOrdinals)
+            }
+
+            // A checkpoint whose identity no longer matches the adoption must
+            // fail closed as well.
+            val checkpoint = File(workspace, ".forever-casc-resume-checkpoint")
+            assertTrue(checkpoint.isFile)
+            val pristineCheckpoint = checkpoint.readBytes()
+            try {
+                val tampered = pristineCheckpoint.copyOf()
+                tampered[40] = (tampered[40].toInt() xor 0x01).toByte()
+                checkpoint.writeBytes(tampered)
+                assertThrows(RuntimeException::class.java) { adopter.plan(destination) }
+            } finally {
+                checkpoint.writeBytes(pristineCheckpoint)
+            }
+
+            // Restored bindings plan the reviewed delta again.
+            val restored = adopter.plan(destination)
+            assertEquals(review.review.missingObjects, restored.missingObjects)
+            assertEquals(review.review.payloadCeilingBytes, restored.payloadCeilingBytes)
+            assertTrue(restored.hasEnoughSpace)
+            assertNoLiveFetchWorkers("tampered adopted bindings")
+        }
+    }
+
+    @Test(timeout = 120_000)
+    fun adoptedPlanCacheHitMatchesRecalculationAndTamperedPlanFailsClosed() {
+        val assets = configAssetsOrSkip()
+        Fixture(cascObjectCount = 4, contiguousRangeObjectCount = 3).use { fixture ->
+            val paths = fixture.makePaths()
+            val destination = fixture.destination(paths)
+            val sourceUpdater = fixture.updater(paths, assets) { record, work, _, progress ->
+                File(work, "${record.ekey}.blte").also { it.writeBytes(fixture.rawFor(record)); progress(it.length()) }
+            }
+            val initial = sourceUpdater.plan(destination)
+            val privateBase = File(paths.work, ".forever-client-update-work")
+            assertThrows(java.util.concurrent.CancellationException::class.java) {
+                sourceUpdater.execute(destination, initial, consentFor(initial), {
+                    privateBase.listFiles().orEmpty().any { File(it, ".forever-casc-resume-checkpoint").length() > 40L }
+                })
+            }
+            val foreignPaths = fixture.makePaths("adopted-plan-cache").copy(client = paths.client)
+            val adopter = fixture.updater(foreignPaths, assets) { record, work, _, progress ->
+                File(work, "${record.ekey}.blte").also { it.writeBytes(fixture.rawFor(record)); progress(it.length()) }
+            }
+            val review = adopter.verifyPartialPortabilitySource(destination, { false }) { _, _, _ -> }
+            val receipt = JSONObject().put("payload", JSONObject().put("catalogSha256",
+                fixture.catalog.verifiedSha256).toString()).toString().toByteArray()
+            var publishedReceipt: ByteArray? = null
+            adopter.confirmAndAdoptPartialPortability(destination, review, review.review.digest, null,
+                sha256(receipt), receipt, { publishedReceipt?.let(::sha256) }, { publishedReceipt = receipt.copyOf() })
+
+            // The adoption publishes the planning handoff next to the checkpoint.
+            val workspace = requireNotNull(workspaceRoot(foreignPaths))
+            val handoff = File(workspace, ".forever-casc-candidate-plan")
+            assertTrue(handoff.isFile)
+
+            // Cache hit: the adopted plan reuses the handoff scalars.
+            val hit = adopter.plan(destination)
+            assertEquals(review.review.missingObjects, hit.missingObjects)
+            assertEquals(review.review.reusableObjects, hit.reusableObjects)
+            assertEquals(review.review.reusableObjects, hit.candidateObjects)
+            assertEquals(review.review.downloadBytes, hit.downloadBytes)
+            assertEquals(review.review.payloadCeilingBytes, hit.payloadCeilingBytes)
+            assertTrue(hit.hasEnoughSpace)
+
+            // A tampered handoff fails closed, never plans as if it were absent.
+            val pristine = handoff.readBytes()
+            try {
+                val tampered = pristine.copyOf()
+                tampered[tampered.size / 2] = (tampered[tampered.size / 2].toInt() xor 0x01).toByte()
+                handoff.writeBytes(tampered)
+                assertThrows(IllegalArgumentException::class.java) { adopter.plan(destination) }
+            } finally {
+                handoff.writeBytes(pristine)
+            }
+
+            // A checkpoint without the handoff (old checkpoint) replans from
+            // scratch and reaches the same consent surface.
+            assertTrue(handoff.delete())
+            val recalculated = adopter.plan(destination)
+            assertTrue("recalculation persists the planning handoff for the next plan", handoff.isFile)
+            assertEquals(hit.planId, recalculated.planId)
+            assertEquals(hit.downloadBytes, recalculated.downloadBytes)
+            assertEquals(hit.privateWorkBytes, recalculated.privateWorkBytes)
+            assertEquals(hit.destinationBytes, recalculated.destinationBytes)
+            assertEquals(hit.peakAdditionalBytes, recalculated.peakAdditionalBytes)
+            assertEquals(hit.totalObjects, recalculated.totalObjects)
+            assertEquals(hit.reusableObjects, recalculated.reusableObjects)
+            assertEquals(hit.missingObjects, recalculated.missingObjects)
+            assertEquals(hit.candidateObjects, recalculated.candidateObjects)
+            assertEquals(hit.payloadCeilingBytes, recalculated.payloadCeilingBytes)
+            assertEquals(hit.cascNewSegmentBytes, recalculated.cascNewSegmentBytes)
+            assertEquals(hit.cascIndexBytes, recalculated.cascIndexBytes)
+            assertEquals(hit.cascNewSegmentCount, recalculated.cascNewSegmentCount)
+
+            // requireSamePlan still rejects a drifted plan while the handoff
+            // is valid: the stale pre-adoption plan cannot execute.
+            handoff.writeBytes(pristine)
+            assertEquals(hit.planId, adopter.plan(destination).planId)
+            assertThrows(IllegalStateException::class.java) {
+                adopter.execute(destination, initial, consentFor(initial))
+            }
+            assertNoLiveFetchWorkers("adopted plan cache")
+        }
+    }
+
     @Test(timeout = 60_000)
-    fun partialAdoptionUsesDirectedGroupChecksOnlyWithBothCapabilities() {
+    fun partialAdoptionReviewUsesDirectedGroupChecksOnlyWithBothCapabilities() {
         val configAssets = configAssetsOrSkip()
         val fullChecksByMode = LinkedHashMap<Boolean, Int>()
         for (directed in listOf(false, true)) {
@@ -549,8 +709,8 @@ class ForeverClientUpdaterTest {
                 }
                 val review = adopter.verifyPartialPortabilitySource(destination, { false }) { _, _, _ -> }
                 val expectedRecords = review.prefix.candidateCount.toInt()
-                fullChecks.set(0)
-                groupChecks.set(0)
+                val fullChecksAfterReview = fullChecks.get()
+                val groupChecksAfterReview = groupChecks.get()
 
                 val receipt = JSONObject().put("payload", JSONObject().put("catalogSha256",
                     fixture.catalog.verifiedSha256).toString()).toString().toByteArray()
@@ -558,15 +718,18 @@ class ForeverClientUpdaterTest {
                 adopter.confirmAndAdoptPartialPortability(destination, review, review.review.digest, null,
                     sha256(receipt), receipt, { publishedReceipt?.let(::sha256) }, { publishedReceipt = receipt.copyOf() })
 
-                assertTrue("adoption retains full boundary validation", fullChecks.get() > 0)
+                assertTrue("adoption still revalidates the full source inventory",
+                    fullChecks.get() > fullChecksAfterReview)
                 if (directed) {
-                    assertTrue("directed adoption checks the binding within each bounded group",
-                        groupChecks.get() >= (expectedRecords + ForeverCasc.RESUMABLE_COMMIT_GROUP_OBJECTS - 1) /
+                    assertTrue("directed review checks the binding within each bounded group",
+                        groupChecksAfterReview >= (expectedRecords + ForeverCasc.RESUMABLE_COMMIT_GROUP_OBJECTS - 1) /
                             ForeverCasc.RESUMABLE_COMMIT_GROUP_OBJECTS)
+                    assertEquals("adoption reuses the reviewed prefix without rescanning",
+                        groupChecksAfterReview, groupChecks.get())
                 } else {
                     assertEquals("one missing capability disables light group checks", 0, groupChecks.get())
                     assertTrue("missing capability retains per-record full guards",
-                        fullChecks.get() >= expectedRecords)
+                        fullChecksAfterReview >= expectedRecords)
                 }
                 fullChecksByMode[directed] = fullChecks.get()
             }
@@ -720,13 +883,28 @@ class ForeverClientUpdaterTest {
             assertTrue(File(workspace, ".forever-casc-resume-checkpoint").length() > 40L)
             assertTrue(File(workspace, ".forever-casc-resume-owner").isFile)
             val resumed = adopter.plan(destination)
-            // The ordinary plan counts CASC misses against the published source;
-            // durable checkpoint credit reduces download bytes, not that count.
-            assertTrue(resumed.downloadBytes <= review.review.downloadBytes)
-            assertTrue("fixture must demonstrate authenticated review reuse differs from ordinary-plan reuse",
-                review.review.reusableObjects > resumed.reusableObjects)
-            assertTrue("fixture must demonstrate the ordinary plan's published-source misses differ from review misses",
-                resumed.missingObjects > review.review.missingObjects)
+            // An adopted plan hands off the reviewed missing-only work: the
+            // delta costs stay within the reviewed ceilings while the full
+            // ceiling remains the hard cap for consent and the payload budget.
+            // Candidates stay unverified: the writer still authenticates every
+            // body before reuse.
+            assertEquals("adopted plan reports the reviewed missing count",
+                review.review.missingObjects, resumed.missingObjects)
+            assertEquals("adopted plan reports the reviewed unverified candidates as reusable",
+                review.review.reusableObjects, resumed.reusableObjects)
+            assertEquals("adopted plan reports the reviewed candidate count",
+                review.review.reusableObjects, resumed.candidateObjects)
+            assertEquals("adopted plan reports the reviewed delta download",
+                review.review.downloadBytes, resumed.downloadBytes)
+            assertEquals("adopted plan keeps the full reviewed payload ceiling",
+                review.review.payloadCeilingBytes, resumed.payloadCeilingBytes)
+            assertTrue("adopted destination cost stays within its reviewed ceiling",
+                resumed.destinationBytes <= review.review.destinationAdditionalBytes)
+            assertTrue("adopted private cost stays within its reviewed ceiling",
+                resumed.privateWorkBytes <= review.review.privateAdditionalBytes)
+            assertTrue("adopted peak cost stays within its reviewed ceiling",
+                resumed.peakAdditionalBytes <= review.review.peakAdditionalBytes)
+            assertTrue("adopted delta fits the space the review admitted", resumed.hasEnoughSpace)
             assertEquals("adoption preserves the reviewed loose/config/source snapshot",
                 review.review.snapshotHash, resumed.snapshotHash)
             assertEquals(sourceBefore, sourceData.listFiles()!!.filter { it.name.startsWith("data.") }.associate { it.name to sha256(it.readBytes()) })
@@ -4422,7 +4600,13 @@ class ForeverClientUpdaterTest {
             assertThrows(java.util.concurrent.CancellationException::class.java) {
                 firstUpdater.execute(destination, plan, consentFor(plan), { checkpointLength(paths) >= 40L + 34L * 72L })
             }
-            val prefixObjects = ((checkpointLength(paths) - 40L) / 72L)
+            val checkpointBytes = File(requireNotNull(workspaceRoot(paths)),
+                ".forever-casc-resume-checkpoint").readBytes()
+            val frameTypes = (0 until (checkpointBytes.size - 40) / 72)
+                .map { checkpointBytes[40 + it * 72].toInt() and 0xff }
+            val prefixObjects = frameTypes.count { it == 1 }.toLong()
+            assertTrue("only a trailing finish frame may follow object frames",
+                frameTypes.drop(prefixObjects.toInt()).all { it == 2 })
             assertEquals("checkpoint ends on a durable object-frame boundary", 0L, (checkpointLength(paths) - 40L) % 72L)
             assertTrue("grouped commits may checkpoint beyond the cancellation threshold", prefixObjects >= 34L)
             // Durable groups may extend the prefix beyond 34; only exactly 34

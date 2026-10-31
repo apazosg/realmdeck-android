@@ -1137,6 +1137,42 @@ class ForeverClientUpdater(
         record.decodedSize,
     )
 
+    /**
+     * Prove a planning handoff describes exactly the live adopted inputs
+     * before any cached scalar is trusted. The decode already bound identity,
+     * catalog and count; here the stored bitset digest must match the live
+     * bitset bytes, the stored prefix digest must match the canonical record
+     * of the live prefix, and the cardinality must agree with the inventoried
+     * prefix. Any substitution fails closed, exactly as a fresh replan would
+     * reject it. Revalidation brackets the checks with the same discipline
+     * the table rebuild applies around its own reads.
+     */
+    private fun checkCachedAdoptedPlan(
+        destination: ForeverClientUpdateDestination,
+        prefix: ForeverCasc.ForeignStageCandidateScan,
+        adoptedCandidates: ByteArray,
+        cached: ForeverCasc.AdoptedCandidatePlan,
+        checkpointIdentity: String,
+        cancelled: () -> Boolean,
+    ) {
+        checkCancelled(cancelled)
+        destination.revalidate()
+        require(cached.bitsetBinding.contentEquals(
+            MessageDigest.getInstance("SHA-256").digest(adoptedCandidates))) {
+            "adopted candidate bitset changed since its planning handoff"
+        }
+        require(cached.prefixBinding.contentEquals(MessageDigest.getInstance("SHA-256").digest(
+            ForeverCasc.encodeForeignCandidatePrefix(checkpointIdentity, prefix)))) {
+            "adopted foreign prefix changed since its planning handoff"
+        }
+        require(cached.cardinality == BitSet.valueOf(adoptedCandidates).cardinality() &&
+            cached.cardinality.toLong() == prefix.candidateCount) {
+            "adopted candidate coverage changed since its planning handoff"
+        }
+        destination.revalidate()
+        checkCancelled(cancelled)
+    }
+
     private fun buildPlan(
         destination: ForeverClientUpdateDestination,
         cancelled: () -> Boolean,
@@ -1165,6 +1201,10 @@ class ForeverClientUpdater(
         var checkpointedObjects = 0L
         var candidateObjects = 0L
         var candidateBytes = 0L
+        // True once a validated adopted candidate bitset replaces the full
+        // sourceless scan with the reviewed missing-only packing below. The
+        // ordinary writer and every other branch keep their current behavior.
+        var adoptedPrefixPlan = false
         val stageReceipt = privateResume.stageReceipt
         val stageDirectory = stageReceipt?.let { transactionStageDirectory(destination, it) }
             ?: File(File(destination.root, TRANSACTION_STAGING_NAME), "unused-${workspaceKey(destination)}")
@@ -1222,56 +1262,147 @@ class ForeverClientUpdater(
                             targetCatalogSha256, summary.objectCount.toInt(),
                         )
                     } else null
-                var currentOrdinal = -1
-                archiveOrder.withObjects(cancelled) { records ->
-                    val specs = sequence {
-                        var ordinal = 0
-                        records.forEach { record ->
-                            checkCancelled(cancelled)
-                            validateTransferBounds(record)
-                            currentOrdinal = ordinal++
-                            scanned = Math.addExact(scanned, 1L)
-                            if ((scanned and 0x3fffL) == 0L) {
-                                progress(ForeverClientUpdateProgress(ForeverClientUpdateProgress.Phase.SCANNING, scanned, summary.objectCount, 0, 0))
-                            }
-                            yield(ForeverCasc.IncrementalObjectSpec(record.ekey, record.contentKey, record.encodedSize, record.decodedSize))
-                        }
-                        check(ordinal.toLong() == summary.objectCount) { "archive-order scan did not consume the complete admitted target" }
-                    }
-                    val onScannedObject: (ForeverCasc.IncrementalObjectSpec, Boolean) -> Unit = { objectSpec, verified ->
-                        if (currentOrdinal !in 0 until summary.objectCount.toInt()) {
-                            throw IllegalStateException("archive-order planner callback has no current target ordinal")
-                        }
-                        if (checkpointedOrdinals[currentOrdinal]) {
-                            checkpointedObjects = Math.addExact(checkpointedObjects, 1L)
-                            checkpointedEncodedBytes = Math.addExact(checkpointedEncodedBytes, objectSpec.encodedSize)
-                            if (!verified) checkpointedMissingBytes = Math.addExact(checkpointedMissingBytes, objectSpec.encodedSize)
-                            if (objectSpec.ekey == privateResume.cachedObjectKey) cachedKeyIsCheckpointed = true
-                        } else if (adoptedCandidates != null &&
-                            ForeverCasc.isCandidateOrdinal(adoptedCandidates, currentOrdinal)
-                        ) {
-                            // Header-admitted but unverified: counted for the
-                            // minimum only. Already-staged ordinals stay
-                            // credited through the checkpoint delta above.
-                            candidateObjects = Math.addExact(candidateObjects, 1L)
-                            candidateBytes = Math.addExact(candidateBytes, objectSpec.encodedSize)
-                        }
-                        if (objectSpec.ekey == privateResume.cachedObjectKey) cachedObjectIsCascMiss = !verified
-                    }
-                    // Physical archive order is not EKey order. Use the generic
-                    // bounded inspector so packing and quota estimates match ingestion.
-                    // The archive order already admitted the complete target count:
-                    // pass it as a capacity-only hint so the disk-backed target
-                    // table pre-sizes once instead of rehashing mid-scan. The hint
-                    // never changes results, callbacks, packing, or verifications.
-                    ForeverCasc.inspectTarget(
-                        null,
-                        File(inspectionWork, "scan"),
-                        specs,
+                if (adoptedCandidates != null) {
+                    // Valid adoption: hand off the missing-only work the review
+                    // already admitted, using the same packing it used. The
+                    // candidates stay unverified (the writer still
+                    // authenticates every body before reuse) and the full
+                    // ceiling is kept below as the hard cap, so consent and
+                    // the durable payload budget remain conservative.
+                    adoptedPrefixPlan = true
+                    val prefix = ForeverCasc.readForeignPrefixRecord(
+                        cascOutput,
+                        resumableWorkspacePath(destination),
+                        checkpointIdentity,
                         cancelled,
-                        targetObjectCountHint = archiveOrder.objectCount.coerceIn(0L, Int.MAX_VALUE.toLong()).toInt(),
-                        onObject = onScannedObject,
+                    ) ?: throw IllegalStateException("adopted checkpoint has no foreign prefix binding")
+                    val cached = ForeverCasc.readAdoptedForeignCandidatePlan(
+                        resumableWorkspacePath(destination), checkpointIdentity,
+                        targetCatalogSha256, summary.objectCount.toInt(),
                     )
+                    if (cached != null) {
+                        // Planning handoff hit: the adoption already packed
+                        // this exact prefix/bitset/catalog binding. Re-stream
+                        // the admitted cursor for bounds, progress and the
+                        // completeness proof, but skip the disk-backed table
+                        // rebuild; every other plan input below stays fresh.
+                        checkCachedAdoptedPlan(destination, prefix, adoptedCandidates, cached,
+                            checkpointIdentity, cancelled)
+                        archiveOrder.withObjects(cancelled) { records ->
+                            records.forEach { record ->
+                                checkCancelled(cancelled)
+                                validateTransferBounds(record)
+                                scanned = Math.addExact(scanned, 1L)
+                                if ((scanned and 0x3fffL) == 0L) {
+                                    progress(ForeverClientUpdateProgress(ForeverClientUpdateProgress.Phase.SCANNING, scanned, summary.objectCount, 0, 0))
+                                }
+                            }
+                            check(scanned == summary.objectCount) {
+                                "archive-order scan did not consume the complete admitted target"
+                            }
+                        }
+                        candidateObjects = cached.verifiedObjects
+                        candidateBytes = cached.reusedEncodedBytes
+                        ForeverCasc.TargetScanResult(
+                            cached.totalObjects, cached.verifiedObjects, cached.missingObjects,
+                            cached.downloadBytes, cached.reusedEncodedBytes,
+                            cached.newSegmentBytesUpperBound, cached.indexBytesUpperBound,
+                            cached.newSegmentCount,
+                        )
+                    } else {
+                        // Old checkpoint without a planning handoff: replan
+                        // from scratch exactly as before.
+                        var adopted: ForeverCasc.TargetScanResult? = null
+                        archiveOrder.withObjects(cancelled) { records ->
+                            val specs = sequence {
+                                records.forEach { record ->
+                                    checkCancelled(cancelled)
+                                    validateTransferBounds(record)
+                                    scanned = Math.addExact(scanned, 1L)
+                                    if ((scanned and 0x3fffL) == 0L) {
+                                        progress(ForeverClientUpdateProgress(ForeverClientUpdateProgress.Phase.SCANNING, scanned, summary.objectCount, 0, 0))
+                                    }
+                                    yield(ForeverCasc.IncrementalObjectSpec(record.ekey, record.contentKey, record.encodedSize, record.decodedSize))
+                                }
+                            }
+                            // A present but foreign prefix/bitset fails closed
+                            // here: catalog, count, cardinality, segment inventory
+                            // and checkpoint identity are all revalidated, exactly
+                            // as in the review. The checkpoint delta above stays
+                            // empty for a prefix-only checkpoint.
+                            adopted = ForeverCasc.planCandidateTarget(
+                                cascOutput,
+                                File(inspectionWork, "scan"),
+                                prefix,
+                                summary.objectCount.toInt(),
+                                specs,
+                                adoptedCandidates,
+                                cancelled,
+                            ) { destination.revalidate() }
+                        }
+                        val result = requireNotNull(adopted) {
+                            "archive-order scan did not consume the complete admitted target"
+                        }
+                        candidateObjects = result.verifiedObjects
+                        candidateBytes = result.reusedEncodedBytes
+                        // Older adopted checkpoints predate the planning handoff.
+                        // Persist it now so the next plan can skip the table
+                        // rebuild, without requiring a second adoption.
+                        try {
+                            ForeverCasc.writeAdoptedForeignCandidatePlan(
+                                resumableWorkspacePath(destination), checkpointIdentity,
+                                targetCatalogSha256, summary.objectCount.toInt(),
+                                prefix, adoptedCandidates, result,
+                            )
+                        } catch (_: java.nio.file.FileAlreadyExistsException) {
+                            // A concurrent reader published the same handoff first.
+                        }
+                        result
+                    }
+                } else {
+                    var currentOrdinal = -1
+                    archiveOrder.withObjects(cancelled) { records ->
+                        val specs = sequence {
+                            var ordinal = 0
+                            records.forEach { record ->
+                                checkCancelled(cancelled)
+                                validateTransferBounds(record)
+                                currentOrdinal = ordinal++
+                                scanned = Math.addExact(scanned, 1L)
+                                if ((scanned and 0x3fffL) == 0L) {
+                                    progress(ForeverClientUpdateProgress(ForeverClientUpdateProgress.Phase.SCANNING, scanned, summary.objectCount, 0, 0))
+                                }
+                                yield(ForeverCasc.IncrementalObjectSpec(record.ekey, record.contentKey, record.encodedSize, record.decodedSize))
+                            }
+                            check(ordinal.toLong() == summary.objectCount) { "archive-order scan did not consume the complete admitted target" }
+                        }
+                        val onScannedObject: (ForeverCasc.IncrementalObjectSpec, Boolean) -> Unit = { objectSpec, verified ->
+                            if (currentOrdinal !in 0 until summary.objectCount.toInt()) {
+                                throw IllegalStateException("archive-order planner callback has no current target ordinal")
+                            }
+                            if (checkpointedOrdinals[currentOrdinal]) {
+                                checkpointedObjects = Math.addExact(checkpointedObjects, 1L)
+                                checkpointedEncodedBytes = Math.addExact(checkpointedEncodedBytes, objectSpec.encodedSize)
+                                if (!verified) checkpointedMissingBytes = Math.addExact(checkpointedMissingBytes, objectSpec.encodedSize)
+                                if (objectSpec.ekey == privateResume.cachedObjectKey) cachedKeyIsCheckpointed = true
+                            }
+                            if (objectSpec.ekey == privateResume.cachedObjectKey) cachedObjectIsCascMiss = !verified
+                        }
+                        // Physical archive order is not EKey order. Use the generic
+                        // bounded inspector so packing and quota estimates match ingestion.
+                        // The archive order already admitted the complete target count:
+                        // pass it as a capacity-only hint so the disk-backed target
+                        // table pre-sizes once instead of rehashing mid-scan. The hint
+                        // never changes results, callbacks, packing, or verifications.
+                        ForeverCasc.inspectTarget(
+                            null,
+                            File(inspectionWork, "scan"),
+                            specs,
+                            cancelled,
+                            targetObjectCountHint = archiveOrder.objectCount.coerceIn(0L, Int.MAX_VALUE.toLong()).toInt(),
+                            onObject = onScannedObject,
+                        )
+                    }
                 }
             } else {
                 catalog.withObjects(cancelled) { records ->
@@ -1416,13 +1547,20 @@ class ForeverClientUpdater(
                 }
             }
         }
-        val transferBytes = Math.addExact(cascTransferBytes.coerceAtLeast(0L), looseTransferBytes.coerceAtLeast(0L))
-        // Unverified candidates are assumed reusable for the minimum, but the
-        // ceiling keeps them as missing: if every candidate proves invalid,
-        // the payload may still reach the ceiling. Ordinary plans have no
-        // candidates, so both values coincide.
-        val minimumTransferBytes =
+        // Adopted plans pack only the missing objects, so their transfer
+        // bound is already the delta. The ceiling adds the unverified
+        // candidates back: if every candidate proves invalid at use, the
+        // payload may still reach the ceiling. Ordinary plans have no
+        // candidates, so both values coincide exactly as before.
+        val ceilingTransferBytes = Math.addExact(
+            Math.addExact(cascTransferBytes.coerceAtLeast(0L), candidateBytes),
+            looseTransferBytes.coerceAtLeast(0L),
+        )
+        val minimumTransferBytes = if (adoptedPrefixPlan) {
+            Math.addExact(cascTransferBytes.coerceAtLeast(0L), looseTransferBytes.coerceAtLeast(0L))
+        } else {
             Math.addExact((cascTransferBytes - candidateBytes).coerceAtLeast(0L), looseTransferBytes.coerceAtLeast(0L))
+        }
         if (target.sourceDataFiles == null && replayReaderFactory != null && resume.completedObjectCount > 0) {
             // Sealed-prefix overlap admission: new segments start at fresh IDs
             // above the frozen prefix maximum, and the last frozen segment is
@@ -1547,7 +1685,7 @@ class ForeverClientUpdater(
             scan.indexBytesUpperBound,
             scan.newSegmentCount,
             loose.changes.map { it.path }.toSet(),
-            transferBytes,
+            ceilingTransferBytes,
             candidateObjects,
         )
     }
@@ -3532,9 +3670,14 @@ class ForeverClientUpdater(
             requireSafeAncestors(root.toPath())
             requireExactFile(File(root, WORKSPACE_OWNER_NAME).toPath(), workspaceOwnerBytes(destination, EMPTY_SOURCE_REVISION), "prepared workspace owner")
             validatePrivateWorkspaceContents(root)
-            val expectedFiles = setOf(WORKSPACE_OWNER_NAME, STAGE_RECEIPT_NAME, CASC_RESUME_OWNER_NAME,
+            val requiredFiles = setOf(WORKSPACE_OWNER_NAME, STAGE_RECEIPT_NAME, CASC_RESUME_OWNER_NAME,
                 CASC_RESUME_CHECKPOINT_NAME, ForeverCasc.FOREIGN_CANDIDATE_ORDINALS_NAME)
-            require(boundedPortabilityWorkspaceNodes(root).map { root.toPath().relativize(it).toString() }.toSet() == expectedFiles) {
+            val actualFiles = boundedPortabilityWorkspaceNodes(root).map { root.toPath().relativize(it).toString() }.toSet()
+            // Adoption persists the reviewed planning scalars beside the
+            // checkpoint; a portability-transition prepared workspace does not.
+            // The record is optional, never a replacement for required state.
+            require(actualFiles == requiredFiles ||
+                actualFiles == requiredFiles + ForeverCasc.FOREIGN_CANDIDATE_PLAN_NAME) {
                 "prepared workspace contains unexpected state"
             }
             val checkpoint = File(root, CASC_RESUME_CHECKPOINT_NAME)
@@ -3763,61 +3906,19 @@ class ForeverClientUpdater(
             }
         }
 
-        val directedRecordChecksEligible = destination.revalidateCascSegment != null &&
-            destination.revalidateCascCommitGroup != null
-        var recordsSinceBindingCheck = 0
-        var nextBindingCheck = 0L
-        // Directed proof bounds the interval, but a transient route swap within
-        // this 16-record/250 ms window may not be observed; retain full boundary
-        // checks and require independent security review of this tradeoff.
-        fun revalidateRecordBinding() {
-            checkCancelled(cancelled)
-            if (!directedRecordChecksEligible) {
-                revalidateSource()
-                return
-            }
-            check(leaseHeld()) { "portability updater lease was lost" }
-            val now = System.nanoTime()
-            if (recordsSinceBindingCheck == 0 || now >= nextBindingCheck) {
-                requireNotNull(destination.revalidateCascCommitGroup).invoke()
-                requireExactFile(marker.toPath(), oldMarkerBytes, "foreign partial stage marker binding")
-                nextBindingCheck = now + 250_000_000L
-                recordsSinceBindingCheck = 0
-            }
-            recordsSinceBindingCheck = (recordsSinceBindingCheck + 1) % ForeverCasc.RESUMABLE_COMMIT_GROUP_OBJECTS
-        }
-
-        // Confirmed consent precedes this header-only re-enumeration and its
-        // checkpoint barriers. No body is authenticated here: candidates are
-        // re-admitted by header under the same lease, then bound to the
-        // reviewed prefix, bitset, plan and digest before anything is published.
+        // Confirmed consent precedes this adoption. The review already bound the
+        // candidate prefix and bitset to the catalog and to the segment inventory;
+        // revalidateSource(inventory = true) proves the stage, marker and catalog
+        // admission did not change. Do not re-enumerate every header here: reuse
+        // the reviewed prefix and bitset, then rebuild the plan from the admitted
+        // catalog. No body is authenticated by either path.
         revalidateSource(inventory = true)
         val objectCount = targetSummary.objectCount.toInt()
         val scanScratch = File(privateWorkDirectory, ".portability-scan-$operationId")
-        val freshScan = withArchiveOrder(cancelled) { order ->
-            val admitted = java.util.BitSet(objectCount)
-            val scan = ForeverCasc.inspectForeignStageCandidates(
-                dataFiles, scanScratch, targetCatalogSha256, objectCount,
-                { key -> archiveTargetMembership(order, key) },
-                cancelled, { revalidateSource() }, ::revalidateRecordBinding,
-                targetMembershipBatch = { keys -> archiveTargetMembershipBatch(order, keys, cancelled) },
-                expectedPrefix = reviewed.prefix,
-                onCandidateLocation = { admitted.set(it.ordinal) },
-            )
-            require(admitted.cardinality().toLong() == scan.candidateCount) {
-                "foreign candidate coverage changed during adoption"
-            }
-            scan to admitted
-        }
-        val (freshPrefix, freshAdmitted) = freshScan
-        require(freshPrefix == reviewed.prefix) { "partial source inventory changed since confirmation review" }
-        val freshOrdinalBytes = ByteArray((objectCount + 7) / 8)
-        freshAdmitted.toByteArray().copyInto(freshOrdinalBytes)
-        require(freshOrdinalBytes.contentEquals(reviewed.candidateOrdinals)) {
-            "partial candidate set changed since confirmation review"
-        }
-        // The enumeration deleted its scratch; the planner recreates the same
-        // fresh directory, so no second orphan root is needed.
+        val freshPrefix = reviewed.prefix
+        val freshOrdinalBytes = reviewed.candidateOrdinals
+        // The planner recreates the scan directory, so no second orphan root is
+        // needed and no enumeration scratch is deleted.
         val freshPlan = withArchiveOrder(cancelled) { order ->
             order.withObjects(cancelled) { records ->
                 ForeverCasc.planCandidateTarget(
@@ -3852,6 +3953,14 @@ class ForeverClientUpdater(
         require(freshReview.digest == confirmedReviewDigest && freshReview.hasEnoughSpace) {
             "partial continuation bindings or available space changed; review and confirm again"
         }
+        // Persist the validated planning scalars next to the adopted
+        // checkpoint so later adopted plans reuse them without rebuilding
+        // the disk-backed target table. The record binds the exact fresh
+        // prefix and bitset; no body is authenticated by either path.
+        val planRecord = ForeverCasc.writeAdoptedForeignCandidatePlan(
+            prepared, checkpointIdentity, targetCatalogSha256, objectCount,
+            freshPrefix, freshOrdinalBytes, freshPlan)
+        cleanupFiles[File(prepared, ForeverCasc.FOREIGN_CANDIDATE_PLAN_NAME)] = sha256(planRecord)
 
         val receipt = UpdateStageReceipt(reviewed.stageId, markerDigest, EMPTY_SOURCE_REVISION, freshReview.snapshotHash,
             destination.storageId, destination.root.toPath().toAbsolutePath().normalize().toString())
@@ -5678,7 +5787,7 @@ class ForeverClientUpdater(
         private val VERSION_PATTERN = Regex("[0-9]+(?:\\.[0-9]+){3}")
         private val STORAGE_ID_PATTERN = Regex("[A-Za-z0-9][A-Za-z0-9._:-]{0,127}")
         private val STAGE_RECEIPT_FIELDS = setOf("version", "stageId", "markerHash", "sourceRevision", "snapshotHash", "storageId", "destinationPath", "resetCasc")
-        private val PRIVATE_WORKSPACE_FILES = setOf(WORKSPACE_OWNER_NAME, STAGE_RECEIPT_NAME, CASC_RESUME_OWNER_NAME, CASC_RESUME_CHECKPOINT_NAME, CASC_OBJECT_TEMP_NAME, ForeverCasc.FOREIGN_CANDIDATE_ORDINALS_NAME)
+        private val PRIVATE_WORKSPACE_FILES = setOf(WORKSPACE_OWNER_NAME, STAGE_RECEIPT_NAME, CASC_RESUME_OWNER_NAME, CASC_RESUME_CHECKPOINT_NAME, CASC_OBJECT_TEMP_NAME, ForeverCasc.FOREIGN_CANDIDATE_ORDINALS_NAME, ForeverCasc.FOREIGN_CANDIDATE_PLAN_NAME)
         private val PRIVATE_WORKSPACE_ENTRIES = PRIVATE_WORKSPACE_FILES + setOf("objects", "loose")
     }
 }

@@ -1159,6 +1159,56 @@ class ForeverCascTest {
     }
 
     @Test
+    fun foreignCandidateEnumerationIsIdenticalWithOneAndFourWorkers() {
+        val root = tempDir()
+        try {
+            val (stage, specs) = foreignStageFixture(root)
+            val membership = specs.mapIndexed { index, spec -> spec.ekey to IndexedValue(index, spec) }.toMap()
+            fun scan(workers: Int, name: String): Pair<ForeverCasc.ForeignStageCandidateScan,
+                List<ForeverCasc.ForeignStageCandidateLocation>> {
+                val locations = mutableListOf<ForeverCasc.ForeignStageCandidateLocation>()
+                val threads = mutableSetOf<String>()
+                val scan = ForeverCasc.inspectForeignStageCandidates(
+                    stage, File(root, "private/$name"), "ef".repeat(32), specs.size,
+                    { membership.getValue(it) }, { false }, {},
+                    targetMembershipBatch = { keys -> keys.map { membership.getValue(it) } },
+                    candidateWorkers = workers,
+                ) { location ->
+                    locations += location
+                    synchronized(threads) { threads += Thread.currentThread().name }
+                }
+                assertEquals(setOf("foreign-casc-enumerate"), threads)
+                assertFalse(File(root, "private/$name").exists())
+                return scan to locations
+            }
+            val (serial, serialLocations) = scan(1, "candidate-serial")
+            val (parallel, parallelLocations) = scan(4, "candidate-parallel")
+
+            assertEquals(specs.size.toLong(), serial.candidateCount)
+            assertEquals(specs.size.toLong(), parallel.candidateCount)
+            assertEquals(serial.segments, parallel.segments)
+            assertEquals(serial.sourceInventoryBinding, parallel.sourceInventoryBinding)
+            assertEquals(serial, parallel)
+            assertEquals(serialLocations.map { Triple(it.target.ekey, it.archiveId, it.offset) }.sortedBy { it.third },
+                parallelLocations.map { Triple(it.target.ekey, it.archiveId, it.offset) }.sortedBy { it.third })
+
+            // A cancellation observed inside a worker still aborts the scan and
+            // removes its private scratch without publishing a partial result.
+            val cancelledScratch = File(root, "private/candidate-cancelled")
+            var cancel = false
+            assertThrows(java.util.concurrent.CancellationException::class.java) {
+                ForeverCasc.inspectForeignStageCandidates(
+                    stage, cancelledScratch, "ef".repeat(32), specs.size,
+                    { membership.getValue(it) }, { cancel }, {},
+                    targetMembershipBatch = { keys -> keys.map { membership.getValue(it) } },
+                    candidateWorkers = 4,
+                ) { cancel = true }
+            }
+            assertFalse(cancelledScratch.exists())
+        } finally { delete(root) }
+    }
+
+    @Test
     fun foreignCandidatePrefixRescansOnlyBoundOriginalSegmentsAfterSuffixAppears() {
         val root = tempDir()
         try {
@@ -1564,6 +1614,71 @@ class ForeverCascTest {
             assertEquals((specs.size - 1).toLong(), plan.missingObjects)
             assertEquals(specs[0].encodedSize, plan.reusedEncodedBytes)
             assertEquals(specs.drop(1).sumOf { it.encodedSize }, plan.downloadBytes)
+        } finally {
+            delete(root)
+        }
+    }
+
+    @Test
+    fun adoptedCandidatePlanRecordRoundTripsAndBindsEveryInput() {
+        val root = tempDir()
+        try {
+            val (stage, specs) = foreignStageFixture(root)
+            val membership = specs.withIndex().associate { it.value.ekey to IndexedValue(it.index, it.value) }
+            val catalog = "ef".repeat(32)
+            val scan = ForeverCasc.inspectForeignStageCandidates(
+                stage, File(root, "private/plan-handoff-scan"), catalog, specs.size,
+                { membership.getValue(it) }, { false }, {},
+            ) { }
+            val prefix = scan.copy(candidateCount = 1)
+            val ordinals = ByteArray((specs.size + 7) / 8).also { it[0] = 1 }
+            val plan = ForeverCasc.planCandidateTarget(
+                stage, File(root, "private/plan-handoff-work"), prefix, specs.size,
+                specs.asSequence(), ordinals, { false }, {},
+            )
+            val identity = "plan-handoff-identity"
+            val stored = File(root, "private/plan-handoff-store").apply { assertTrue(mkdirs()) }
+            ForeverCasc.writeAdoptedForeignCandidatePlan(
+                stored, identity, catalog, specs.size, prefix, ordinals, plan)
+            assertTrue(File(stored, ForeverCasc.FOREIGN_CANDIDATE_PLAN_NAME).isFile)
+            val cached = ForeverCasc.readAdoptedForeignCandidatePlan(stored, identity, catalog, specs.size)
+            org.junit.Assert.assertNotNull(cached)
+            requireNotNull(cached)
+            assertEquals(plan.totalObjects, cached.totalObjects)
+            assertEquals(plan.verifiedObjects, cached.verifiedObjects)
+            assertEquals(plan.missingObjects, cached.missingObjects)
+            assertEquals(plan.downloadBytes, cached.downloadBytes)
+            assertEquals(plan.reusedEncodedBytes, cached.reusedEncodedBytes)
+            assertEquals(plan.newSegmentBytesUpperBound, cached.newSegmentBytesUpperBound)
+            assertEquals(plan.indexBytesUpperBound, cached.indexBytesUpperBound)
+            assertEquals(plan.newSegmentCount, cached.newSegmentCount)
+            assertEquals(1, cached.cardinality)
+            // Every binding dimension fails closed.
+            assertThrows(Exception::class.java) {
+                ForeverCasc.readAdoptedForeignCandidatePlan(stored, "other-identity", catalog, specs.size)
+            }
+            assertThrows(Exception::class.java) {
+                ForeverCasc.readAdoptedForeignCandidatePlan(stored, identity, "cd".repeat(32), specs.size)
+            }
+            assertThrows(Exception::class.java) {
+                ForeverCasc.readAdoptedForeignCandidatePlan(stored, identity, catalog, specs.size + 1)
+            }
+            val corrupt = File(stored, ForeverCasc.FOREIGN_CANDIDATE_PLAN_NAME).readBytes().copyOf()
+                .also { it[it.size - 1] = (it[it.size - 1].toInt() xor 1).toByte() }
+            assertThrows(Exception::class.java) {
+                ForeverCasc.decodeForeignCandidatePlan(identity, catalog, specs.size, corrupt)
+            }
+            // A substituted bitset or prefix no longer matches the stored binding.
+            val otherOrdinals = ordinals.copyOf().also { it[0] = 2 }
+            assertFalse(cached.bitsetBinding.contentEquals(
+                MessageDigest.getInstance("SHA-256").digest(otherOrdinals)))
+            val otherPrefix = prefix.copy(candidateCount = 2)
+            assertFalse(cached.prefixBinding.contentEquals(MessageDigest.getInstance("SHA-256").digest(
+                ForeverCasc.encodeForeignCandidatePrefix(identity, otherPrefix))))
+            // A checkpoint without the handoff reads as absent, never as corrupt.
+            org.junit.Assert.assertNull(ForeverCasc.readAdoptedForeignCandidatePlan(
+                File(root, "private/plan-handoff-absent").apply { assertTrue(mkdirs()) },
+                identity, catalog, specs.size))
         } finally {
             delete(root)
         }

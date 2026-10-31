@@ -43,12 +43,21 @@ internal class ForeverCascReplayReaderAndroid(
     private var boundPath: String? = null
     private var boundDev: Long = -1L
     private var boundIno: Long = -1L
+    // Header-only candidate verification reads a 30-byte record followed by
+    // its body, then advances. A small read-ahead turns those latency-bound
+    // preads into sequential block reads without changing any verification:
+    // the cache only serves bytes from the same open, bound segment.
+    private val readAhead = ByteArray(READ_AHEAD_BYTES)
+    private var readAheadStart = 0L
+    private var readAheadLength = 0
 
     override fun ensureSegment(file: File) {
         checkCancelled()
         val path = file.absoluteFile.path
         if (fd != null && boundPath == path) return
         closeOwned()
+        readAheadStart = 0L
+        readAheadLength = 0
         rejectSymlinkParentsOs(file)
         val pre = lstatOf(path, "segment")
         requireRegular(pre, path)
@@ -142,6 +151,41 @@ internal class ForeverCascReplayReaderAndroid(
         val open = fd ?: throw IllegalStateException("CASC replay reader is closed")
         if (len == 0) return 0
         checkCancelled()
+        if (readAheadLength > 0) {
+            val cacheEnd = readAheadStart + readAheadLength
+            if (position >= readAheadStart && position + len <= cacheEnd) {
+                System.arraycopy(readAhead, (position - readAheadStart).toInt(), buffer, off, len)
+                return len
+            }
+        }
+        // Refill only on a forward miss. Random index lookups keep the old
+        // direct path instead of paying a block read they will not reuse.
+        if (len <= READ_AHEAD_BYTES && position >= readAheadStart + readAheadLength) {
+            val bound = (ARCHIVE_LIMIT - position).coerceIn(0L, READ_AHEAD_BYTES.toLong()).toInt()
+            if (bound > 0) {
+                var filled = 0
+                while (filled < bound) {
+                    checkCancelled()
+                    val served = try {
+                        Os.pread(open, readAhead, filled, bound - filled, position + filled)
+                    } catch (e: ErrnoException) {
+                        if (e.errno == OsConstants.EINTR) continue
+                        throw IllegalStateException("cannot read CASC staged segment", e)
+                    }
+                    if (served < 0) throw IllegalStateException("cannot read CASC staged segment")
+                    if (served == 0) break
+                    filled += served
+                }
+                if (filled > 0) {
+                    readAheadStart = position
+                    readAheadLength = filled
+                    if (len <= filled) {
+                        System.arraycopy(readAhead, 0, buffer, off, len)
+                        return len
+                    }
+                }
+            }
+        }
         var offset = off
         var remaining = len
         var at = position
@@ -172,6 +216,8 @@ internal class ForeverCascReplayReaderAndroid(
         boundPath = null
         boundDev = -1L
         boundIno = -1L
+        readAheadStart = 0L
+        readAheadLength = 0
         try {
             Os.close(open)
         } catch (e: ErrnoException) {
@@ -225,6 +271,8 @@ internal class ForeverCascReplayReaderAndroid(
     private companion object {
         /** Shared V7 staged-segment bound; the writer enforces the same limit. */
         const val ARCHIVE_LIMIT = 1L shl 30
+        /** One sequential block covers many 30-byte candidate headers and bodies. */
+        const val READ_AHEAD_BYTES = 1 shl 20
     }
 }
 
