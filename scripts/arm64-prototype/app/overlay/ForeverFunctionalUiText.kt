@@ -67,8 +67,9 @@ object ForeverFunctionalUiText {
 
     /**
      * Truthful one-line operation text. Numbers are shown only when the detail
-     * carries valid in-range data; out-of-range counters are invalid (no
-     * clamping to 100) and fall back to the phase-appropriate live text.
+     * carries valid in-range data; a zero transfer total means the actual total
+     * is unknown, not that a consent ceiling is an actual total. Out-of-range
+     * counters are invalid (no clamping to 100) and fall back to live text.
      * No ETA is ever synthesized.
      */
     fun downloadStatusText(detail: ForeverClientUpdateProgress?, fallback: String): String {
@@ -77,6 +78,8 @@ object ForeverFunctionalUiText {
         return if (detail.phase == ForeverClientUpdateProgress.Phase.DOWNLOADING) {
             if (validBytes(detail)) {
                 "Descargando ${clientBytes(detail.transferredBytes)} de ${clientBytes(detail.totalTransferBytes)}"
+            } else if (detail.totalTransferBytes == 0L && detail.transferredBytes >= 0L) {
+                "Descargando ${clientBytes(detail.transferredBytes)}"
             } else {
                 fallback
             }

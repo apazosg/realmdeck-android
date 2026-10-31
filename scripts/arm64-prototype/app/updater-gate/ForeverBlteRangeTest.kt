@@ -136,6 +136,45 @@ class ForeverBlteRangeTest {
     }
 
     @Test
+    fun foreignPartialRequiresBoundEncryptedSizeTableAndChecksEncodedBytes() {
+        val encoded = chunkedE(21, byteArrayOf('E'.code.toByte(), 7, 8, 9))
+        val ekey = independentEkey(encoded)
+        fun verify(bytes: ByteArray, key: String = ekey, size: Long = 21L) =
+            ForeverBlte.verifyForeignPartialEncodedRange(bytes.inputStream(), bytes.size.toLong(), key, size, "0".repeat(32))
+
+        // An intentionally unrelated CKey is not falsely claimed to be verified for E.
+        assertEquals("encrypted", verify(encoded))
+        assertThrows(IllegalArgumentException::class.java) { verify(encoded, size = 20L) }
+        assertThrows(IllegalArgumentException::class.java) { verify(encoded, key = "0".repeat(32)) }
+        val corrupt = encoded.clone().also { it[it.lastIndex] = (it.last().toInt() xor 1).toByte() }
+        assertThrows(IllegalArgumentException::class.java) { verify(corrupt) }
+
+        // A mixed N/E object is encrypted overall; its total must combine the
+        // independently decoded N bytes and the E frame's table declaration.
+        val rawFrame = byteArrayOf('N'.code.toByte(), 1, 2)
+        val encryptedFrame = byteArrayOf('E'.code.toByte(), 3, 4)
+        val mixed = byteArrayOf(0x42, 0x4c, 0x54, 0x45) + u32(12 + 48) + byteArrayOf(0x0f, 0, 0, 2) +
+            u32(rawFrame.size) + u32(2) + md5Bytes(rawFrame) +
+            u32(encryptedFrame.size) + u32(21) + md5Bytes(encryptedFrame) + rawFrame + encryptedFrame
+        assertEquals("encrypted", verify(mixed, key = independentEkey(mixed), size = 23L))
+        assertThrows(IllegalArgumentException::class.java) { verify(mixed, key = independentEkey(mixed), size = 22L) }
+
+        // Headerless E has no table to bind a declared decoded size to the EKey.
+        val headerless = zeroHeader(byteArrayOf(7, 8, 9), 'E')
+        val headerlessKey = independentEkey(headerless)
+        assertEquals("encrypted", ForeverBlte.verifyEncodedRange(headerless.inputStream(), headerless.size.toLong(), headerlessKey, 21L, "0".repeat(32)))
+        assertThrows(IllegalArgumentException::class.java) { verify(headerless, key = headerlessKey) }
+
+        // Non-E objects retain independent CKey verification in the new entrypoint.
+        val raw = "foreign-plain".toByteArray()
+        val plain = chunked(raw, 'N')
+        assertEquals("decoded", ForeverBlte.verifyForeignPartialEncodedRange(plain.inputStream(), plain.size.toLong(), independentEkey(plain), raw.size.toLong(), md5Hex(raw)))
+        assertThrows(IllegalArgumentException::class.java) {
+            ForeverBlte.verifyForeignPartialEncodedRange(plain.inputStream(), plain.size.toLong(), independentEkey(plain), raw.size.toLong(), "0".repeat(32))
+        }
+    }
+
+    @Test
     fun extendedTableRejectedByFileAndRange() {
         val raw = "extended-chunk".toByteArray()
         val payload = byteArrayOf('Z'.code.toByte()) + zlib(raw)

@@ -8,7 +8,7 @@ class ForeverClientDownloadRate {
     data class Estimate(val bytesPerSecond: Double, val remainingSeconds: Long?) {
         fun text(): String {
             val speed = "%.1f MB/s".format(java.util.Locale.ROOT, bytesPerSecond / 1_000_000)
-            val seconds = remainingSeconds ?: return speed
+            val seconds = remainingSeconds ?: return "$speed · Sin estimación de tiempo"
             val minutes = (seconds + 59) / 60
             val eta = when {
                 seconds < 60 -> "<1 min"
@@ -34,7 +34,8 @@ class ForeverClientDownloadRate {
 
     @Synchronized fun record(detail: ForeverClientUpdateProgress, now: Long) {
         if (detail.phase != ForeverClientUpdateProgress.Phase.DOWNLOADING ||
-            detail.totalTransferBytes <= 0 || detail.transferredBytes !in 0..detail.totalTransferBytes) return
+            detail.totalTransferBytes < 0 || detail.transferredBytes < 0 ||
+            (detail.totalTransferBytes > 0 && detail.transferredBytes > detail.totalTransferBytes)) return
         if (samples.isNotEmpty() && (detail.transferredBytes < lastBytes || now < samples.last.time ||
             detail.totalTransferBytes != total)) reset()
         if (samples.isEmpty() || detail.transferredBytes > lastBytes) lastAdvance = now
@@ -51,9 +52,9 @@ class ForeverClientDownloadRate {
         val first = samples.first
         val elapsed = now - first.time
         val bytes = lastBytes - first.bytes
-        if (elapsed < 1_000 || bytes <= 0 || lastBytes >= total) return null
+        if (elapsed < 1_000 || bytes <= 0 || (total > 0 && lastBytes >= total)) return null
         val rate = bytes * 1000.0 / elapsed
-        return Estimate(rate, kotlin.math.ceil((total - lastBytes) / rate).toLong())
+        return Estimate(rate, if (total > 0) kotlin.math.ceil((total - lastBytes) / rate).toLong() else null)
     }
 
     private fun trimWindow(now: Long) {

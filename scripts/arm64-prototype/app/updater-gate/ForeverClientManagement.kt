@@ -84,6 +84,7 @@ fun ForeverClientManagementDialog(
     onPlay: () -> Unit = onDismiss,
     inline: Boolean = false,
     initialMissingStorageLabel: String? = null,
+    initialMissingStorageRoute: String? = null,
 ) {
     val context = LocalContext.current.applicationContext
     val scope = rememberCoroutineScope()
@@ -103,12 +104,16 @@ fun ForeverClientManagementDialog(
     // Presentation only: never use this snapshot to admit, plan or execute a
     // mutation. Continue/checkVersions and the engine still revalidate freshly.
     var inspection by remember { mutableStateOf(missingHome?.let {
-        ForeverClientUpdateService.Inspection(null, "", it, 0, "", false, null)
+        ForeverClientUpdateService.Inspection(
+            null, "", it, 0, "", false, null,
+            destinationPath = initialMissingStorageRoute,
+        )
     }) }
     var published by remember { mutableStateOf<ForeverClientUpdateCheck.Fingerprint?>(null) }
     var plan by remember { mutableStateOf<ForeverClientUpdatePlan?>(null) }
     var portabilityReview by remember { mutableStateOf<ForeverClientUpdateService.PartialPortabilityReview?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
+    var planNotice by remember { mutableStateOf<String?>(null) }
 
     val execution = remember { ForeverClientUpdateExecution }
     val executionBusy by execution.busy.collectAsState()
@@ -132,6 +137,7 @@ fun ForeverClientManagementDialog(
         if (!dialogSingleFlight.compareAndSet(false, true)) return
         busy = true
         error = null
+        planNotice = null
         cancel.set(false)
         progressFlow.value = title
         scope.launch {
@@ -243,10 +249,39 @@ fun ForeverClientManagementDialog(
         progressFlow.value = ForeverFunctionalUiText.downloadStatusText(update, progressFlow.value)
     }
 
+    fun reviewPartial(service: ForeverClientUpdateService, target: ForeverClientUpdateCheck.Fingerprint) {
+        var verifiedObjects = 0L
+        var verifiedEncodedBytes = 0L
+        var lastVerificationProgress = 0L
+        val reviewed = service.beginPartialPortabilityReview(
+            ForeverClientUpdateService.MetadataConsent(target, 1L shl 30, false), cancel::get,
+            { stage, completed, total ->
+                progressFlow.value = ForeverFunctionalUiText.preparationStatus(stage, completed, total)
+            },
+            { spec, _, _ ->
+                verifiedObjects++
+                verifiedEncodedBytes = Math.addExact(verifiedEncodedBytes, spec.encodedSize)
+                val now = System.nanoTime()
+                if (verifiedObjects == 1L || now - lastVerificationProgress >= 500_000_000L) {
+                    progressFlow.value = "Examinando USB: $verifiedObjects candidatos · ${ForeverFunctionalUiText.clientBytes(verifiedEncodedBytes)} localizados"
+                    lastVerificationProgress = now
+                }
+            },
+        )
+        withContextOnMain { if (alive.get() && !cancel.get()) { portabilityReview = reviewed; plan = null } }
+    }
+
     // Explicit metadata consent + planning. The service still enforces its own
     // guest/storage/qualification gates; this only sequences the user action.
     fun startUpdate(target: ForeverClientUpdateCheck.Fingerprint) {
         runOperation("Preparando la descarga…") { service ->
+            val source = service.discoverPartialPortabilitySource()
+            if (source == ForeverClientUpdater.PortabilitySourceKind.PARTIAL_CANDIDATE) {
+                reviewPartial(service, target)
+                return@runOperation
+            }
+            if (source == ForeverClientUpdater.PortabilitySourceKind.UNREADABLE_OR_AMBIGUOUS)
+                throw IllegalStateException("El destino contiene datos pendientes ambiguos; se conservan sin cambios.")
             val current = service.preparePublishedVersion(
                 ForeverClientUpdateService.MetadataConsent(target, 1L shl 30, false), cancel::get,
             ) { stage, completed, total ->
@@ -260,13 +295,23 @@ fun ForeverClientManagementDialog(
         }
     }
 
-    fun handoff(readyPlan: ForeverClientUpdatePlan) = withContextOnMain {
+    fun handoff(
+        readyPlan: ForeverClientUpdatePlan,
+        portabilityAuthorization: ForeverClientUpdateService.PortabilityContinuationAuthorization? = null,
+    ) = withContextOnMain {
         if (!alive.get() || cancel.get()) throw CancellationException("download handoff cancelled")
-        ForeverClientUpdateExecution.resetFor(readyPlan)
+        if (portabilityAuthorization == null) {
+            ForeverClientUpdateExecution.resetFor(readyPlan)
+        } else {
+            ForeverClientUpdateExecution.resetForWithPortabilityAuthorization(readyPlan, portabilityAuthorization)
+        }
         try {
             context.startForegroundService(Intent(context, ForeverClientUpdateForegroundService::class.java))
         } catch (failure: Exception) {
-            if (!execution.busy.value && execution.pendingPlan === readyPlan) execution.pendingPlan = null
+            if (!execution.busy.value && execution.pendingPlan === readyPlan) {
+                execution.pendingPlan = null
+                execution.pendingPortabilityAuthorization = null
+            }
             throw failure
         }
     }
@@ -282,6 +327,15 @@ fun ForeverClientManagementDialog(
 
     fun continueInstallation() {
         runOperation("Consultando versión…") { service ->
+            val source = service.discoverPartialPortabilitySource()
+            if (source == ForeverClientUpdater.PortabilitySourceKind.PARTIAL_CANDIDATE) {
+                val target = service.checkVersions().published
+                    ?: throw IllegalStateException("network versions unavailable")
+                reviewPartial(service, target)
+                return@runOperation
+            }
+            if (source == ForeverClientUpdater.PortabilitySourceKind.UNREADABLE_OR_AMBIGUOUS)
+                throw IllegalStateException("El destino contiene datos pendientes ambiguos; se conservan sin cambios.")
             val remote = service.checkVersions()
             val target = remote.published ?: throw IllegalStateException("network versions unavailable")
             val current = service.preparePublishedVersion(
@@ -297,41 +351,56 @@ fun ForeverClientManagementDialog(
         }
     }
 
-    fun reviewPortableDownload() {
-        runOperation("Consultando versión para revisar la descarga existente…") { service ->
-            val target = service.checkVersions().published ?: throw IllegalStateException("network versions unavailable")
-            var verifiedObjects = 0L
-            var verifiedEncodedBytes = 0L
-            var lastVerificationProgress = 0L
-            val reviewed = service.beginPartialPortabilityReview(
-                ForeverClientUpdateService.MetadataConsent(target, 1L shl 30, false), cancel::get,
-                { stage, completed, total ->
-                    progressFlow.value = ForeverFunctionalUiText.preparationStatus(stage, completed, total)
-                },
-                { spec, _, _ ->
-                    verifiedObjects++
-                    verifiedEncodedBytes = Math.addExact(verifiedEncodedBytes, spec.encodedSize)
-                    val now = System.nanoTime()
-                    if (verifiedObjects == 1L || now - lastVerificationProgress >= 500_000_000L) {
-                        progressFlow.value = "Autenticando USB: $verifiedObjects objetos · ${ForeverFunctionalUiText.clientBytes(verifiedEncodedBytes)} verificados"
-                        lastVerificationProgress = now
-                    }
-                },
-            )
-            withContextOnMain { if (alive.get() && !cancel.get()) { portabilityReview = reviewed; plan = null } }
-        }
-    }
-
     fun adoptPortableDownload(reviewed: ForeverClientUpdateService.PartialPortabilityReview) {
         runOperation("Verificando y recuperando la descarga existente…") { service ->
-            service.confirmPartialPortabilityAdoption(reviewed, reviewed.verification.review.digest, cancel::get)
-            // Adoption never starts payload. The ordinary freshly computed plan is
-            // displayed afterwards and still requires its own Download confirmation.
-            if (cancel.get()) throw CancellationException("portable download recovered and paused")
             service.qualify(cancel::get)
+            val adoption = service.confirmPartialPortabilityAdoption(
+                reviewed, reviewed.verification.review.digest, cancel::get,
+            )
+            if (cancel.get()) throw CancellationException("portable download recovered and paused")
             val computed = service.plan(cancel::get, ::publishProgress)
+            if (cancel.get()) throw CancellationException("portable download recovery paused")
+            service.qualify(cancel::get)
+            val costs = adoption.verification.review
+            val withinReviewedCeilings = computed.payloadCeilingBytes <= costs.payloadCeilingBytes &&
+                computed.peakAdditionalBytes <= costs.peakAdditionalBytes &&
+                computed.privateWorkBytes <= costs.privateAdditionalBytes &&
+                computed.destinationBytes <= costs.destinationAdditionalBytes &&
+                computed.totalObjects == costs.totalObjects &&
+                computed.snapshotHash == adoption.verification.review.snapshotHash &&
+                computed.looseChangePaths == costs.looseChangePaths
+            if (withinReviewedCeilings && computed.hasEnoughSpace) {
+                val authorization = ForeverClientUpdateService.PortabilityContinuationAuthorization(
+                    adoption.binding,
+                    reviewed.candidate.storageId,
+                    reviewed.candidate.destinationPath,
+                    adoption.binding.catalogDigest,
+                    adoption.verification.review.snapshotHash,
+                    costs.payloadCeilingBytes,
+                    costs.peakAdditionalBytes,
+                    costs.privateAdditionalBytes,
+                    costs.destinationAdditionalBytes,
+                    costs.totalObjects,
+                    costs.looseChangePaths,
+                )
+                handoff(computed, authorization)
+                withContextOnMain {
+                    if (alive.get()) {
+                        portabilityReview = null
+                        plan = null
+                        planNotice = null
+                        onClientChanged()
+                    }
+                }
+                return@runOperation
+            }
             withContextOnMain {
-                if (alive.get() && !cancel.get()) { portabilityReview = null; plan = computed; onClientChanged() }
+                if (alive.get() && !cancel.get()) {
+                    portabilityReview = null
+                    plan = computed
+                    planNotice = "El plan actualizado ha cambiado o no hay espacio suficiente. Revisa y confirma este plan por separado."
+                    onClientChanged()
+                }
             }
         }
     }
@@ -350,7 +419,7 @@ fun ForeverClientManagementDialog(
         runOperation("Comprobando descarga pendiente…") { service ->
             service.qualify(cancel::get)
             val computed = service.plan(cancel::get, ::publishProgress)
-            val consent = ForeverClientUpdateConsent(previous.planId, previous.downloadBytes,
+            val consent = ForeverClientUpdateConsent(previous.planId, previous.payloadCeilingBytes,
                 previous.peakAdditionalBytes, previous.privateWorkBytes, previous.destinationBytes)
             // The ID binds identity/snapshot; residual costs must stay within
             // the original consent, not prompt again just for saved progress.
@@ -372,6 +441,7 @@ fun ForeverClientManagementDialog(
                     style = if (inline) MaterialTheme.typography.titleMedium else MaterialTheme.typography.titleLarge)
                 inspection?.let { current ->
                     Text("Destino: ${current.storageLabel}")
+                    Text("Ruta: ${current.destinationPath?.takeIf { it.isNotBlank() } ?: "No disponible"}")
                     if (!inline || details) Text(current.installedVersion?.let { "Instalado: $it" } ?: if (current.clientPresent)
                         "Hay archivos del cliente, pero no se pudo identificar la instalación." else "Cliente no instalado.")
                 }
@@ -407,20 +477,26 @@ fun ForeverClientManagementDialog(
                     if (portable != null) {
                         val verified = portable.verification
                         val costs = verified.review
-                        Text("Reutilizables verificados: ${verified.objects.objectCount} objetos")
+                        Text("Destino: ${portable.candidate.destinationPath.takeIf { it.isNotBlank() } ?: "No disponible"}")
+                        Text("Versión: ${portable.candidate.admission.target.version}")
+                        Text("Candidatos localizados sin verificar: ${verified.prefix.candidateCount} objetos")
                         Text("Pendientes CASC: ${verified.targetPlan.missingObjects} objetos")
-                        Text("Descarga prevista, incluidos archivos sueltos: hasta ${ForeverFunctionalUiText.clientBytes(costs.downloadBytes)}")
-                        Text("Espacio adicional: hasta ${ForeverFunctionalUiText.clientBytes(costs.peakAdditionalBytes)}")
-                        Text("App: hasta ${ForeverFunctionalUiText.clientBytes(costs.privateAdditionalBytes)} · USB: hasta ${ForeverFunctionalUiText.clientBytes(costs.destinationAdditionalBytes)}")
-                        Text("Al confirmar se verificará el estado actual y se creará una reanudación propia. La descarga se confirma después.")
+                        Text("Descarga prevista, incluidos archivos sueltos: hasta ${ForeverFunctionalUiText.clientBytes(costs.payloadCeilingBytes)}")
+                        Text("Espacio adicional previsto: ${ForeverFunctionalUiText.clientBytes(costs.peakAdditionalBytes)}")
+                        Text("App: ${ForeverFunctionalUiText.clientBytes(costs.privateAdditionalBytes)} · USB: ${ForeverFunctionalUiText.clientBytes(costs.destinationAdditionalBytes)}")
+                        Text("Al confirmar se reutilizarán los datos localizados; cada objeto se verifica al usarlo y, si el plan actualizado se mantiene dentro de estos límites, comenzará la descarga.")
                         Button(enabled = costs.hasEnoughSpace, onClick = { adoptPortableDownload(portable) }) {
-                            Text("Reutilizar y preparar continuación")
+                            Text("Recuperar datos localizados")
                         }
                         if (!costs.hasEnoughSpace) Text("No hay espacio suficiente.", color = MaterialTheme.colorScheme.error)
                         TextButton(onClick = { portabilityReview = null }) { Text("Cancelar revisión") }
                     } else if (readyPlan != null) {
+                        planNotice?.let { Text(it) }
+                        Text("Destino: ${readyPlan.destinationPath.takeIf { it.isNotBlank() } ?: "No disponible"}")
                         Text("Versión: ${readyPlan.version}")
-                        Text("Descarga: ${ForeverFunctionalUiText.clientBytes(readyPlan.downloadBytes)}")
+                        Text(if (readyPlan.payloadCeilingBytes > readyPlan.downloadBytes) {
+                            "Descarga: hasta ${ForeverFunctionalUiText.clientBytes(readyPlan.payloadCeilingBytes)}"
+                        } else "Descarga: ${ForeverFunctionalUiText.clientBytes(readyPlan.downloadBytes)}")
                         Text("Espacio adicional: ${ForeverFunctionalUiText.clientBytes(readyPlan.peakAdditionalBytes)}")
                         if (!readyPlan.privateAndDestinationShareFileStore) {
                             Text("Almacenamiento de la app: hasta ${ForeverFunctionalUiText.clientBytes(readyPlan.privateWorkBytes)}")
@@ -472,7 +548,8 @@ fun ForeverClientManagementDialog(
                             if (latest == null) TextButton(onClick = ::checkForUpdates) { Text("Buscar actualizaciones") }
                         } else if (latest != null) {
                             if (local.clientPresent && !pastedReady) {
-                                Button(onClick = ::checkForUpdates, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Reintentar detección") }
+                                Text("Continuar consultará metadatos de hasta 1 GiB por Wi-Fi y comprobará el destino; antes de modificar o descargar verás el coste. Los datos no verificables se conservarán.")
+                                Button(onClick = ::continueInstallation, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Continuar") }
                             } else {
                                 Text("Disponible: ${latest.version}")
                                 Text("Al continuar se consultan los archivos de la versión (hasta 1 GiB). El tamaño del juego se confirma después.",
@@ -482,6 +559,9 @@ fun ForeverClientManagementDialog(
                                     onClick = { startUpdate(latest) },
                                 ) { Text(if (pastedReady) "Completar la instalación" else "Descargar e instalar") }
                             }
+                        } else if (local.clientPresent && installed == null && !pastedReady) {
+                            Text("Continuar consultará metadatos de hasta 1 GiB por Wi-Fi y comprobará el destino; antes de modificar o descargar verás el coste. Los datos no verificables se conservarán.")
+                            Button(onClick = ::continueInstallation, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Continuar") }
                         } else {
                             Button(onClick = ::checkForUpdates, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Buscar actualizaciones") }
                         }
@@ -489,9 +569,6 @@ fun ForeverClientManagementDialog(
                         Button(onClick = ::inspectLocal, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Reintentar") }
                     }
                     if (readyPlan == null && portable == null && execution.resumePlan == null) {
-                        Text("Descarga parcial trasladada: revisión explícita, hasta 1 GiB de metadatos por Wi-Fi. No inicia la descarga del juego.",
-                            style = MaterialTheme.typography.bodySmall)
-                        TextButton(onClick = ::reviewPortableDownload) { Text("Revisar descarga de otro móvil") }
                         TextButton(onClick = ::recoverPortableDownload) { Text("Recuperar adopción interrumpida") }
                     }
                 }

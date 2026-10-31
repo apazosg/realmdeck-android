@@ -92,6 +92,17 @@ def test_home_state_derivation_drives_one_truthful_status_and_cta() -> None:
     assert "consent = true" not in activity
 
 
+def test_missing_home_passes_existing_storage_route_to_inline_client_manager() -> None:
+    activity = _read("ForeverFunctionalPocActivity.kt")
+    ux = _read("ForeverFunctionalLauncherUx.kt")
+    manager = (ROOT / "scripts/arm64-prototype/app/updater-gate/ForeverClientManagement.kt").read_text(encoding="utf-8")
+
+    assert "storageRoute = selected?.route ?: \"No disponible\"" in ux
+    assert "initialMissingStorageRoute = if (homeState is ForeverFunctionalLauncherUx.HomeState.Missing) readiness.storageRoute else null" in activity
+    assert "initialMissingStorageRoute: String? = null" in manager
+    assert "destinationPath = initialMissingStorageRoute" in manager
+
+
 def test_prepared_proof_reveals_launch_panel_without_claiming_integrity() -> None:
     # Regression (managed 70450): prepare() succeeds while metadata inspection
     # deliberately stays PRESENT_NOT_VERIFIED (homeState Incomplete, never

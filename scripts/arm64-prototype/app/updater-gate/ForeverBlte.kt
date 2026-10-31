@@ -123,6 +123,33 @@ object ForeverBlte {
         expectedSize: Long,
         expectedContentKey: String,
         cancelled: () -> Boolean = { false },
+    ): String = verifyEncodedRangeInternal(source, encodedSize, expectedEkey, expectedSize, expectedContentKey, cancelled, false)
+
+    /**
+     * The foreign-partial flow additionally requires an E object's decoded size
+     * to be declared by an EKey-bound BLTE table. This validates the declaration,
+     * not the decrypted size or CKey. Existing non-foreign callers are unchanged.
+     */
+    internal class ForeignEncryptedSizeTableMissingException :
+        IllegalArgumentException("encrypted BLTE object has no declared decoded-size table")
+
+    internal fun verifyForeignPartialEncodedRange(
+        source: InputStream,
+        encodedSize: Long,
+        expectedEkey: String,
+        expectedSize: Long,
+        expectedContentKey: String,
+        cancelled: () -> Boolean = { false },
+    ): String = verifyEncodedRangeInternal(source, encodedSize, expectedEkey, expectedSize, expectedContentKey, cancelled, true)
+
+    private fun verifyEncodedRangeInternal(
+        source: InputStream,
+        encodedSize: Long,
+        expectedEkey: String,
+        expectedSize: Long,
+        expectedContentKey: String,
+        cancelled: () -> Boolean,
+        requireEncryptedSizeTable: Boolean,
     ): String {
         require(expectedSize >= 0) { "negative BLTE decoded size" }
         require(expectedSize <= MAX_DECODED_BYTES) { "BLTE decoded output exceeds safety limit" }
@@ -134,14 +161,15 @@ object ForeverBlte {
             "invalid BLTE encoded key"
         }
         require(encodedSize >= 4) { "BLTE encoded range is truncated" }
-        return decodeStream(source, encodedSize, null, expectedSize, expectedContentKey, cancelled, allowEncrypted = true, expectedEkey = wantedEkey)
+        return decodeStream(source, encodedSize, null, expectedSize, expectedContentKey, cancelled, allowEncrypted = true,
+            expectedEkey = wantedEkey, requireEncryptedSizeTable = requireEncryptedSizeTable)
     }
 
     /**
      * The single shared BLTE core over exactly N encoded bytes.  Both the
-     * File wrappers ([decode]) and the caller-windowed [verifyEncodedRange]
-     * parse here, so acceptance and rejection stay identical and no second
-     * parser can drift.  [encodedSize] replaces every former input.length()
+     * File wrappers ([decode]) and the caller-windowed range verifiers parse
+     * here, so no second parser can drift. The foreign-partial verifier adds
+     * its explicit encrypted-size-table requirement. [encodedSize] replaces input.length()
      * use in header, table-total, and trailing arithmetic; all values stay in
      * Long.  Cancellation, decoded-size/content-key enforcement, the
      * 512MiB/zlib bomb guards, and the always-reject-0x10-with-allowEncrypted
@@ -156,6 +184,7 @@ object ForeverBlte {
         cancelled: () -> Boolean,
         allowEncrypted: Boolean,
         expectedEkey: String? = null,
+        requireEncryptedSizeTable: Boolean = false,
     ): String {
         require(encodedSize >= 4) { "BLTE input is truncated" }
         val bounded = BoundedRangeStream(source, encodedSize)
@@ -187,6 +216,9 @@ object ForeverBlte {
                 val payloadLength = encodedSize - 8L
                 if (payloadLength < 1) throw IllegalArgumentException("truncated BLTE zero-header payload")
                 val result = processChunk(windowed, payloadLength, null, null, sink, decodedMd5, cancelled, expectedSize, allowEncrypted)
+                if (result.second && requireEncryptedSizeTable) {
+                    throw ForeignEncryptedSizeTableMissingException()
+                }
                 decodedBytes += result.first
                 if (result.second) encryptedFrames += 1
             } else {

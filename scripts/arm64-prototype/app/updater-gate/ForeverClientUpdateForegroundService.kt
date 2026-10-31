@@ -27,6 +27,7 @@ import kotlinx.coroutines.withContext
 object ForeverClientUpdateExecution {
     /** Set by the management dialog before the service starts; the plan object stays in-process. */
     @Volatile var pendingPlan: ForeverClientUpdatePlan? = null
+    @Volatile internal var pendingPortabilityAuthorization: ForeverClientUpdateService.PortabilityContinuationAuthorization? = null
     /** Only an in-process consent candidate: every resume must freshly re-plan. */
     @Volatile var resumePlan: ForeverClientUpdatePlan? = null
     val rate = ForeverClientDownloadRate()
@@ -61,9 +62,21 @@ object ForeverClientUpdateExecution {
     }
 
     /** Clear per-run volatile state before a fresh foreground run. */
-    fun resetFor(plan: ForeverClientUpdatePlan) {
+    fun resetFor(plan: ForeverClientUpdatePlan) = resetForInternal(plan, null)
+
+    /** Adoption-only handoff without widening the established public reset API. */
+    internal fun resetForWithPortabilityAuthorization(
+        plan: ForeverClientUpdatePlan,
+        portabilityAuthorization: ForeverClientUpdateService.PortabilityContinuationAuthorization,
+    ) = resetForInternal(plan, portabilityAuthorization)
+
+    private fun resetForInternal(
+        plan: ForeverClientUpdatePlan,
+        portabilityAuthorization: ForeverClientUpdateService.PortabilityContinuationAuthorization?,
+    ) {
         check(!busy.value && pendingPlan == null) { "client download is already running" }
         pendingPlan = plan
+        pendingPortabilityAuthorization = portabilityAuthorization
         resumePlan = plan
         rate.reset()
         cancel.set(false)
@@ -104,7 +117,7 @@ class ForeverClientUpdateForegroundService : Service() {
             stopSelf(startId)
             return START_NOT_STICKY
         }
-        run(plan)
+        run(plan, ForeverClientUpdateExecution.pendingPortabilityAuthorization)
         return START_NOT_STICKY
     }
 
@@ -128,10 +141,14 @@ class ForeverClientUpdateForegroundService : Service() {
         wifiLock = null
     }
 
-    private fun run(plan: ForeverClientUpdatePlan) {
+    private fun run(
+        plan: ForeverClientUpdatePlan,
+        portabilityAuthorization: ForeverClientUpdateService.PortabilityContinuationAuthorization?,
+    ) {
         val execution = ForeverClientUpdateExecution
         execution.busy.value = true
         execution.pendingPlan = null
+        execution.pendingPortabilityAuthorization = null
         Log.i(TAG, "foreground execution started")
         createChannel()
         acquireLocks()
@@ -148,12 +165,12 @@ class ForeverClientUpdateForegroundService : Service() {
                 service = activeService
                 val consent = ForeverClientUpdateConsent(
                     plan.planId,
-                    plan.downloadBytes,
+                    plan.payloadCeilingBytes,
                     plan.peakAdditionalBytes,
                     plan.privateWorkBytes,
                     plan.destinationBytes,
                 )
-                executeWithAutoRecovery(activeService, plan, consent)
+                executeWithAutoRecovery(activeService, plan, consent, portabilityAuthorization)
                 outcome = if (execution.cancel.get()) {
                     ForeverClientUpdateExecution.Outcome.Paused
                 } else {
@@ -200,10 +217,17 @@ class ForeverClientUpdateForegroundService : Service() {
         service: ForeverClientUpdateService,
         plan: ForeverClientUpdatePlan,
         consent: ForeverClientUpdateConsent,
+        portabilityAuthorization: ForeverClientUpdateService.PortabilityContinuationAuthorization?,
     ) {
         val execution = ForeverClientUpdateExecution
         try {
-            service.execute(plan, consent, execution.cancel::get, ::publish)
+            if (portabilityAuthorization == null) {
+                service.execute(plan, consent, execution.cancel::get, ::publish)
+            } else {
+                service.executeWithPortabilityAuthorization(
+                    plan, consent, portabilityAuthorization, execution.cancel::get, ::publish,
+                )
+            }
         } catch (blocked: IllegalStateException) {
             if (blocked.message?.contains("recuperación") != true) throw blocked
             if (execution.cancel.get()) throw CancellationException("encoded-object transfer cancelled")
@@ -214,7 +238,13 @@ class ForeverClientUpdateForegroundService : Service() {
             try {
                 service.recover(::publish)
                 if (execution.cancel.get()) throw CancellationException("encoded-object transfer cancelled")
-                service.execute(plan, consent, execution.cancel::get, ::publish)
+                if (portabilityAuthorization == null) {
+                    service.execute(plan, consent, execution.cancel::get, ::publish)
+                } else {
+                    service.executeWithPortabilityAuthorization(
+                        plan, consent, portabilityAuthorization, execution.cancel::get, ::publish,
+                    )
+                }
             } finally {
                 execution.applying.value = false
             }

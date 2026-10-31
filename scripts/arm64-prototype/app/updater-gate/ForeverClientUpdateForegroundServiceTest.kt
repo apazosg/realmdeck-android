@@ -11,6 +11,12 @@ import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.mockito.kotlin.any
+import org.mockito.kotlin.eq
+import org.mockito.kotlin.mock
+import org.mockito.kotlin.never
+import org.mockito.kotlin.same
+import org.mockito.kotlin.verify
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
@@ -24,6 +30,7 @@ class ForeverClientUpdateForegroundServiceTest {
         ForeverClientUpdateExecution.busy.value = false
         ForeverClientUpdateExecution.cancel.set(false)
         ForeverClientUpdateExecution.pendingPlan = null
+        ForeverClientUpdateExecution.pendingPortabilityAuthorization = null
         ForeverClientUpdateExecution.resumePlan = null
         ForeverClientUpdateExecution.rate.reset()
         ForeverClientUpdateExecution.outcome.value = null
@@ -159,6 +166,35 @@ class ForeverClientUpdateForegroundServiceTest {
             looseChangePaths = emptySet(),
         )
 
+    private fun portabilityAuthorizationFixture(): ForeverClientUpdateService.PortabilityContinuationAuthorization =
+        ForeverClientUpdateService.PortabilityContinuationAuthorization(
+            binding = ForeverClientUpdater.PortabilityIntentBinding(
+                operationId = "operation",
+                generation = "generation",
+                stageId = "stage",
+                catalogDigest = "catalog",
+                planDigest = "plan",
+                inventoryDigest = "inventory",
+                checkpointDigest = "checkpoint",
+                checkpointIdentityDigest = "checkpoint-identity",
+                oldMarkerDigest = "old-marker",
+                newMarkerDigest = "new-marker",
+                oldWorkspaceDigest = null,
+                oldCatalogReceiptDigest = null,
+                newCatalogReceiptDigest = "new-catalog-receipt",
+            ),
+            storageId = "storage",
+            destinationPath = "destination",
+            catalogDigest = "catalog",
+            snapshotHash = "snapshot",
+            downloadCeiling = 10,
+            peakCeiling = 20,
+            privateCeiling = 10,
+            destinationCeiling = 10,
+            totalObjects = 1,
+            looseChangePaths = emptySet(),
+        )
+
     @Test
     fun resetForPublishesPendingPlanBeforeServiceStart() {
         val plan = pendingPlanFixture()
@@ -188,11 +224,80 @@ class ForeverClientUpdateForegroundServiceTest {
         try {
             val service = controller.get()
             val plan = pendingPlanFixture()
-            ForeverClientUpdateExecution.resetFor(plan)
+            val authorization = portabilityAuthorizationFixture()
+            ForeverClientUpdateExecution.resetForWithPortabilityAuthorization(plan, authorization)
+            assertSame(plan, ForeverClientUpdateExecution.pendingPlan)
+            assertSame(authorization, ForeverClientUpdateExecution.pendingPortabilityAuthorization)
             assertEquals(Service.START_NOT_STICKY, service.onStartCommand(Intent(), 0, 7))
             assertFalse(shadowOf(service).isStoppedBySelf)
             assertTrue(ForeverClientUpdateExecution.busy.value)
             assertEquals(null, ForeverClientUpdateExecution.pendingPlan)
+            assertEquals(null, ForeverClientUpdateExecution.pendingPortabilityAuthorization)
+        } finally {
+            controller.destroy()
+        }
+    }
+
+    @Test
+    fun ordinaryRunResetDoesNotCarryPortabilityAuthorizationForward() {
+        ForeverClientUpdateExecution.pendingPortabilityAuthorization = portabilityAuthorizationFixture()
+
+        ForeverClientUpdateExecution.resetFor(pendingPlanFixture())
+
+        assertEquals(null, ForeverClientUpdateExecution.pendingPortabilityAuthorization)
+    }
+
+    @Test
+    fun privateExecutionDispatchPassesPlanConsentAndSamePortabilityAuthorization() {
+        val plan = pendingPlanFixture()
+        val consent = consentFor(plan)
+        val authorization = portabilityAuthorizationFixture()
+        val updateService = mock<ForeverClientUpdateService>()
+
+        invokePrivateExecutionDispatch(plan, consent, authorization, updateService)
+
+        verify(updateService).executeWithPortabilityAuthorization(
+            eq(plan), eq(consent), same(authorization), any(), any(),
+        )
+        verify(updateService, never()).execute(any(), any(), any(), any())
+    }
+
+    @Test
+    fun privateExecutionDispatchUsesOrdinaryMethodWithoutPortabilityAuthorization() {
+        val plan = pendingPlanFixture()
+        val consent = consentFor(plan)
+        val updateService = mock<ForeverClientUpdateService>()
+
+        invokePrivateExecutionDispatch(plan, consent, null, updateService)
+
+        verify(updateService).execute(eq(plan), eq(consent), any(), any())
+        verify(updateService, never()).executeWithPortabilityAuthorization(any(), any(), any(), any(), any())
+    }
+
+    private fun consentFor(plan: ForeverClientUpdatePlan) = ForeverClientUpdateConsent(
+        plan.planId, plan.downloadBytes, plan.peakAdditionalBytes, plan.privateWorkBytes, plan.destinationBytes,
+    )
+
+    /**
+     * Calls only the private synchronous dispatch branch. The real onStartCommand/run coroutine is not covered:
+     * mockConstruction is thread-local, while run constructs the update service on Dispatchers.IO.
+     */
+    private fun invokePrivateExecutionDispatch(
+        plan: ForeverClientUpdatePlan,
+        consent: ForeverClientUpdateConsent,
+        portabilityAuthorization: ForeverClientUpdateService.PortabilityContinuationAuthorization?,
+        updateService: ForeverClientUpdateService,
+    ) {
+        val controller = Robolectric.buildService(ForeverClientUpdateForegroundService::class.java).create()
+        try {
+            val dispatch = controller.get().javaClass.getDeclaredMethod(
+                "executeWithAutoRecovery",
+                ForeverClientUpdateService::class.java,
+                ForeverClientUpdatePlan::class.java,
+                ForeverClientUpdateConsent::class.java,
+                ForeverClientUpdateService.PortabilityContinuationAuthorization::class.java,
+            ).apply { isAccessible = true }
+            dispatch.invoke(controller.get(), updateService, plan, consent, portabilityAuthorization)
         } finally {
             controller.destroy()
         }

@@ -362,6 +362,10 @@ class ForeverClientUpdatePlan internal constructor(
     internal val cascIndexBytes: Long,
     internal val cascNewSegmentCount: Int,
     internal val looseChangePaths: Set<String>,
+    /** Maximum new payload bytes if every unverified candidate proves invalid. Defaults to the minimum. */
+    val payloadCeilingBytes: Long = downloadBytes,
+    /** Catalog objects counted as unverified-reusable candidates; zero on ordinary plans. */
+    val candidateObjects: Long = 0,
 )
 
 data class ForeverClientUpdateResult(
@@ -428,6 +432,27 @@ class ForeverClientUpdater(
     internal var beforePostRevalidateSampleForTests: (() -> Unit)? = null
     internal var afterRawRetirementForTests: ((String, Boolean) -> Unit)? = null
     internal var beforeRawRetirementForceForTests: ((Int) -> Unit)? = null
+    /**
+     * Durable response-body ledger for the reviewed continuation only. Every
+     * worker transfer shares this instance for the duration of one execution.
+     */
+    private var payloadBudget: ForeverClientPayloadBudget? = null
+
+    private fun fetchObjectForExecution(
+        record: ForeverClientUpdateCatalog.ObjectRecord,
+        workDir: File,
+        cancelled: () -> Boolean,
+        progress: (Long) -> Unit,
+    ): File {
+        val budget = payloadBudget
+        // An injected fetcher stays authoritative (tests and diagnostics); the
+        // durable ledger only wraps the production transfer.
+        return if (budget != null && fetchObject === DEFAULT_UPDATER_FETCH_OBJECT) {
+            ForeverClientUpdateTransfer(budget).fetch(record, workDir, cancelled, progress)
+        } else {
+            fetchObject(record, workDir, cancelled, progress)
+        }
+    }
     private val targetSummary = validatedTargetSummary()
     private val targetCatalogSha256 = catalog.verifiedSha256.lowercase(Locale.ROOT).also {
         require(it.matches(HASH_PATTERN)) { "verified client catalog SHA-256 is malformed" }
@@ -461,6 +486,28 @@ class ForeverClientUpdater(
         consent: ForeverClientUpdateConsent,
         cancelled: () -> Boolean = { false },
         progress: (ForeverClientUpdateProgress) -> Unit = {},
+    ): ForeverClientUpdateResult = executeInternal(destination, plan, consent, null, null, cancelled, progress)
+
+    internal fun executeWithPortabilityAuthorization(
+        destination: ForeverClientUpdateDestination,
+        plan: ForeverClientUpdatePlan,
+        consent: ForeverClientUpdateConsent,
+        portabilityBinding: PortabilityIntentBinding,
+        payloadCeiling: Long,
+        cancelled: () -> Boolean = { false },
+        progress: (ForeverClientUpdateProgress) -> Unit = {},
+    ): ForeverClientUpdateResult = executeInternal(
+        destination, plan, consent, portabilityBinding, payloadCeiling, cancelled, progress,
+    )
+
+    private fun executeInternal(
+        destination: ForeverClientUpdateDestination,
+        plan: ForeverClientUpdatePlan,
+        consent: ForeverClientUpdateConsent,
+        portabilityBinding: PortabilityIntentBinding?,
+        payloadCeiling: Long?,
+        cancelled: () -> Boolean,
+        progress: (ForeverClientUpdateProgress) -> Unit,
     ): ForeverClientUpdateResult = withLease(destination) { leaseHeld ->
         checkConsent(destination, plan, consent)
         ensureNoRootTransaction(destination)
@@ -468,6 +515,7 @@ class ForeverClientUpdater(
         withPlanArchiveOrder(destination, cancelled) { target, archiveOrder ->
         val fresh = buildPlan(destination, cancelled, progress, target, archiveOrder)
         requireSamePlan(plan, fresh)
+        portabilityBinding?.let { requireAdoptedCheckpoint(destination, fresh, it) }
         if (!fresh.hasEnoughSpace) {
             throw IllegalStateException(
                 if (fresh.privateAndDestinationShareFileStore) {
@@ -489,11 +537,31 @@ class ForeverClientUpdater(
         val loosePlan = inspectLooseFiles(destination)
         val privateResume = inspectPrivateWorkspace(destination, plan.sourceRevision, loosePlan)
         val retainedOldSegments = existingSegmentBytes(destination)
-        val cascResult = writeCascDelta(destination, plan, paths, cancelled, progress, archiveOrder)
-        if (Math.addExact(cascResult.reusedObjects, cascResult.writtenObjects) != plan.totalObjects) {
-            throw IllegalStateException("CASC writer did not account for the complete admitted object manifest")
+        payloadBudget = portabilityBinding?.let { binding ->
+            openPayloadBudget(paths.root, binding, requireNotNull(payloadCeiling))
         }
-        materializeLooseFiles(destination, loosePlan, paths, privateResume.stagedLoosePaths, cancelled, progress, plan.downloadBytes)
+        val cascResult = try {
+            val adoptedCandidates = if (paths.stageReceipt != null && plan.sourceRevision == EMPTY_SOURCE_REVISION &&
+                plan.candidateObjects > 0L && plan.totalObjects in 1..Int.MAX_VALUE.toLong()
+            ) {
+                // The bitset was published with the prefix checkpoint during
+                // adoption. It only drives prefetch suppression: every candidate
+                // is still authenticated by the writer before reuse.
+                ForeverCasc.readAdoptedForeignCandidates(
+                    resumableWorkspacePath(destination),
+                    cascCheckpointIdentity(destination, plan.sourceRevision, paths.stageReceipt),
+                    targetCatalogSha256, plan.totalObjects.toInt(),
+                )
+            } else null
+            val written = writeCascDelta(destination, plan, paths, cancelled, progress, archiveOrder, adoptedCandidates)
+            if (Math.addExact(written.reusedObjects, written.writtenObjects) != plan.totalObjects) {
+                throw IllegalStateException("CASC writer did not account for the complete admitted object manifest")
+            }
+            materializeLooseFiles(destination, loosePlan, paths, privateResume.stagedLoosePaths, cancelled, progress, plan.downloadBytes)
+            written
+        } finally {
+            payloadBudget = null
+        }
         checkCancelled(cancelled)
         destination.revalidate()
         val configs = validateConfigAssets()
@@ -1095,6 +1163,8 @@ class ForeverClientUpdater(
         var checkpointedMissingBytes = 0L
         var checkpointedEncodedBytes = 0L
         var checkpointedObjects = 0L
+        var candidateObjects = 0L
+        var candidateBytes = 0L
         val stageReceipt = privateResume.stageReceipt
         val stageDirectory = stageReceipt?.let { transactionStageDirectory(destination, it) }
             ?: File(File(destination.root, TRANSACTION_STAGING_NAME), "unused-${workspaceKey(destination)}")
@@ -1140,6 +1210,18 @@ class ForeverClientUpdater(
                     checkpointIdentity,
                     cancelled,
                 )
+                // Adopted foreign candidates are unverified-reusable: the
+                // bitset is only consulted for the exact adopted checkpoint
+                // identity and receipt that published it. Absent file means an
+                // ordinary sourceless plan; a present but invalid file fails
+                // closed. No other branch reads this file.
+                val adoptedCandidates: ByteArray? =
+                    if (stageReceipt?.sourceRevision == EMPTY_SOURCE_REVISION && summary.objectCount in 1..Int.MAX_VALUE) {
+                        ForeverCasc.readAdoptedForeignCandidates(
+                            resumableWorkspacePath(destination), checkpointIdentity,
+                            targetCatalogSha256, summary.objectCount.toInt(),
+                        )
+                    } else null
                 var currentOrdinal = -1
                 archiveOrder.withObjects(cancelled) { records ->
                     val specs = sequence {
@@ -1165,6 +1247,14 @@ class ForeverClientUpdater(
                             checkpointedEncodedBytes = Math.addExact(checkpointedEncodedBytes, objectSpec.encodedSize)
                             if (!verified) checkpointedMissingBytes = Math.addExact(checkpointedMissingBytes, objectSpec.encodedSize)
                             if (objectSpec.ekey == privateResume.cachedObjectKey) cachedKeyIsCheckpointed = true
+                        } else if (adoptedCandidates != null &&
+                            ForeverCasc.isCandidateOrdinal(adoptedCandidates, currentOrdinal)
+                        ) {
+                            // Header-admitted but unverified: counted for the
+                            // minimum only. Already-staged ordinals stay
+                            // credited through the checkpoint delta above.
+                            candidateObjects = Math.addExact(candidateObjects, 1L)
+                            candidateBytes = Math.addExact(candidateBytes, objectSpec.encodedSize)
                         }
                         if (objectSpec.ekey == privateResume.cachedObjectKey) cachedObjectIsCascMiss = !verified
                     }
@@ -1327,6 +1417,12 @@ class ForeverClientUpdater(
             }
         }
         val transferBytes = Math.addExact(cascTransferBytes.coerceAtLeast(0L), looseTransferBytes.coerceAtLeast(0L))
+        // Unverified candidates are assumed reusable for the minimum, but the
+        // ceiling keeps them as missing: if every candidate proves invalid,
+        // the payload may still reach the ceiling. Ordinary plans have no
+        // candidates, so both values coincide.
+        val minimumTransferBytes =
+            Math.addExact((cascTransferBytes - candidateBytes).coerceAtLeast(0L), looseTransferBytes.coerceAtLeast(0L))
         if (target.sourceDataFiles == null && replayReaderFactory != null && resume.completedObjectCount > 0) {
             // Sealed-prefix overlap admission: new segments start at fresh IDs
             // above the frozen prefix maximum, and the last frozen segment is
@@ -1429,7 +1525,7 @@ class ForeverClientUpdater(
         return ForeverClientUpdatePlan(
             planId,
             summary.version,
-            transferBytes,
+            minimumTransferBytes,
             workspaceBytes,
             destinationBytes,
             peak,
@@ -1451,6 +1547,8 @@ class ForeverClientUpdater(
             scan.indexBytesUpperBound,
             scan.newSegmentCount,
             loose.changes.map { it.path }.toSet(),
+            transferBytes,
+            candidateObjects,
         )
     }
 
@@ -1644,6 +1742,7 @@ class ForeverClientUpdater(
         cancelled: () -> Boolean,
         progress: (ForeverClientUpdateProgress) -> Unit,
         archiveOrder: ForeverClientArchiveOrder?,
+        candidateOrdinals: ByteArray?,
     ): ForeverCasc.IncrementalResult {
         val target = inspectTargetState(destination)
         if (target.sourceRevision != plan.sourceRevision) throw IllegalStateException("client CASC source changed after planning")
@@ -1659,7 +1758,8 @@ class ForeverClientUpdater(
             val overlapIdentity = cascCheckpointIdentity(destination, plan.sourceRevision, paths.stageReceipt)
             val overlapArmed = replayReaderFactory != null &&
                 ForeverCasc.resumableCheckpointHasObjects(paths.cascDataFiles, paths.root, overlapIdentity, cancelled)
-            writeCascDeltaParallel(destination, plan, paths, cancelled, progress, overlapArmed, overlapIdentity, requiredOrder)
+            writeCascDeltaParallel(destination, plan, paths, cancelled, progress, overlapArmed, overlapIdentity, requiredOrder,
+                candidateOrdinals)
         } else {
             check(archiveOrder == null) { "existing-source CASC updates must retain their serial EKey path" }
             writeCascDeltaSerial(destination, plan, paths, target, cancelled, progress)
@@ -1733,7 +1833,7 @@ class ForeverClientUpdater(
                         Files.size(part.toPath()).takeIf { it in 1 until record.encodedSize } ?: 0L
                     } else 0L
                     var objectNetworkBytes = 0L
-                    val raw = fetchObject(record, paths.objects, cancelled) { bytes ->
+                    val raw = fetchObjectForExecution(record, paths.objects, cancelled) { bytes ->
                         objectNetworkBytes = maxOf(objectNetworkBytes, (bytes - resumeOffset).coerceAtLeast(0L))
                         reportLocked(objectNetworkBytes)
                     }
@@ -1896,6 +1996,7 @@ class ForeverClientUpdater(
         overlapArmed: Boolean,
         overlapIdentity: String,
         archiveOrder: ForeverClientArchiveOrder,
+        candidateOrdinals: ByteArray?,
     ): ForeverCasc.IncrementalResult {
         val reducedStorageCadenceEligible =
             destination.revalidateCascSegment != null && destination.revalidateCascCommitGroup != null
@@ -2022,7 +2123,7 @@ class ForeverClientUpdater(
                 val resumeOffset = if (Files.isRegularFile(part.toPath(), LinkOption.NOFOLLOW_LINKS)) {
                     Files.size(part.toPath()).takeIf { it in 1 until record.encodedSize } ?: 0L
                 } else 0L
-                return fetchObject(record, paths.objects, workerCancelled) { bytes ->
+                return fetchObjectForExecution(record, paths.objects, workerCancelled) { bytes ->
                     if (tearingDown.get()) throw CancellationException("client update was paused or cancelled")
                     val network = (bytes - resumeOffset).coerceAtLeast(0L)
                     synchronized(progressLock) {
@@ -2032,10 +2133,13 @@ class ForeverClientUpdater(
                     }
                 }
             }
-            val batchFetch = batchFetchForTests ?: if (fetchObject === DEFAULT_UPDATER_FETCH_OBJECT) {
-                DEFAULT_UPDATER_FETCH_BATCH
-            } else {
-                null
+            val batchFetch = batchFetchForTests ?: when {
+                fetchObject !== DEFAULT_UPDATER_FETCH_OBJECT -> null
+                payloadBudget != null -> { records, work, batchCancelled, onBytes ->
+                    ForeverClientUpdateTransfer(requireNotNull(payloadBudget))
+                        .fetchBatch(records, work, batchCancelled, onBytes)
+                }
+                else -> DEFAULT_UPDATER_FETCH_BATCH
             }
             fun resumeOffset(record: ForeverClientUpdateCatalog.ObjectRecord): Long {
                 val part = File(paths.objects, "${record.ekey}.part")
@@ -2359,6 +2463,18 @@ class ForeverClientUpdater(
                                             if (overlap != null || ekey !in earlyCheckpointedRawKeys) {
                                                 emit(BareCheckpointObject(spec, record, sourceOrdinal))
                                             }
+                                            return@forEach
+                                        }
+                                        if (candidateOrdinals != null &&
+                                            ForeverCasc.isCandidateOrdinal(candidateOrdinals, sourceOrdinal)
+                                        ) {
+                                            // Header-admitted, not yet authenticated: never
+                                            // prefetch it. The writer must prove the existing
+                                            // body before reuse; if that proof fails it falls
+                                            // back to sourceFor and fails closed rather than
+                                            // silently downloading outside this pipeline.
+                                            flushCandidates()
+                                            emit(BareCheckpointObject(spec, record, sourceOrdinal))
                                             return@forEach
                                         }
                                         if (record.sourceKind != "range" ||
@@ -2811,7 +2927,7 @@ class ForeverClientUpdater(
             val resumeOffset = if (Files.isRegularFile(part.toPath(), LinkOption.NOFOLLOW_LINKS)) {
                 Files.size(part.toPath()).takeIf { it in 1 until item.record.encodedSize } ?: 0L
             } else 0L
-            val raw = fetchObject(item.record, paths.objects, cancelled) { bytes ->
+            val raw = fetchObjectForExecution(item.record, paths.objects, cancelled) { bytes ->
                 objectNetworkBytes = maxOf(objectNetworkBytes, (bytes - resumeOffset).coerceAtLeast(0L))
                 progress(ForeverClientUpdateProgress(ForeverClientUpdateProgress.Phase.DOWNLOADING, index.toLong(), loose.changes.size.toLong(), Math.addExact(transferred, objectNetworkBytes), totalTransferBytes))
             }
@@ -3014,6 +3130,29 @@ class ForeverClientUpdater(
         val objectRecord = catalog.objectByKey(key)
         if (objectRecord.ekey != key) throw IllegalStateException("install metadata object does not bind to its encoded EKey")
         return key
+    }
+
+    /**
+     * Reopen the same durable ledger for the same staged workspace; a new
+     * operation creates it exactly once. A changed binding or ceiling fails
+     * closed instead of silently widening the reviewed maximum.
+     */
+    private fun openPayloadBudget(
+        root: File,
+        binding: PortabilityIntentBinding,
+        ceiling: Long,
+    ): ForeverClientPayloadBudget {
+        require(ceiling >= 0L) { "payload ceiling is invalid" }
+        val directory = File(root, "payload-budget")
+        val bindingDigest = MessageDigest.getInstance("SHA-256").digest(
+            "${binding.stageId}|${binding.catalogDigest}|${binding.checkpointIdentityDigest}".toByteArray(Charsets.UTF_8),
+        ).joinToString("") { "%02x".format(it.toInt() and 0xff) }
+        if (Files.exists(directory.toPath(), LinkOption.NOFOLLOW_LINKS)) {
+            return ForeverClientPayloadBudget.open(directory, bindingDigest, ceiling)
+        }
+        Files.createDirectory(directory.toPath())
+        forceDirectory(root.toPath())
+        return ForeverClientPayloadBudget.create(directory, bindingDigest, ceiling)
     }
 
     private fun prepareWorkspace(
@@ -3393,7 +3532,8 @@ class ForeverClientUpdater(
             requireSafeAncestors(root.toPath())
             requireExactFile(File(root, WORKSPACE_OWNER_NAME).toPath(), workspaceOwnerBytes(destination, EMPTY_SOURCE_REVISION), "prepared workspace owner")
             validatePrivateWorkspaceContents(root)
-            val expectedFiles = setOf(WORKSPACE_OWNER_NAME, STAGE_RECEIPT_NAME, CASC_RESUME_OWNER_NAME, CASC_RESUME_CHECKPOINT_NAME)
+            val expectedFiles = setOf(WORKSPACE_OWNER_NAME, STAGE_RECEIPT_NAME, CASC_RESUME_OWNER_NAME,
+                CASC_RESUME_CHECKPOINT_NAME, ForeverCasc.FOREIGN_CANDIDATE_ORDINALS_NAME)
             require(boundedPortabilityWorkspaceNodes(root).map { root.toPath().relativize(it).toString() }.toSet() == expectedFiles) {
                 "prepared workspace contains unexpected state"
             }
@@ -3563,7 +3703,7 @@ class ForeverClientUpdater(
         rejectOrphanPortabilityArtifacts()
         require(confirmedReviewDigest == reviewed.review.digest) { "partial continuation plan was not confirmed" }
         require(reviewed.review.hasEnoughSpace) { "partial continuation plan does not have enough space" }
-        require(reviewed.objects.targetCatalogDigest == targetCatalogSha256 &&
+        require(reviewed.prefix.targetCatalogDigest == targetCatalogSha256 &&
             reviewed.targetPlan.totalObjects == targetSummary.objectCount) { "partial review belongs to another admitted target" }
         validateDestination(destination)
         require(!transaction(destination).hasPendingTransaction()) { "recover the ordinary journal first" }
@@ -3577,7 +3717,7 @@ class ForeverClientUpdater(
         val oldMarkerBytes = readPortabilityFile(marker, 4096)
         val oldMarkerDigest = sha256(oldMarkerBytes)
         require(oldMarkerDigest == reviewed.markerDigest) { "partial stage ownership changed since review" }
-        require(dataFiles.toPath().toAbsolutePath().normalize().toString() == reviewed.objects.canonicalDataFilesPath) {
+        require(dataFiles.toPath().toAbsolutePath().normalize().toString() == reviewed.prefix.canonicalDataFilesPath) {
             "partial source route changed since review"
         }
         require(catalogReceiptDigest() == oldCatalogReceiptDigest) { "active catalog admission changed since review" }
@@ -3603,11 +3743,11 @@ class ForeverClientUpdater(
                 "partial stage layout changed during adoption"
             }
             require(sha256(readPortabilityFile(marker, 4096)) == expectedMarker) { "partial stage marker changed during adoption" }
-            require(dataFiles.toPath().toAbsolutePath().normalize().toString() == reviewed.objects.canonicalDataFilesPath)
-            // The scanner already checks each segment around its body reads. Do not
-            // restat the entire USB inventory for every authenticated object.
+            require(dataFiles.toPath().toAbsolutePath().normalize().toString() == reviewed.prefix.canonicalDataFilesPath)
+            // The scanner already checks each segment around its header reads. Do not
+            // restat the entire USB inventory for every enumerated candidate.
             if (!inventory) return
-            val expectedSegments = reviewed.objects.segments.associateBy { it.name }
+            val expectedSegments = reviewed.prefix.segments.associateBy { it.name }
             Files.newDirectoryStream(dataFiles.toPath()).use { children ->
                 var count = 0
                 children.forEach { path ->
@@ -3623,17 +3763,71 @@ class ForeverClientUpdater(
             }
         }
 
-        // Confirmed consent precedes this full authenticated scan and its source-data force barriers.
-        revalidateSource(inventory = true)
-        val freshVerification = withArchiveOrder(cancelled) { order ->
-            val membershipCache = object : LinkedHashMap<String, IndexedValue<ForeverCasc.IncrementalObjectSpec>>(2048, 0.75f, true) {
-                override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, IndexedValue<ForeverCasc.IncrementalObjectSpec>>?) = size > 2048
+        val directedRecordChecksEligible = destination.revalidateCascSegment != null &&
+            destination.revalidateCascCommitGroup != null
+        var recordsSinceBindingCheck = 0
+        var nextBindingCheck = 0L
+        // Directed proof bounds the interval, but a transient route swap within
+        // this 16-record/250 ms window may not be observed; retain full boundary
+        // checks and require independent security review of this tradeoff.
+        fun revalidateRecordBinding() {
+            checkCancelled(cancelled)
+            if (!directedRecordChecksEligible) {
+                revalidateSource()
+                return
             }
-            ForeverCasc.prepareForeignStageCheckpoint(
-                dataFiles, prepared, checkpointIdentity, targetCatalogSha256, targetSummary.objectCount.toInt(),
-                { ekey -> membershipCache[ekey] ?: archiveTargetMembership(order, ekey).also { membershipCache[ekey] = it } },
-                cancelled, { revalidateSource() },
+            check(leaseHeld()) { "portability updater lease was lost" }
+            val now = System.nanoTime()
+            if (recordsSinceBindingCheck == 0 || now >= nextBindingCheck) {
+                requireNotNull(destination.revalidateCascCommitGroup).invoke()
+                requireExactFile(marker.toPath(), oldMarkerBytes, "foreign partial stage marker binding")
+                nextBindingCheck = now + 250_000_000L
+                recordsSinceBindingCheck = 0
+            }
+            recordsSinceBindingCheck = (recordsSinceBindingCheck + 1) % ForeverCasc.RESUMABLE_COMMIT_GROUP_OBJECTS
+        }
+
+        // Confirmed consent precedes this header-only re-enumeration and its
+        // checkpoint barriers. No body is authenticated here: candidates are
+        // re-admitted by header under the same lease, then bound to the
+        // reviewed prefix, bitset, plan and digest before anything is published.
+        revalidateSource(inventory = true)
+        val objectCount = targetSummary.objectCount.toInt()
+        val scanScratch = File(privateWorkDirectory, ".portability-scan-$operationId")
+        val freshScan = withArchiveOrder(cancelled) { order ->
+            val admitted = java.util.BitSet(objectCount)
+            val scan = ForeverCasc.inspectForeignStageCandidates(
+                dataFiles, scanScratch, targetCatalogSha256, objectCount,
+                { key -> archiveTargetMembership(order, key) },
+                cancelled, { revalidateSource() }, ::revalidateRecordBinding,
+                targetMembershipBatch = { keys -> archiveTargetMembershipBatch(order, keys, cancelled) },
+                expectedPrefix = reviewed.prefix,
+                onCandidateLocation = { admitted.set(it.ordinal) },
             )
+            require(admitted.cardinality().toLong() == scan.candidateCount) {
+                "foreign candidate coverage changed during adoption"
+            }
+            scan to admitted
+        }
+        val (freshPrefix, freshAdmitted) = freshScan
+        require(freshPrefix == reviewed.prefix) { "partial source inventory changed since confirmation review" }
+        val freshOrdinalBytes = ByteArray((objectCount + 7) / 8)
+        freshAdmitted.toByteArray().copyInto(freshOrdinalBytes)
+        require(freshOrdinalBytes.contentEquals(reviewed.candidateOrdinals)) {
+            "partial candidate set changed since confirmation review"
+        }
+        // The enumeration deleted its scratch; the planner recreates the same
+        // fresh directory, so no second orphan root is needed.
+        val freshPlan = withArchiveOrder(cancelled) { order ->
+            order.withObjects(cancelled) { records ->
+                ForeverCasc.planCandidateTarget(
+                    dataFiles, scanScratch, freshPrefix, objectCount,
+                    records.map { record ->
+                        validateTransferBounds(record)
+                        ForeverCasc.IncrementalObjectSpec(record.ekey, record.contentKey, record.encodedSize, record.decodedSize)
+                    }, freshOrdinalBytes, cancelled, { revalidateSource() },
+                )
+            }
         }
         val cleanupFiles = LinkedHashMap<File, String>()
         val checkpoint = File(prepared, CASC_RESUME_CHECKPOINT_NAME)
@@ -3641,19 +3835,20 @@ class ForeverClientUpdater(
         var admissionArtifact: File? = null
         var manifestArtifact: File? = null
         var manifestBytes: ByteArray? = null
+        // Publish the identity-bound prefix checkpoint plus the candidate
+        // bitset only after the fresh enumeration matched the reviewed prefix,
+        // bitset, plan and digest above. Nothing here authenticates a body.
+        ForeverCasc.prepareForeignPrefixCheckpoint(
+            dataFiles, prepared, checkpointIdentity, freshPrefix, objectCount, freshOrdinalBytes)
+        val candidateOrdinalsFile = File(prepared, ForeverCasc.FOREIGN_CANDIDATE_ORDINALS_NAME)
         try {
         val checkpointDigest = sha256File(checkpoint)
         cleanupFiles[checkpoint] = checkpointDigest
+        cleanupFiles[candidateOrdinalsFile] = sha256File(candidateOrdinalsFile)
         cleanupFiles[File(prepared, CASC_RESUME_OWNER_NAME)] = sha256(
             "FWCASCR1".toByteArray(Charsets.US_ASCII) + checkpointIdentityDigest.chunked(2).map { it.toInt(16).toByte() }.toByteArray())
         portabilityBoundaryForTests?.invoke("checkpoint-prepared")
-        require(freshVerification.targetCatalogDigest == reviewed.objects.targetCatalogDigest &&
-            freshVerification.inventoryDigest == reviewed.objects.inventoryDigest &&
-            freshVerification.objectCount == reviewed.objects.objectCount &&
-            freshVerification.canonicalDataFilesPath == reviewed.objects.canonicalDataFilesPath) {
-            "partial source inventory changed since confirmation review"
-        }
-        val freshReview = portabilityReview(destination, oldMarkerDigest, freshVerification, reviewed.targetPlan, cancelled)
+        val freshReview = portabilityReview(destination, oldMarkerDigest, freshPrefix, freshPlan, cancelled)
         require(freshReview.digest == confirmedReviewDigest && freshReview.hasEnoughSpace) {
             "partial continuation bindings or available space changed; review and confirm again"
         }
@@ -3683,7 +3878,7 @@ class ForeverClientUpdater(
         val oldWorkspaceDigest = oldWorkspaceManifest?.let(::sha256)
         val binding = PortabilityIntentBinding(
             operationId, generation, reviewed.stageId, targetCatalogSha256, confirmedReviewDigest,
-            freshVerification.inventoryDigest, checkpointDigest, checkpointIdentityDigest,
+            freshPrefix.sourceInventoryBinding, checkpointDigest, checkpointIdentityDigest,
             reviewed.markerDigest, markerDigest, oldWorkspaceDigest, oldCatalogReceiptDigest, newCatalogReceiptDigest,
         )
         val manifestPath = File(privateWorkDirectory, ".forever-portability-$operationId.old-workspace")
@@ -3702,7 +3897,9 @@ class ForeverClientUpdater(
             validatePreparedAndSource, catalogReceiptDigest, publishCatalogReceipt, cancelled, leaseHeld)
         Files.deleteIfExists(admissionPath.toPath())
         forceDirectory(privateWorkDirectory.toPath())
-        PortabilityAdoptionResult(reviewed.copy(objects = freshVerification, review = freshReview), binding)
+        PortabilityAdoptionResult(
+            reviewed.copy(prefix = freshPrefix, candidateOrdinals = freshOrdinalBytes, targetPlan = freshPlan, review = freshReview),
+            binding)
         } catch (failure: Exception) {
             // Once an intent may have been published, all operation state is recovery state.
             val intent = File(privateWorkDirectory, ".forever-portability-intent.json")
@@ -3821,16 +4018,42 @@ class ForeverClientUpdater(
         val markerBytes = transaction(destination, leaseHeld).generationStagingMarkerBytes(binding.stageId, binding.generation)
         require(sha256(markerBytes) == binding.newMarkerDigest)
         val scratch = File(candidate, ".recovery-scan-${binding.operationId}")
-        val refreshed = withArchiveOrder(cancelled) { order ->
-            ForeverCasc.inspectForeignStage(dataFiles, scratch, binding.catalogDigest, targetSummary.objectCount.toInt(),
-                { ekey -> archiveTargetMembership(order, ekey) }, cancelled, {
-                    check(leaseHeld()); destination.revalidate(); verifyStorageMarker(destination)
-                    require(sha256(readPortabilityFile(marker, 4096)) in setOf(binding.oldMarkerDigest, binding.newMarkerDigest))
-                }, expectedInventoryDigest = binding.inventoryDigest) { _, _, _ ->
-                    portabilityBoundaryForTests?.invoke("recovery-record-verified")
+        val recoveredDigest = withArchiveOrder(cancelled) { order ->
+            fun revalidateStage() {
+                check(leaseHeld())
+                destination.revalidate()
+                verifyStorageMarker(destination)
+                require(sha256(readPortabilityFile(marker, 4096)) in setOf(binding.oldMarkerDigest, binding.newMarkerDigest))
+            }
+            val checkpointIdentity = cascCheckpointIdentity(destination, EMPTY_SOURCE_REVISION, stageReceipt)
+            val prefix = ForeverCasc.readForeignPrefixRecord(dataFiles, candidate, checkpointIdentity, cancelled)
+            if (prefix != null) {
+                // Header-only checkpoint: re-enumerate candidates under the same
+                // prefix instead of scanning every body again. Bodies stay
+                // unauthenticated until their per-object proof at use.
+                val scan = ForeverCasc.inspectForeignStageCandidates(
+                    dataFiles, scratch, binding.catalogDigest, targetSummary.objectCount.toInt(),
+                    { ekey -> archiveTargetMembership(order, ekey) }, cancelled, ::revalidateStage,
+                    expectedPrefix = prefix,
+                    onCandidateLocation = { portabilityBoundaryForTests?.invoke("recovery-candidate-located") },
+                )
+                require(scan == prefix) { "pending foreign prefix changed during recovery" }
+                require(scan.sourceInventoryBinding == binding.inventoryDigest) {
+                    "foreign CASC inventory does not match the durable recovery binding"
                 }
+                scan.sourceInventoryBinding
+            } else {
+                // Legacy authenticated checkpoint: keep the historical body scan.
+                ForeverCasc.inspectForeignStage(
+                    dataFiles, scratch, binding.catalogDigest, targetSummary.objectCount.toInt(),
+                    { ekey -> archiveTargetMembership(order, ekey) }, cancelled, ::revalidateStage,
+                    expectedInventoryDigest = binding.inventoryDigest,
+                ) { _, _, _ ->
+                    portabilityBoundaryForTests?.invoke("recovery-record-verified")
+                }.inventoryDigest
+            }
         }
-        require(refreshed.inventoryDigest == binding.inventoryDigest && refreshed.targetCatalogDigest == binding.catalogDigest)
+        require(recoveredDigest == binding.inventoryDigest)
         val validate: (File, Boolean) -> Unit = { root, _ ->
             require(root == candidate || root == prepared || root == canonical)
             requireExactFile(File(root, WORKSPACE_OWNER_NAME).toPath(), owner, "pending workspace owner")
@@ -4009,7 +4232,7 @@ class ForeverClientUpdater(
             "update plan is bound to a different frozen destination"
         }
         require(
-            consent.planId == plan.planId && consent.downloadBytes >= plan.downloadBytes &&
+            consent.planId == plan.planId && consent.downloadBytes >= plan.payloadCeilingBytes &&
                 consent.peakAdditionalBytes >= plan.peakAdditionalBytes &&
                 consent.privateWorkBytes >= plan.privateWorkBytes && consent.destinationBytes >= plan.destinationBytes,
         ) { "recorded download or storage consent does not cover this plan's remaining cost" }
@@ -4017,11 +4240,44 @@ class ForeverClientUpdater(
 
     private fun requireSamePlan(original: ForeverClientUpdatePlan, fresh: ForeverClientUpdatePlan) {
         if (original.snapshotHash != fresh.snapshotHash || original.sourceRevision != fresh.sourceRevision ||
+            original.version != fresh.version || original.planId != fresh.planId ||
             original.downloadBytes != fresh.downloadBytes || original.privateWorkBytes != fresh.privateWorkBytes ||
             original.destinationBytes != fresh.destinationBytes || original.totalObjects != fresh.totalObjects ||
             original.reusableObjects != fresh.reusableObjects || original.missingObjects != fresh.missingObjects ||
-            original.looseChangePaths != fresh.looseChangePaths || original.transactionFileCount != fresh.transactionFileCount
+            original.peakAdditionalBytes != fresh.peakAdditionalBytes ||
+            original.cascNewSegmentBytes != fresh.cascNewSegmentBytes || original.cascIndexBytes != fresh.cascIndexBytes ||
+            original.cascNewSegmentCount != fresh.cascNewSegmentCount ||
+            original.looseChangePaths != fresh.looseChangePaths || original.looseChanges != fresh.looseChanges ||
+            original.transactionFileCount != fresh.transactionFileCount ||
+            original.payloadCeilingBytes != fresh.payloadCeilingBytes ||
+            original.candidateObjects != fresh.candidateObjects ||
+            original.privateAndDestinationShareFileStore != fresh.privateAndDestinationShareFileStore
         ) throw IllegalStateException("destination or admitted source changed after the displayed update plan; plan again")
+    }
+
+    /** A one-consent continuation is tied to the exact checkpoint created by adoption. */
+    private fun requireAdoptedCheckpoint(
+        destination: ForeverClientUpdateDestination,
+        plan: ForeverClientUpdatePlan,
+        binding: PortabilityIntentBinding,
+    ) {
+        require(binding.catalogDigest == targetCatalogSha256 &&
+            binding.checkpointDigest.matches(Regex("[0-9a-f]{64}")) &&
+            binding.checkpointIdentityDigest.matches(Regex("[0-9a-f]{64}"))) {
+            "USB continuation authorization belongs to another admitted catalog"
+        }
+        require(plan.storageId == destination.storageId &&
+            plan.destinationPath == destination.root.toPath().toAbsolutePath().normalize().toString()) {
+            "USB continuation authorization belongs to another destination"
+        }
+        val checkpoint = File(resumableWorkspacePath(destination), CASC_RESUME_CHECKPOINT_NAME)
+        val owner = File(resumableWorkspacePath(destination), CASC_RESUME_OWNER_NAME)
+        require(sha256File(checkpoint) == binding.checkpointDigest) {
+            "adopted USB checkpoint changed after its reviewed consent"
+        }
+        val expectedOwner = "FWCASCR1".toByteArray(Charsets.US_ASCII) +
+            binding.checkpointIdentityDigest.chunked(2).map { it.toInt(16).toByte() }.toByteArray()
+        requireExactFile(owner.toPath(), expectedOwner, "adopted USB checkpoint identity")
     }
 
     private fun hasPendingUpdateState(destination: ForeverClientUpdateDestination): Boolean =
@@ -4029,14 +4285,56 @@ class ForeverClientUpdater(
             Files.exists(resumableWorkspacePath(destination).toPath(), LinkOption.NOFOLLOW_LINKS)
 
     internal enum class PortabilitySourceKind {
-        EMPTY, PUBLISHED_CANDIDATE, PARTIAL_CANDIDATE, UNREADABLE_OR_AMBIGUOUS,
+        EMPTY, NO_PORTABILITY_CANDIDATE, PUBLISHED_CANDIDATE, PARTIAL_CANDIDATE, OWN_PENDING, UNREADABLE_OR_AMBIGUOUS,
     }
 
     /** Metadata only: neither candidate verdict authenticates objects or permits adoption. */
     internal fun discoverPortabilitySource(
         destination: ForeverClientUpdateDestination,
     ): PortabilitySourceKind = withLease(destination, allowRootPending = true) {
-        inspectPortabilitySourceMetadata(destination)
+        val guardState = resumeGuardState(destination)
+        when (guardState) {
+            ResumeGuardState.OWN_PENDING -> return@withLease PortabilitySourceKind.OWN_PENDING
+            ResumeGuardState.IDLE -> Unit
+            ResumeGuardState.BLOCKED -> {
+                // A foreign stage is intentionally discoverable, but never let a
+                // blocked owned receipt, journal, or private workspace masquerade
+                // as a foreign candidate. These checks are bounded metadata only.
+                val receipt = try {
+                    readStageReceipt(destination)
+                } catch (_: Exception) {
+                    return@withLease PortabilitySourceKind.UNREADABLE_OR_AMBIGUOUS
+                }
+                if (receipt != null || transaction(destination) { false }.hasPendingTransaction() ||
+                    privateWorkspaceEvidencePresent()
+                ) return@withLease PortabilitySourceKind.UNREADABLE_OR_AMBIGUOUS
+            }
+        }
+        val verdict = inspectPortabilitySourceMetadata(destination)
+        if (guardState == ResumeGuardState.IDLE && verdict == PortabilitySourceKind.UNREADABLE_OR_AMBIGUOUS &&
+            hasNoPortabilityCandidate(destination)
+        ) return@withLease PortabilitySourceKind.NO_PORTABILITY_CANDIDATE
+        verdict
+    }
+
+    /** An ordinary destination is not an empty portability source; keep adoption validation strict. */
+    private fun hasNoPortabilityCandidate(destination: ForeverClientUpdateDestination): Boolean {
+        verifyStorageMarker(destination)
+        val root = destination.root.toPath()
+        if (Files.isSymbolicLink(root)) return false
+        val rootAbsent = !Files.exists(root, LinkOption.NOFOLLOW_LINKS)
+        if (!rootAbsent && !Files.isDirectory(root, LinkOption.NOFOLLOW_LINKS)) return false
+        if (!rootAbsent) {
+            if (Files.exists(root.resolve(TRANSACTION_STAGING_NAME), LinkOption.NOFOLLOW_LINKS) ||
+                Files.exists(root.resolve(".build.info"), LinkOption.NOFOLLOW_LINKS)
+            ) return false
+            Files.newDirectoryStream(root).use { children ->
+                if (children.any { Files.isSymbolicLink(it) }) return false
+            }
+        }
+        destination.revalidate()
+        verifyStorageMarker(destination)
+        return true
     }
 
     private fun inspectPortabilitySourceMetadata(
@@ -4096,7 +4394,10 @@ class ForeverClientUpdater(
     internal data class PartialPortabilityVerification(
         val stageId: String,
         val markerDigest: String,
-        val objects: ForeverCasc.ForeignStageVerification,
+        /** Header-admitted inventory only; no body was authenticated to produce it. */
+        val prefix: ForeverCasc.ForeignStageCandidateScan,
+        /** Catalog-ordinal bitset (LSB-first) marking the header-admitted candidates. */
+        val candidateOrdinals: ByteArray,
         val targetPlan: ForeverCasc.TargetScanResult,
         val review: PortabilityReview,
     )
@@ -4110,12 +4411,24 @@ class ForeverClientUpdater(
         val peakAdditionalBytes: Long,
         val hasEnoughSpace: Boolean,
         val snapshotHash: String,
+        val totalObjects: Long,
+        val reusableObjects: Long,
+        val missingObjects: Long,
+        val cascNewSegmentBytes: Long,
+        val cascIndexBytes: Long,
+        val cascNewSegmentCount: Int,
+        val transactionFileCount: Int,
+        val looseChangePaths: Set<String>,
+        /** Maximum new payload bytes if every unverified candidate proves invalid. */
+        val payloadCeilingBytes: Long,
+        /** All totals are conservative upper bounds, never measured actuals. */
+        val totalsAreUpperBounds: Boolean,
     )
 
     private fun portabilityReview(
         destination: ForeverClientUpdateDestination,
         markerDigest: String,
-        verified: ForeverCasc.ForeignStageVerification,
+        prefix: ForeverCasc.ForeignStageCandidateScan,
         scan: ForeverCasc.TargetScanResult,
         cancelled: () -> Boolean,
     ): PortabilityReview {
@@ -4134,15 +4447,17 @@ class ForeverClientUpdater(
             } else check(configMatches(file, config.hash)) { "existing CASC config is corrupt or foreign" }
             config.hash to current
         }
-        val operations = Math.addExact(Math.addExact(Math.addExact(verified.segments.size, scan.newSegmentCount), 16),
+        val operations = Math.addExact(Math.addExact(Math.addExact(prefix.segments.size, scan.newSegmentCount), 16),
             Math.addExact(Math.addExact(loose.changes.size, configCount), 1))
         require(operations in 1..MAX_TRANSACTION_FILES) { "portability exceeds the bounded transaction file count" }
         val bounds = catalog.objectSizeBounds(cancelled)
         require(bounds.maxEncodedSize in 1..MAX_ENCODED_BYTES && bounds.maxDecodedSize in 0..MAX_DECODED_BYTES)
         val largest = bounds.maxEncodedSize
-        val prefetch = if (scan.missingObjects == 0L) 0L else
-            if (scan.missingObjects > PREFETCH_MAX_BYTES / largest) PREFETCH_MAX_BYTES else
-                minOf(PREFETCH_MAX_BYTES, Math.multiplyExact(scan.missingObjects, largest))
+        // Conservative: candidates are unverified, so any of them may still
+        // need a download slot. Total objects, not only the missing ones.
+        val prefetch = if (scan.totalObjects == 0L) 0L else
+            if (scan.totalObjects > PREFETCH_MAX_BYTES / largest) PREFETCH_MAX_BYTES else
+                minOf(PREFETCH_MAX_BYTES, Math.multiplyExact(scan.totalObjects, largest))
         // Reserve a complete NEW checkpoint, not a copy of the previous phone's
         // state. C->S is a same-filesystem rename, not another private-data copy.
         // The manifest reserve matches the transition codec's bounded 2 MiB.
@@ -4154,7 +4469,12 @@ class ForeverClientUpdater(
         val destinationBytes = sumExact(scan.newSegmentBytesUpperBound, scan.indexBytesUpperBound,
             CASC_TABLE_AND_SORT_RESERVE, loose.changedDecodedBytes, configBytes, buildInfo.size.toLong(),
             loose.backupBytes, JOURNAL_AND_MARGIN_RESERVE)
-        val download = Math.addExact(scan.downloadBytes, loose.changes.sumOf { it.record.encodedSize })
+        val looseEncoded = loose.changes.sumOf { it.record.encodedSize }
+        val download = Math.addExact(scan.downloadBytes, looseEncoded)
+        // Maximum new payload if every unverified candidate proves invalid:
+        // encoded bytes of every non-owned catalog object plus loose changes.
+        // Retries are not covered; the durable budget fails closed at this bound.
+        val ceiling = Math.addExact(Math.addExact(scan.downloadBytes, scan.reusedEncodedBytes), looseEncoded)
         val buildState = inspectBuildInfo(destination, buildInfo, true, destination.sourceOrigin)
         val snapshot = snapshotHash(EMPTY_SOURCE_REVISION, verifyStorageMarker(destination),
             destination.storageMarkerIdentity, loose, buildState, configs, observed, buildInfo)
@@ -4163,17 +4483,27 @@ class ForeverClientUpdater(
         val destinationAvailable = ForeverClientUpdateCatalog.availableBytes(destination.root.toPath())
         val shared = ForeverClientUpdateCatalog.sharedCapacity(privateWorkDirectory.toPath(), destination.root.toPath())
         checkCancelled(cancelled)
+        val loosePaths = loose.changes.map { it.path }.toSet()
         val digest = sha256(listOf(targetBinding, destination.storageId,
             destination.root.toPath().toAbsolutePath().normalize().toString(), markerDigest,
-            verified.inventoryDigest, snapshot, download, privateBytes, destinationBytes).joinToString("\n").toByteArray(Charsets.UTF_8))
+            prefix.sourceInventoryBinding, prefix.candidateCount, ceiling,
+            snapshot, download, privateBytes, destinationBytes,
+            scan.totalObjects, prefix.candidateCount, scan.missingObjects,
+            scan.newSegmentBytesUpperBound, scan.indexBytesUpperBound, scan.newSegmentCount, operations,
+            loosePaths.sorted().joinToString("\n")).joinToString("\n").toByteArray(Charsets.UTF_8))
         return PortabilityReview(digest, download, privateBytes, destinationBytes, peak,
             if (shared) privateAvailable >= peak else privateAvailable >= privateBytes && destinationAvailable >= destinationBytes,
-            snapshot)
+            snapshot, scan.totalObjects, prefix.candidateCount, scan.missingObjects,
+            scan.newSegmentBytesUpperBound, scan.indexBytesUpperBound, scan.newSegmentCount, operations, loosePaths,
+            ceiling, true)
     }
 
-    /** Explicit full verification, never called by discovery. Result/rows remain
-     * provisional: this lease ends on return; adoption must revalidate all bindings
-     * under its own uninterrupted exclusion before publishing any new state. */
+    /** Header-only review, never called by discovery. No body is read or
+     * authenticated here: candidates are header-admitted locations whose
+     * catalog ordinals are recorded in a bitset for the later plan. Rows sent
+     * to [onVerifiedRecord] and the returned prefix are provisional: this
+     * lease ends on return; adoption must re-enumerate and revalidate all
+     * bindings under its own uninterrupted exclusion before publishing state. */
     internal fun verifyPartialPortabilitySource(
         destination: ForeverClientUpdateDestination,
         cancelled: () -> Boolean,
@@ -4253,20 +4583,43 @@ class ForeverClientUpdater(
         withArchiveOrder(cancelled) { order ->
             val scratch = File(privateWorkDirectory, ".portability-scan-${UUID.randomUUID()}")
             order.withObjects(cancelled) { records ->
-                val result = ForeverCasc.inspectForeignTarget(
+                val specs = records.map { record ->
+                    validateTransferBounds(record)
+                    ForeverCasc.IncrementalObjectSpec(record.ekey, record.contentKey, record.encodedSize, record.decodedSize)
+                }
+                val objectCount = targetSummary.objectCount.toInt()
+                val admitted = java.util.BitSet(objectCount)
+                // Header-only enumeration: bodies are never read here. The
+                // same stage/marker discovery and the same revalidation
+                // discipline as the former full scan still bracket every
+                // segment and the complete result.
+                val scan = ForeverCasc.inspectForeignStageCandidates(
                     stage.resolve("Data/data").toFile(), scratch, targetCatalogSha256,
-                    targetSummary.objectCount.toInt(), { key -> archiveTargetMembership(order, key) },
-                    records.map { record ->
-                        validateTransferBounds(record)
-                        ForeverCasc.IncrementalObjectSpec(record.ekey, record.contentKey, record.encodedSize, record.decodedSize)
-                    }, cancelled, ::revalidate, ::revalidateRecord,
+                    objectCount, { key -> archiveTargetMembership(order, key) },
+                    cancelled, ::revalidate, ::revalidateRecord,
                     targetMembershipBatch = { keys -> archiveTargetMembershipBatch(order, keys, cancelled) },
-                    onVerifiedRecord = onVerifiedRecord,
+                    expectedPrefix = null,
+                    onCandidateLocation = { location ->
+                        admitted.set(location.ordinal)
+                        onVerifiedRecord(location.target, location.archiveId, location.offset)
+                    },
+                )
+                require(admitted.cardinality().toLong() == scan.candidateCount) {
+                    "foreign candidate coverage changed during enumeration"
+                }
+                val ordinalBytes = ByteArray((objectCount + 7) / 8)
+                admitted.toByteArray().copyInto(ordinalBytes)
+                revalidate()
+                // The scan deleted its scratch; the planner recreates the same
+                // fresh directory, so no second UUID root is needed.
+                val plan = ForeverCasc.planCandidateTarget(
+                    stage.resolve("Data/data").toFile(), scratch, scan, objectCount, specs, ordinalBytes,
+                    cancelled, ::revalidate,
                 )
                 revalidate()
-                val review = portabilityReview(destination, markerDigest, result.verification, result.target, cancelled)
+                val review = portabilityReview(destination, markerDigest, scan, plan, cancelled)
                 revalidate()
-                PartialPortabilityVerification(stageId, markerDigest, result.verification, result.target, review)
+                PartialPortabilityVerification(stageId, markerDigest, scan, ordinalBytes, plan, review)
             }
         }
     }
@@ -5101,10 +5454,16 @@ class ForeverClientUpdater(
                 val relative = root.toPath().relativize(path).toString().replace(File.separatorChar, '/')
                 if (Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS)) {
                     val looseDirectory = relative.removePrefix("loose/")
-                    if (relative !in setOf("objects", "loose") &&
+                    if (relative !in setOf("objects", "loose", "payload-budget") &&
                         !(relative.startsWith("loose/") && loosePaths.any { it.startsWith("$looseDirectory/") })
                     ) {
                         throw IllegalStateException("private updater workspace contains an unowned directory: $relative")
+                    }
+                    return@forEach
+                }
+                if (relative == "payload-budget/${ForeverClientPayloadBudget.RECORD_FILE_NAME}") {
+                    if (!Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS) || Files.size(path) > 4096L) {
+                        throw IllegalStateException("private updater payload budget is unsafe: $relative")
                     }
                     return@forEach
                 }
@@ -5319,7 +5678,7 @@ class ForeverClientUpdater(
         private val VERSION_PATTERN = Regex("[0-9]+(?:\\.[0-9]+){3}")
         private val STORAGE_ID_PATTERN = Regex("[A-Za-z0-9][A-Za-z0-9._:-]{0,127}")
         private val STAGE_RECEIPT_FIELDS = setOf("version", "stageId", "markerHash", "sourceRevision", "snapshotHash", "storageId", "destinationPath", "resetCasc")
-        private val PRIVATE_WORKSPACE_FILES = setOf(WORKSPACE_OWNER_NAME, STAGE_RECEIPT_NAME, CASC_RESUME_OWNER_NAME, CASC_RESUME_CHECKPOINT_NAME, CASC_OBJECT_TEMP_NAME)
+        private val PRIVATE_WORKSPACE_FILES = setOf(WORKSPACE_OWNER_NAME, STAGE_RECEIPT_NAME, CASC_RESUME_OWNER_NAME, CASC_RESUME_CHECKPOINT_NAME, CASC_OBJECT_TEMP_NAME, ForeverCasc.FOREIGN_CANDIDATE_ORDINALS_NAME)
         private val PRIVATE_WORKSPACE_ENTRIES = PRIVATE_WORKSPACE_FILES + setOf("objects", "loose")
     }
 }

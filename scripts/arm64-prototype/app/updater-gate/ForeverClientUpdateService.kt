@@ -63,6 +63,7 @@ class ForeverClientUpdateService private constructor(
         val serverVersionConfirmed: Boolean = false,
         val clientPresent: Boolean = false,
         val pastedReport: PastedClientReport? = null,
+        val destinationPath: String? = null,
     )
 
     /** Explicit, per-action consent to resolve official metadata for one published identity. */
@@ -100,6 +101,21 @@ class ForeverClientUpdateService private constructor(
     internal data class PartialPortabilityAdoption(
         val verification: ForeverClientUpdater.PartialPortabilityVerification,
         val binding: ForeverClientUpdater.PortabilityIntentBinding,
+    )
+
+    /** Ephemeral authority for the one reviewed adoption-to-download handoff. */
+    internal data class PortabilityContinuationAuthorization(
+        val binding: ForeverClientUpdater.PortabilityIntentBinding,
+        val storageId: String,
+        val destinationPath: String,
+        val catalogDigest: String,
+        val snapshotHash: String,
+        val downloadCeiling: Long,
+        val peakCeiling: Long,
+        val privateCeiling: Long,
+        val destinationCeiling: Long,
+        val totalObjects: Long,
+        val looseChangePaths: Set<String>,
     )
 
     internal data class PartialPortabilityRecovery(
@@ -193,6 +209,7 @@ class ForeverClientUpdateService private constructor(
             serverVersionConfirmed = targetBuild.serverVersionSource == "user-confirmed",
             clientPresent = present,
             pastedReport = pasted,
+            destinationPath = target?.root?.absolutePath,
         )
     }
 
@@ -449,10 +466,33 @@ class ForeverClientUpdateService private constructor(
         updater(catalog).plan(destination(target, catalog, cancelled), cancelled, progress)
     }
 
+    /** Bounded, read-only classification used by Continue before ordinary planning. */
+    internal fun discoverPartialPortabilitySource(): ForeverClientUpdater.PortabilitySourceKind =
+        withStorageIo({ false }) { target ->
+            updater(catalog(), includeConfigAssets = false).discoverPortabilitySource(recoveryDestination(target))
+        }
+
     /** Requires runtime quiescence, usable storage and explicit plan consent. Native evidence is informational. */
     fun execute(
         plan: ForeverClientUpdatePlan,
         consent: ForeverClientUpdateConsent,
+        cancelled: () -> Boolean,
+        progress: (ForeverClientUpdateProgress) -> Unit,
+    ): ForeverClientUpdateResult = executeInternal(plan, consent, null, cancelled, progress)
+
+    /** Internal adoption continuation; the established public execute contract remains unchanged. */
+    internal fun executeWithPortabilityAuthorization(
+        plan: ForeverClientUpdatePlan,
+        consent: ForeverClientUpdateConsent,
+        portabilityAuthorization: PortabilityContinuationAuthorization,
+        cancelled: () -> Boolean,
+        progress: (ForeverClientUpdateProgress) -> Unit,
+    ): ForeverClientUpdateResult = executeInternal(plan, consent, portabilityAuthorization, cancelled, progress)
+
+    private fun executeInternal(
+        plan: ForeverClientUpdatePlan,
+        consent: ForeverClientUpdateConsent,
+        portabilityAuthorization: PortabilityContinuationAuthorization?,
         cancelled: () -> Boolean,
         progress: (ForeverClientUpdateProgress) -> Unit,
     ): ForeverClientUpdateResult = withStorageIo(cancelled) { target ->
@@ -478,7 +518,35 @@ class ForeverClientUpdateService private constructor(
             engine.replayReaderFactory = { readerCancelled -> ForeverCascReplayReaderAndroid(readerCancelled) }
         }
         val updateDestination = destination(target, catalog, cancelled)
-        val result = engine.execute(updateDestination, plan, consent, cancelled, progress)
+        portabilityAuthorization?.let { authorization ->
+            require(authorization.storageId == storage.operationStorageId(target) &&
+                authorization.destinationPath == target.root.toPath().toAbsolutePath().normalize().toString() &&
+                authorization.catalogDigest == catalog.verifiedSha256.lowercase() &&
+                authorization.snapshotHash == plan.snapshotHash) {
+                "USB continuation authorization no longer matches the selected target"
+            }
+            require(plan.payloadCeilingBytes <= authorization.downloadCeiling &&
+                plan.peakAdditionalBytes <= authorization.peakCeiling &&
+                plan.privateWorkBytes <= authorization.privateCeiling &&
+                plan.destinationBytes <= authorization.destinationCeiling &&
+                plan.totalObjects == authorization.totalObjects &&
+                plan.looseChangePaths == authorization.looseChangePaths) {
+                "updated USB continuation costs exceed the reviewed consent; review the ordinary plan"
+            }
+        }
+        // The portability consent is the reviewed ceiling, not the displayed
+        // minimum: the engine enforces the ceiling against consent, while the
+        // durable budget independently fails closed at the authorized bound.
+        val effectiveConsent = if (portabilityAuthorization == null) consent
+            else consent.copy(downloadBytes = maxOf(consent.downloadBytes, plan.payloadCeilingBytes))
+        val result = if (portabilityAuthorization == null) {
+            engine.execute(updateDestination, plan, consent, cancelled, progress)
+        } else {
+            engine.executeWithPortabilityAuthorization(
+                updateDestination, plan, effectiveConsent, portabilityAuthorization.binding,
+                portabilityAuthorization.downloadCeiling, cancelled, progress,
+            )
+        }
         storage.revalidateForUpdate(target)
         val installed = inspectInstalled(target.root, catalog, cancelled, target)?.proof
             ?: throw IllegalStateException("committed client did not pass independent target-build verification")
@@ -638,7 +706,7 @@ class ForeverClientUpdateService private constructor(
                 admission.target.buildConfig.hash to admission.buildConfigFile,
                 admission.target.cdnConfig.hash to admission.cdnConfigFile,
             ))
-            val destination = recoveryDestination(target)
+            val destination = recoveryDestination(target, allowDirectedVerification = true)
             val result = engine.confirmAndAdoptPartialPortability(
                 destination, review.verification, confirmedReviewDigest,
                 candidate.previousAdmissionDigest, candidate.admissionDigest,
@@ -1944,7 +2012,6 @@ class ForeverClientUpdateService private constructor(
         const val CATALOG_ASSET = "forever/client-update/catalog.sqlite3.gzip"
         const val BUILD_CONFIG_ASSET = "forever/client-update/build-config.txt"
         const val CDN_CONFIG_ASSET = "forever/client-update/cdn-config.txt"
-
 
         private const val PRODUCT = "wow_classic_beta"
         private const val CATALOG_DIRECTORY = "forever-client-catalog"

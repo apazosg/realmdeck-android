@@ -1778,6 +1778,7 @@ private fun ForeverFunctionalPocScreen(
                         ForeverClientManagementDialog(
                             inline = true,
                             initialMissingStorageLabel = if (homeState is ForeverFunctionalLauncherUx.HomeState.Missing) readiness.storageLabel else null,
+                            initialMissingStorageRoute = if (homeState is ForeverFunctionalLauncherUx.HomeState.Missing) readiness.storageRoute else null,
                             onDismiss = { showClientManagement = false; refreshReadiness() },
                             onPlay = {
                                 showClientManagement = false

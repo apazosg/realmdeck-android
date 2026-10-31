@@ -301,8 +301,8 @@ class ForeverFunctionalLauncherUxTest {
         val noDenominator = ForeverClientUpdateProgress(
             ForeverClientUpdateProgress.Phase.DOWNLOADING, 0, 0, 10L, 0L,
         )
-        // No honest denominator: no bytes, no percentage, just the live text.
-        assertEquals("Descargando…", ForeverFunctionalUiText.downloadStatusText(noDenominator, "Descargando…"))
+        // No honest denominator: show measured bytes, not a fabricated percentage.
+        assertEquals("Descargando 10 B", ForeverFunctionalUiText.downloadStatusText(noDenominator, "Descargando…"))
         assertEquals(null, ForeverFunctionalUiText.downloadFraction(noDenominator))
         assertEquals(null, ForeverFunctionalUiText.downloadPercent(noDenominator))
         // Out-of-range counters are invalid, never clamped to a fake 100 %:

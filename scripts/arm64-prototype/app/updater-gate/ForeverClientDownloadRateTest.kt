@@ -35,6 +35,17 @@ class ForeverClientDownloadRateTest {
         assertNull(rate.estimate(15_000))
     }
 
+    @Test fun unknownTotalShowsMeasuredSpeedWithoutAnEta() {
+        val rate = ForeverClientDownloadRate()
+        rate.record(progress(0).copy(totalTransferBytes = 0), 0)
+        rate.record(progress(1_000_000).copy(totalTransferBytes = 0), 1_000)
+        val estimate = requireNotNull(rate.estimate(1_000))
+        assertEquals(1_000_000.0, estimate.bytesPerSecond, 0.01)
+        assertNull(estimate.remainingSeconds)
+        assertTrue(estimate.text().contains("Sin estimación de tiempo"))
+        assertNull(rate.estimate(11_000))
+    }
+
     @Test fun verificationIsNotNetworkAndCountersCannotRunBackwards() {
         val rate = ForeverClientDownloadRate()
         rate.record(progress(0), 0)

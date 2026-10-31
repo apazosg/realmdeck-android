@@ -161,14 +161,25 @@ class ForeverClientUpdaterTest {
             )
             val prepared = first.portabilityPreparedWorkspace(destination, binding)
             val membership = fixture.targetSpecs().withIndex().associateBy { it.value.ekey }
-            val verification = ForeverCasc.prepareForeignStageCheckpoint(data, prepared, checkpointIdentity,
-                catalogDigest, membership.size, { membership.getValue(it) }, { false }, {})
+            // The only producible transition is header-only: enumerate
+            // candidates without authenticating bodies, then publish the
+            // identity-bound prefix checkpoint plus its ordinal bitset.
+            val scanScratch = File(paths.work, ".prefix-scan-fixture")
+            val admittedOrdinals = java.util.BitSet(membership.size)
+            val scan = ForeverCasc.inspectForeignStageCandidates(data, scanScratch, catalogDigest, membership.size,
+                { membership.getValue(it) }, { false }, {}, expectedPrefix = null,
+                onCandidateLocation = { admittedOrdinals.set(it.ordinal) })
+            require(admittedOrdinals.cardinality().toLong() == scan.candidateCount)
+            val ordinalBytes = ByteArray((membership.size + 7) / 8)
+            admittedOrdinals.toByteArray().copyInto(ordinalBytes)
+            val verification = ForeverCasc.prepareForeignPrefixCheckpoint(data, prepared, checkpointIdentity,
+                scan, membership.size, ordinalBytes)
             File(prepared, ".owner").writeBytes(owner)
             payload.put("markerHash", newMarkerDigest)
             val newPayload = payload.toString()
             File(prepared, ".transaction-stage-receipt.json").writeText(JSONObject().put("payload", newPayload)
                 .put("sha256", sha256(newPayload.toByteArray())).toString())
-            binding = binding.copy(inventoryDigest = verification.inventoryDigest,
+            binding = binding.copy(inventoryDigest = verification.sourceInventoryBinding,
                 checkpointDigest = sha256(File(prepared, ".forever-casc-resume-checkpoint").readBytes()))
             if (scenario == "without-old-workspace") {
                 check(canonical.deleteRecursively()) // This test fixture's own private state, never the USB source.
@@ -182,7 +193,9 @@ class ForeverClientUpdaterTest {
                 assertEquals(sha256(actualReceipt.getString("payload").toByteArray()), actualReceipt.getString("sha256"))
                 assertEquals(newMarkerDigest, JSONObject(actualReceipt.getString("payload")).getString("markerHash"))
                 ForeverCasc.withResumableCheckpointObjects(data, candidate, checkpointIdentity, { false }) { records ->
-                    assertEquals(verification.objectCount, records.count().toLong())
+                    // Header-only adoption publishes no object frames; candidates
+                    // live only in the ordinal bitset and are authenticated at use.
+                    assertEquals(0L, records.count().toLong())
                 }
             }
             val readAdmission = { if (admission.exists()) sha256(admission.readBytes()) else null }
@@ -265,8 +278,8 @@ class ForeverClientUpdaterTest {
             val foreign = fixture.updater(foreignPaths, assets) { _, _, _, _ -> error("verification must not fetch") }
             val records = ArrayList<ForeverCasc.IncrementalObjectSpec>()
             val verified = foreign.verifyPartialPortabilitySource(foreignDestination, { false }) { spec, _, _ -> records += spec }
-            assertTrue(verified.objects.objectCount > 0)
-            assertEquals(records.size.toLong(), verified.objects.objectCount)
+            assertTrue(verified.prefix.candidateCount > 0)
+            assertEquals(records.size.toLong(), verified.prefix.candidateCount)
             assertTrue("directed review must check bindings at least every sixteen records",
                 lightValidations >= (records.size + 15) / 16)
             assertTrue("directed review must not repeat binding checks for every fast fixture object",
@@ -275,11 +288,11 @@ class ForeverClientUpdaterTest {
             // each segment adds bounded checks. Do not compare that fixed cost
             // to a pressure-flushed prefix which may contain very few objects.
             assertTrue("full validation count $fullValidations exceeds scan/segment boundaries",
-                fullValidations <= 16 + 4 * verified.objects.segments.size)
-            assertEquals(verified.objects.objectCount, verified.targetPlan.verifiedObjects)
+                fullValidations <= 24 + 4 * verified.prefix.segments.size)
+            assertEquals(verified.prefix.candidateCount, verified.targetPlan.verifiedObjects)
             assertEquals(plan.totalObjects, verified.targetPlan.totalObjects)
-            assertEquals(plan.totalObjects - verified.objects.objectCount, verified.targetPlan.missingObjects)
-            assertEquals(fixture.catalog.summary().totalEncodedBytes - verified.objects.encodedBytes,
+            assertEquals(plan.totalObjects - verified.prefix.candidateCount, verified.targetPlan.missingObjects)
+            assertEquals(fixture.catalog.summary().totalEncodedBytes - verified.targetPlan.reusedEncodedBytes,
                 verified.targetPlan.downloadBytes)
             assertTrue(verified.review.downloadBytes >= verified.targetPlan.downloadBytes)
             assertEquals(verified.review.privateAdditionalBytes + verified.review.destinationAdditionalBytes,
@@ -501,6 +514,67 @@ class ForeverClientUpdaterTest {
         runConfirmedPartialAdoptionScenarios(listOf(null, "new-workspace-renamed", "intent-removed"))
     }
 
+    @Test(timeout = 60_000)
+    fun partialAdoptionUsesDirectedGroupChecksOnlyWithBothCapabilities() {
+        val configAssets = configAssetsOrSkip()
+        val fullChecksByMode = LinkedHashMap<Boolean, Int>()
+        for (directed in listOf(false, true)) {
+            Fixture(cascObjectCount = 4, contiguousRangeObjectCount = 3).use { fixture ->
+                val paths = fixture.makePaths("adoption-cadence-$directed")
+                val sourceDestination = fixture.destination(paths)
+                val sourceUpdater = fixture.updater(paths, configAssets) { record, work, _, progress ->
+                    File(work, "${record.ekey}.blte").also { it.writeBytes(fixture.rawFor(record)); progress(it.length()) }
+                }
+                val initial = sourceUpdater.plan(sourceDestination)
+                val sourceWorkspace = File(paths.work, ".forever-client-update-work")
+                assertThrows(java.util.concurrent.CancellationException::class.java) {
+                    sourceUpdater.execute(sourceDestination, initial, consentFor(initial), {
+                        sourceWorkspace.listFiles().orEmpty().any {
+                            File(it, ".forever-casc-resume-checkpoint").length() > 40L
+                        }
+                    })
+                }
+
+                val foreignPaths = fixture.makePaths("adoption-cadence-private-$directed").copy(client = paths.client)
+                val fullChecks = AtomicInteger()
+                val groupChecks = AtomicInteger()
+                val foreignBase = fixture.destination(foreignPaths)
+                val destination = foreignBase.copy(
+                    revalidate = { fullChecks.incrementAndGet(); foreignBase.revalidate() },
+                    revalidateCascSegment = { },
+                    revalidateCascCommitGroup = if (directed) ({ groupChecks.incrementAndGet() }) else null,
+                )
+                val adopter = fixture.updater(foreignPaths, configAssets) { _, _, _, _ ->
+                    error("adoption must not fetch")
+                }
+                val review = adopter.verifyPartialPortabilitySource(destination, { false }) { _, _, _ -> }
+                val expectedRecords = review.prefix.candidateCount.toInt()
+                fullChecks.set(0)
+                groupChecks.set(0)
+
+                val receipt = JSONObject().put("payload", JSONObject().put("catalogSha256",
+                    fixture.catalog.verifiedSha256).toString()).toString().toByteArray()
+                var publishedReceipt: ByteArray? = null
+                adopter.confirmAndAdoptPartialPortability(destination, review, review.review.digest, null,
+                    sha256(receipt), receipt, { publishedReceipt?.let(::sha256) }, { publishedReceipt = receipt.copyOf() })
+
+                assertTrue("adoption retains full boundary validation", fullChecks.get() > 0)
+                if (directed) {
+                    assertTrue("directed adoption checks the binding within each bounded group",
+                        groupChecks.get() >= (expectedRecords + ForeverCasc.RESUMABLE_COMMIT_GROUP_OBJECTS - 1) /
+                            ForeverCasc.RESUMABLE_COMMIT_GROUP_OBJECTS)
+                } else {
+                    assertEquals("one missing capability disables light group checks", 0, groupChecks.get())
+                    assertTrue("missing capability retains per-record full guards",
+                        fullChecks.get() >= expectedRecords)
+                }
+                fullChecksByMode[directed] = fullChecks.get()
+            }
+        }
+        assertTrue("directed checks reduce repeated full guards while retaining boundaries",
+            requireNotNull(fullChecksByMode[false]) > requireNotNull(fullChecksByMode[true]))
+    }
+
     @Test
     fun portabilityRecoveryRequiresBoundInventoryAndPreservesLegacyScratch() {
         runConfirmedPartialAdoptionScenarios(listOf("recovery-interrupted"))
@@ -560,8 +634,12 @@ class ForeverClientUpdaterTest {
             if (cutBoundary != null) adopter.portabilityBoundaryForTests = { if (it == cutBoundary) throw java.io.IOException("synthetic cut") }
             fun adopt() = adopter.confirmAndAdoptPartialPortability(destination, review, review.review.digest,
                 null, sha256(receipt), receipt, { pointer?.let(::sha256) }, { pointer = receipt.copyOf() })
+            var adoptedBinding: ForeverClientUpdater.PortabilityIntentBinding? = null
             if (cut == null) {
-                assertEquals(review.objects.inventoryDigest, adopt().verification.objects.inventoryDigest)
+                val adopted = adopt()
+                adoptedBinding = adopted.binding
+                assertEquals(review.prefix, adopted.verification.prefix)
+                assertTrue(adopted.verification.candidateOrdinals.contentEquals(review.candidateOrdinals))
             } else if (cut == "intent-removed") {
                 adopter.portabilityBoundaryForTests = { if (it == cut) throw java.io.IOException("synthetic cut") }
                 assertThrows(java.io.IOException::class.java) { adopt() }
@@ -611,7 +689,7 @@ class ForeverClientUpdaterTest {
 
                     var firstRecoveryRecordVerified = false
                     recovered.portabilityBoundaryForTests = { boundary ->
-                        if (boundary == "recovery-record-verified") {
+                        if (boundary == "recovery-candidate-located") {
                             firstRecoveryRecordVerified = true
                             throw java.io.IOException("synthetic recovery interruption after verified record")
                         }
@@ -621,7 +699,7 @@ class ForeverClientUpdaterTest {
                     } finally {
                         recovered.portabilityBoundaryForTests = null
                     }
-                    assertTrue("recovery interruption hook ran after scanner verified a record", firstRecoveryRecordVerified)
+                    assertTrue("recovery interruption hook ran after scanner located a candidate", firstRecoveryRecordVerified)
                     assertArrayEquals(intentBytes, intentFile.readBytes())
                     assertArrayEquals(markerBefore, File(File(paths.client, ".forever-update-staging/${review.stageId}"), ".owner").readBytes())
                     assertEquals(sourceBefore, sourceData.listFiles()!!.filter { it.name.startsWith("data.") }.associate { it.name to sha256(it.readBytes()) })
@@ -645,8 +723,25 @@ class ForeverClientUpdaterTest {
             // The ordinary plan counts CASC misses against the published source;
             // durable checkpoint credit reduces download bytes, not that count.
             assertTrue(resumed.downloadBytes <= review.review.downloadBytes)
+            assertTrue("fixture must demonstrate authenticated review reuse differs from ordinary-plan reuse",
+                review.review.reusableObjects > resumed.reusableObjects)
+            assertTrue("fixture must demonstrate the ordinary plan's published-source misses differ from review misses",
+                resumed.missingObjects > review.review.missingObjects)
+            assertEquals("adoption preserves the reviewed loose/config/source snapshot",
+                review.review.snapshotHash, resumed.snapshotHash)
             assertEquals(sourceBefore, sourceData.listFiles()!!.filter { it.name.startsWith("data.") }.associate { it.name to sha256(it.readBytes()) })
-            adopter.execute(destination, resumed, consentFor(resumed))
+            adopter.replayReaderFactory = { _ -> UpdaterFakeReader() }
+            if (cut == null) {
+                val binding = requireNotNull(adoptedBinding)
+                assertThrows(IllegalArgumentException::class.java) {
+                    adopter.executeWithPortabilityAuthorization(destination, resumed, consentFor(resumed),
+                        binding.copy(checkpointDigest = "00".repeat(32)), Long.MAX_VALUE)
+                }
+                assertTrue("altered checkpoint binding is rejected before any payload fetch", fetched.isEmpty())
+                adopter.executeWithPortabilityAuthorization(destination, resumed, consentFor(resumed), binding, Long.MAX_VALUE)
+            } else {
+                adopter.execute(destination, resumed, consentFor(resumed))
+            }
             val looseKeys = fixture.catalog.looseFiles().map { it.objectRecord.ekey }.toSet()
             assertTrue("authenticated CASC payload must not be fetched again",
                 fetched.intersect(authenticatedKeys).all { it in looseKeys })
@@ -719,6 +814,9 @@ class ForeverClientUpdaterTest {
             assertEquals(ForeverClientUpdater.PortabilitySourceKind.PARTIAL_CANDIDATE, updater.discoverPortabilitySource(destination))
             assertArrayEquals(byteArrayOf(1, 2, 3), body.readBytes())
             assertEquals("untrusted marker", owner.readText())
+            File(paths.client, ".build.info").writeText("existing publication")
+            assertEquals(ForeverClientUpdater.PortabilitySourceKind.UNREADABLE_OR_AMBIGUOUS, updater.discoverPortabilitySource(destination))
+            File(paths.client, ".build.info").delete()
             val ambiguous = File(stage.parentFile, UUID.randomUUID().toString()).apply { mkdir() }
             assertEquals(ForeverClientUpdater.PortabilitySourceKind.UNREADABLE_OR_AMBIGUOUS, updater.discoverPortabilitySource(destination))
             ambiguous.delete()
@@ -732,6 +830,43 @@ class ForeverClientUpdaterTest {
             assertThrows(IllegalStateException::class.java) { updater.discoverPortabilitySource(destination) }
             assertArrayEquals(byteArrayOf(1), intent.readBytes())
             assertArrayEquals(byteArrayOf(4, 5), File(publishedData, "data.000").readBytes())
+        }
+    }
+
+    @Test
+    fun portabilityDiscoveryTreatsNoStageWithoutPublicationAsOrdinaryDestination() {
+        val configAssets = configAssetsOrSkip()
+        Fixture().use { fixture ->
+            val paths = fixture.makePaths()
+            val updater = fixture.updater(paths, configAssets) { _, _, _, _ ->
+                error("metadata discovery must not fetch objects")
+            }
+            val destination = fixture.destination(paths)
+            File(paths.client, "Wow.exe").writeBytes(byteArrayOf(1, 2, 3))
+            File(paths.client, "Data").mkdir()
+            File(paths.client, "Data/partial.dat").writeBytes(byteArrayOf(4, 5))
+            val existingFiles = paths.client.walkTopDown().filter { it.isFile }
+                .associate { it.relativeTo(paths.client).invariantSeparatorsPath to it.readBytes().toList() }
+            assertEquals(ForeverClientUpdater.ResumeGuardState.IDLE, updater.resumeGuardState(destination))
+            assertEquals(ForeverClientUpdater.PortabilitySourceKind.NO_PORTABILITY_CANDIDATE,
+                updater.discoverPortabilitySource(destination))
+            assertEquals(existingFiles, paths.client.walkTopDown().filter { it.isFile }
+                .associate { it.relativeTo(paths.client).invariantSeparatorsPath to it.readBytes().toList() })
+
+            val absentRoot = File(paths.client.parentFile, "not-created")
+            val absentDestination = ForeverClientUpdateDestination(
+                root = absentRoot,
+                storageId = "synthetic-absent-storage",
+                revalidate = { check(!absentRoot.exists() || absentRoot.isDirectory) },
+            )
+            // Storage can resolve an absent path, but updater/service planning and
+            // transaction probes require an existing client directory. Do not
+            // weaken the fail-closed root guard for this unsupported target.
+            assertEquals(ForeverClientUpdater.ResumeGuardState.BLOCKED, updater.resumeGuardState(absentDestination))
+            assertThrows(IllegalStateException::class.java) {
+                updater.discoverPortabilitySource(absentDestination)
+            }
+            assertFalse(absentRoot.exists())
         }
     }
 
@@ -2214,6 +2349,9 @@ class ForeverClientUpdaterTest {
             assertEquals(ForeverClientRecoveryResult.RESUMABLE_STAGE_AVAILABLE, resumedUpdater.recover(destination).result)
             assertFalse(resumedUpdater.hasPendingTransaction(destination))
             assertEquals(ForeverClientUpdater.ResumeGuardState.OWN_PENDING, resumedUpdater.resumeGuardState(destination))
+            File(paths.client, ".build.info").writeText("existing publication")
+            assertEquals(ForeverClientUpdater.PortabilitySourceKind.OWN_PENDING,
+                resumedUpdater.discoverPortabilitySource(destination))
 
             // An untouched destination under the same catalog reports idle
             // and stays read-only.
@@ -3993,7 +4131,7 @@ class ForeverClientUpdaterTest {
 
     private fun consentFor(plan: ForeverClientUpdatePlan) = ForeverClientUpdateConsent(
         plan.planId,
-        plan.downloadBytes,
+        maxOf(plan.downloadBytes, plan.payloadCeilingBytes),
         plan.peakAdditionalBytes,
         plan.privateWorkBytes,
         plan.destinationBytes,

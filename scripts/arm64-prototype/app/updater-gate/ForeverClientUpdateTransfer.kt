@@ -24,9 +24,12 @@ import javax.net.ssl.HttpsURLConnection
 
 /** Resumable transfer of catalog-pinned encoded CASC objects. */
 class ForeverClientUpdateTransfer internal constructor(
+    /** Internal continuation hook; callers must share one budget across this operation's workers. */
+    private val payloadBudget: ForeverClientPayloadBudget? = null,
     private val connectionFactory: (String) -> HttpURLConnection,
 ) {
-    constructor() : this(::openOfficialConnection)
+    constructor() : this(null, ::openOfficialConnection)
+    internal constructor(payloadBudget: ForeverClientPayloadBudget) : this(payloadBudget, ::openOfficialConnection)
 
     /** Per-invocation phase clocks; aggregate on completion, log only sparse samples. */
     private class FetchTimings {
@@ -217,6 +220,7 @@ class ForeverClientUpdateTransfer internal constructor(
         val started = System.nanoTime()
         checkActive(cancelled, started)
         val end = Math.subtractExact(next, 1L)
+        payloadBudget?.reserve(Math.addExact(bytes, 1L))
         val connection = connectionFactory(sourceUrl(first))
         var drained = false
         diagnosticHttpStarted(grouped = true)
@@ -241,7 +245,7 @@ class ForeverClientUpdateTransfer internal constructor(
             val streamStarted = System.nanoTime()
             val stream = try { diagnosticPhase(PHASE_BODY) { connection.inputStream } }
             finally { timings.bodyReadNanos += System.nanoTime() - streamStarted }
-            BufferedInputStream(stream, BUFFER_SIZE).use { input ->
+            stream.use { input ->
                 val buffer = ByteArray(BUFFER_SIZE)
                 records.forEach { record ->
                     checkActive(cancelled, started)
@@ -337,6 +341,7 @@ class ForeverClientUpdateTransfer internal constructor(
         if (expectedNetworkBytes != record.encodedSize - existing) throw IllegalArgumentException("encoded-object source range length is inconsistent")
 
         checkActive(cancelled, deadlineStarted)
+        payloadBudget?.reserve(Math.addExact(expectedNetworkBytes, 1L))
         val connection = connectionFactory(sourceUrl)
         var keepAliveCandidate = false
         diagnosticHttpStarted(grouped = false)
@@ -382,7 +387,7 @@ class ForeverClientUpdateTransfer internal constructor(
                 val streamStarted = if (timings != null) System.nanoTime() else 0L
                 val stream = try { diagnosticPhase(PHASE_BODY) { connection.inputStream } }
                 finally { if (timings != null) timings.bodyReadNanos += System.nanoTime() - streamStarted }
-                BufferedInputStream(stream, BUFFER_SIZE).use { input ->
+                stream.use { input ->
                     val buffer = ByteArray(BUFFER_SIZE)
                     var received = 0L
                     while (received < expectedNetworkBytes) {

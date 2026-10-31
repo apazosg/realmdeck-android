@@ -972,6 +972,332 @@ class ForeverCascTest {
     }
 
     @Test
+    fun foreignCandidateVerificationRequiresBoundDecodedSizeForEncryptedObjects() {
+        val root = tempDir()
+        try {
+            val frame = byteArrayOf('E'.code.toByte(), 7, 8, 9)
+            val magic = byteArrayOf(0x42, 0x4c, 0x54, 0x45)
+            val chunked = magic + u32beBytes(36) + byteArrayOf(0x0f, 0, 0, 1) +
+                u32beBytes(frame.size) + u32beBytes(21) + md5Bytes(frame) + frame
+            val headerless = magic + u32beBytes(0) + frame
+
+            fun stageFor(name: String, raw: ByteArray): Pair<File, ForeverCasc.IncrementalObjectSpec> {
+                val spec = ForeverCasc.IncrementalObjectSpec(encodedEkey(raw), "00".repeat(16), raw.size.toLong(), 21L)
+                val source = file(root, "$name/private/source.blte", raw)
+                val stage = File(root, "$name/usb/Data/data")
+                assertTrue(stage.parentFile!!.mkdirs())
+                val checkpoint = File(root, "$name/private/checkpoint").apply { assertTrue(mkdirs()) }
+                ForeverCasc.writeTargetIncrementalResumable(null, stage, checkpoint, sequenceOf(spec),
+                    { source }, { false }, "$name-fixture")
+                stage.listFiles()!!.filter { it.name.endsWith(".idx") }.forEach { assertTrue(it.delete()) }
+                return stage to spec
+            }
+
+            fun candidate(stage: File, spec: ForeverCasc.IncrementalObjectSpec, scratch: String):
+                Pair<ForeverCasc.ForeignStageCandidateScan, ForeverCasc.ForeignStageCandidateLocation> {
+                val locations = mutableListOf<ForeverCasc.ForeignStageCandidateLocation>()
+                val prefix = ForeverCasc.inspectForeignStageCandidates(stage, File(root, scratch),
+                    "ef".repeat(32), 1, { IndexedValue(0, spec) }, { false }, {}, onCandidateLocation = locations::add)
+                return prefix to locations.single()
+            }
+
+            val (goodStage, goodSpec) = stageFor("chunked", chunked)
+            val (prefix, location) = candidate(goodStage, goodSpec, "chunked/private/scan")
+            val before = directFileHashes(goodStage)
+            FakeCascReplayReader().use { reader ->
+                val verifier = ForeverCasc.ForeignCandidateVerifier(goodStage, prefix, reader, { false }, {})
+                assertEquals(ForeverCasc.ForeignCandidateVerdict.ENCRYPTED, verifier.verify(location, goodSpec))
+                assertThrows(IllegalArgumentException::class.java) {
+                    verifier.verify(location, goodSpec.copy(decodedSize = 20L))
+                }
+            }
+            assertEquals(before, directFileHashes(goodStage))
+            // A catalog whose admitted size differs from the authenticated table
+            // must not credit this body, even if the EKey itself is correct.
+            val wrongSize = goodSpec.copy(decodedSize = 20L)
+            val (wrongPrefix, wrongLocation) = candidate(goodStage, wrongSize, "chunked/private/wrong-size")
+            FakeCascReplayReader().use { reader ->
+                val verifier = ForeverCasc.ForeignCandidateVerifier(goodStage, wrongPrefix, reader, { false }, {})
+                assertEquals(ForeverCasc.ForeignCandidateVerdict.INVALID_BODY, verifier.verify(wrongLocation, wrongSize))
+            }
+
+            val (unboundStage, unboundSpec) = stageFor("headerless", headerless)
+            val unboundBefore = directFileHashes(unboundStage)
+            val (unboundPrefix, unboundLocation) = candidate(unboundStage, unboundSpec, "headerless/private/scan")
+            FakeCascReplayReader().use { reader ->
+                val verifier = ForeverCasc.ForeignCandidateVerifier(unboundStage, unboundPrefix, reader, { false }, {})
+                assertEquals(ForeverCasc.ForeignCandidateVerdict.ENCRYPTED_SIZE_UNAVAILABLE,
+                    verifier.verify(unboundLocation, unboundSpec))
+            }
+            assertEquals(unboundBefore, directFileHashes(unboundStage))
+
+            val segment = File(goodStage, "data.000")
+            RandomAccessFile(segment, "rw").use { file ->
+                val offset = location.offset + 30L + goodSpec.encodedSize - 1L
+                file.seek(offset)
+                val old = file.read()
+                file.seek(offset)
+                file.write(old xor 1)
+            }
+            Files.setLastModifiedTime(segment.toPath(), prefix.segments.single().modifiedTime)
+            val corrupted = directFileHashes(goodStage)
+            FakeCascReplayReader().use { reader ->
+                val verifier = ForeverCasc.ForeignCandidateVerifier(goodStage, prefix, reader, { false }, {})
+                assertEquals(ForeverCasc.ForeignCandidateVerdict.INVALID_BODY, verifier.verify(location, goodSpec))
+            }
+            assertEquals(corrupted, directFileHashes(goodStage))
+        } finally { delete(root) }
+    }
+
+    @Test
+    fun foreignCandidateVerificationAbortsOnBindingOrReadFailureRatherThanReplacing() {
+        val root = tempDir()
+        try {
+            val (stage, specs) = foreignStageFixture(root)
+            val membership = specs.mapIndexed { index, spec -> spec.ekey to IndexedValue(index, spec) }.toMap()
+            val candidates = mutableListOf<ForeverCasc.ForeignStageCandidateLocation>()
+            val prefix = ForeverCasc.inspectForeignStageCandidates(stage, File(root, "private/candidate-scan"),
+                "ef".repeat(32), specs.size, { membership.getValue(it) }, { false }, {}, onCandidateLocation = candidates::add)
+            val candidate = candidates.first()
+            val before = directFileHashes(stage)
+            FakeCascReplayReader().use { reader ->
+                val verifier = ForeverCasc.ForeignCandidateVerifier(stage, prefix, reader, { false }, {})
+                assertEquals(ForeverCasc.ForeignCandidateVerdict.DECODED, verifier.verify(candidate, candidate.target))
+            }
+            var bindingChanged = false
+            FakeCascReplayReader().use { delegate ->
+                val reader = object : CascReplayReader by delegate {
+                    override fun readAt(buffer: ByteArray, off: Int, len: Int, position: Long): Int {
+                        val count = delegate.readAt(buffer, off, len, position)
+                        if (position >= candidate.offset + 30L) bindingChanged = true
+                        return count
+                    }
+                }
+                val verifier = ForeverCasc.ForeignCandidateVerifier(stage, prefix, reader, { false }) {
+                    check(!bindingChanged) { "source binding changed" }
+                }
+                assertThrows(IllegalStateException::class.java) { verifier.verify(candidate, candidate.target) }
+            }
+            FakeCascReplayReader().use { delegate ->
+                val reader = object : CascReplayReader by delegate {
+                    override fun readAt(buffer: ByteArray, off: Int, len: Int, position: Long): Int {
+                        if (position >= candidate.offset + 30L) throw IllegalArgumentException("synthetic read failure")
+                        return delegate.readAt(buffer, off, len, position)
+                    }
+                }
+                val verifier = ForeverCasc.ForeignCandidateVerifier(stage, prefix, reader, { false }, {})
+                assertThrows(IllegalStateException::class.java) { verifier.verify(candidate, candidate.target) }
+            }
+            assertEquals(before, directFileHashes(stage))
+        } finally { delete(root) }
+    }
+
+    @Test
+    fun foreignStageCandidateInventoryDigestUsesDistinctDomainFromAuthenticatedInventory() {
+        val root = tempDir()
+        try {
+            val (stage, specs) = foreignStageFixture(root)
+            val membership = specs.mapIndexed { index, spec -> spec.ekey to IndexedValue(index, spec) }.toMap()
+            val catalogDigest = "ef".repeat(32)
+            val candidate = ForeverCasc.inspectForeignStageCandidates(
+                stage, File(root, "private/candidate-scan"), catalogDigest, specs.size,
+                { membership.getValue(it) }, { false }, {},
+                targetMembershipBatch = { keys -> keys.map { membership.getValue(it) } },
+            ) { }
+            val authenticated = ForeverCasc.inspectForeignStage(
+                stage, File(root, "private/authenticated-scan"), catalogDigest, specs.size,
+                { membership.getValue(it) }, { false }, {},
+            ) { _, _, _ -> }
+
+            assertEquals(catalogDigest, candidate.targetCatalogDigest)
+            assertEquals(catalogDigest, authenticated.targetCatalogDigest)
+            assertEquals(specs.size.toLong(), candidate.candidateCount)
+            assertEquals(specs.size.toLong(), authenticated.objectCount)
+            assertTrue(candidate.sourceInventoryBinding != authenticated.inventoryDigest)
+        } finally {
+            delete(root)
+        }
+    }
+
+    @Test
+    fun foreignStageCandidateScanPublishesOnlyProvisionalLocationsWithoutBodyAuthentication() {
+        val root = tempDir()
+        try {
+            val (stage, specs) = foreignStageFixture(root)
+            RandomAccessFile(File(stage, "data.000"), "rw").use { file ->
+                val payloadOffset = 480L + 30L + specs.first().encodedSize - 1L
+                file.seek(payloadOffset)
+                val value = file.read()
+                file.seek(payloadOffset)
+                file.write(value xor 1)
+            }
+            val before = directFileHashes(stage)
+            val membership = specs.mapIndexed { index, spec -> spec.ekey to IndexedValue(index, spec) }.toMap()
+            val candidates = mutableListOf<ForeverCasc.ForeignStageCandidateLocation>()
+            val result = ForeverCasc.inspectForeignStageCandidates(
+                stage, File(root, "private/candidate-scan"), "ef".repeat(32), specs.size,
+                { membership.getValue(it) }, { false }, {},
+                targetMembershipBatch = { keys -> keys.map { membership.getValue(it) } },
+                onCandidateLocation = candidates::add,
+            )
+            assertEquals(specs.size.toLong(), result.candidateCount)
+            assertEquals(specs.map { it.ekey }.toSet(), candidates.map { it.target.ekey }.toSet())
+            assertTrue(candidates.all { it.archiveId == 0 && it.offset >= 480L })
+            assertEquals("ef".repeat(32), result.targetCatalogDigest)
+            assertTrue(result.sourceInventoryBinding.matches(Regex("[0-9a-f]{64}")))
+            assertEquals(listOf(0), result.segments.map { it.archiveId })
+            assertFalse(File(root, "private/candidate-scan").exists())
+            assertEquals(before, directFileHashes(stage))
+
+            org.junit.Assert.assertThrows(Exception::class.java) {
+                ForeverCasc.inspectForeignStage(stage, File(root, "private/authenticated-scan"),
+                    "ef".repeat(32), specs.size, { membership.getValue(it) }, { false }, {}) { _, _, _ -> }
+            }
+            assertEquals(before, directFileHashes(stage))
+            assertFalse(File(root, "private/authenticated-scan").exists())
+        } finally { delete(root) }
+    }
+
+    @Test
+    fun foreignCandidatePrefixRescansOnlyBoundOriginalSegmentsAfterSuffixAppears() {
+        val root = tempDir()
+        try {
+            val (stage, specs) = foreignStageFixture(root)
+            val membership = specs.mapIndexed { index, spec -> spec.ekey to IndexedValue(index, spec) }.toMap()
+            val original = mutableListOf<ForeverCasc.ForeignStageCandidateLocation>()
+            val prefix = ForeverCasc.inspectForeignStageCandidates(
+                stage, File(root, "private/initial"), "ef".repeat(32), specs.size,
+                { membership.getValue(it) }, { false }, {}, onCandidateLocation = original::add,
+            )
+            // These entries are not admitted by this scan; a caller must prove
+            // suffix ownership separately before mutating anything in the stage.
+            File(stage, "data.001").writeBytes(byteArrayOf(1, 2, 3))
+            File(stage, "unexpected-entry").writeText("not owned")
+            val before = directFileHashes(stage)
+            val replayed = mutableListOf<ForeverCasc.ForeignStageCandidateLocation>()
+            val reopened = ForeverCasc.inspectForeignStageCandidates(
+                stage, File(root, "private/reopen"), "ef".repeat(32), specs.size,
+                { membership.getValue(it) }, { false }, {}, expectedPrefix = prefix,
+                onCandidateLocation = replayed::add,
+            )
+            assertEquals(prefix, reopened)
+            assertEquals(original, replayed)
+            assertEquals(before, directFileHashes(stage))
+            // Ordinary foreign-stage admission remains strict about extra entries.
+            org.junit.Assert.assertThrows(Exception::class.java) {
+                ForeverCasc.inspectForeignStageCandidates(stage, File(root, "private/strict"),
+                    "ef".repeat(32), specs.size, { membership.getValue(it) }, { false }, {}) { }
+            }
+            assertEquals(before, directFileHashes(stage))
+        } finally { delete(root) }
+    }
+
+    @Test
+    fun foreignCandidatePrefixRejectsChangedSourceAndIdentityWithoutWriting() {
+        val root = tempDir()
+        try {
+            val (stage, specs) = foreignStageFixture(root)
+            val membership = specs.mapIndexed { index, spec -> spec.ekey to IndexedValue(index, spec) }.toMap()
+            val prefix = ForeverCasc.inspectForeignStageCandidates(
+                stage, File(root, "private/initial"), "ef".repeat(32), specs.size,
+                { membership.getValue(it) }, { false }, {}) { }
+            File(stage, "data.001").writeBytes(byteArrayOf(1, 2, 3))
+            org.junit.Assert.assertThrows(Exception::class.java) {
+                ForeverCasc.inspectForeignStageCandidates(stage, File(root, "private/wrong-target"),
+                    "aa".repeat(32), specs.size, { membership.getValue(it) }, { false }, {},
+                    expectedPrefix = prefix) { }
+            }
+            RandomAccessFile(File(stage, "data.000"), "rw").use { it.setLength(it.length() - 1L) }
+            val before = directFileHashes(stage)
+            org.junit.Assert.assertThrows(Exception::class.java) {
+                ForeverCasc.inspectForeignStageCandidates(stage, File(root, "private/changed"),
+                    "ef".repeat(32), specs.size, { membership.getValue(it) }, { false }, {},
+                    expectedPrefix = prefix) { }
+            }
+            assertEquals(before, directFileHashes(stage))
+        } finally { delete(root) }
+    }
+
+    @Test
+    fun foreignCandidatePrefixRecordIsBoundedAndOperationIdentityBound() {
+        val root = tempDir()
+        try {
+            val (stage, specs) = foreignStageFixture(root)
+            val membership = specs.mapIndexed { index, spec -> spec.ekey to IndexedValue(index, spec) }.toMap()
+            val prefix = ForeverCasc.inspectForeignStageCandidates(
+                stage, File(root, "private/initial"), "ef".repeat(32), specs.size,
+                { membership.getValue(it) }, { false }, {}) { }
+            val before = directFileHashes(stage)
+            val bytes = ForeverCasc.encodeForeignCandidatePrefix("operation-one", prefix)
+            assertEquals(prefix, ForeverCasc.decodeForeignCandidatePrefix("operation-one", bytes))
+            org.junit.Assert.assertThrows(Exception::class.java) {
+                ForeverCasc.decodeForeignCandidatePrefix("operation-two", bytes)
+            }
+            val corrupt = bytes.copyOf().also { it[it.size / 2] = (it[it.size / 2].toInt() xor 1).toByte() }
+            org.junit.Assert.assertThrows(Exception::class.java) {
+                ForeverCasc.decodeForeignCandidatePrefix("operation-one", corrupt)
+            }
+            org.junit.Assert.assertThrows(Exception::class.java) {
+                ForeverCasc.encodeForeignCandidatePrefix("operation-one",
+                    prefix.copy(segments = listOf(prefix.segments.single().copy(name = "data.001"))))
+            }
+            assertEquals(before, directFileHashes(stage))
+        } finally { delete(root) }
+    }
+
+    @Test
+    fun foreignCandidatePrefixBoundaryCheckDetectsHeaderChangeWithRestoredMetadata() {
+        val root = tempDir()
+        try {
+            val (stage, specs) = foreignStageFixture(root)
+            val membership = specs.mapIndexed { index, spec -> spec.ekey to IndexedValue(index, spec) }.toMap()
+            val prefix = ForeverCasc.inspectForeignStageCandidates(
+                stage, File(root, "private/initial"), "ef".repeat(32), specs.size,
+                { membership.getValue(it) }, { false }, {}) { }
+            File(stage, "data.001").writeBytes(byteArrayOf(1, 2, 3))
+            var checks = 0
+            ForeverCasc.revalidateForeignCandidatePrefix(stage, prefix) { checks++ }
+            assertEquals(2, checks)
+            val segment = File(stage, "data.000")
+            RandomAccessFile(segment, "rw").use { file ->
+                file.seek(0L)
+                val old = file.read()
+                file.seek(0L)
+                file.write(old xor 1)
+            }
+            Files.setLastModifiedTime(segment.toPath(), prefix.segments.single().modifiedTime)
+            val before = directFileHashes(stage)
+            org.junit.Assert.assertThrows(Exception::class.java) {
+                ForeverCasc.revalidateForeignCandidatePrefix(stage, prefix) { }
+            }
+            assertEquals(before, directFileHashes(stage))
+        } finally { delete(root) }
+    }
+
+    @Test
+    fun foreignStageCandidateScanRejectsMalformedHeadersAndChangedBindingsReadOnly() {
+        fun rejected(change: (File) -> Unit, revalidate: () -> Unit = {}) {
+            val root = tempDir()
+            try {
+                val (stage, specs) = foreignStageFixture(root)
+                change(stage)
+                val before = directFileHashes(stage)
+                val membership = specs.mapIndexed { index, spec -> spec.ekey to IndexedValue(index, spec) }.toMap()
+                org.junit.Assert.assertThrows(Exception::class.java) {
+                    ForeverCasc.inspectForeignStageCandidates(stage, File(root, "private/candidate-scan"),
+                        "12".repeat(32), specs.size, { membership.getValue(it) }, { false }, revalidate) { }
+                }
+                assertEquals(before, directFileHashes(stage))
+                assertFalse(File(root, "private/candidate-scan").exists())
+            } finally { delete(root) }
+        }
+        rejected({ stage ->
+            RandomAccessFile(File(stage, "data.000"), "rw").use { file -> file.setLength(480L + 5L) }
+        })
+        rejected({}, { throw IllegalStateException("source binding changed") })
+    }
+
+    @Test
     fun foreignStageInspectionRejectsCorruptionCatalogMismatchTruncationSymlinkAndCancellationReadOnly() {
         fun rejected(name: String, alter: (File, List<ForeverCasc.IncrementalObjectSpec>) -> Unit, cancel: Boolean = false) {
             val root = tempDir()
@@ -1056,9 +1382,19 @@ class ForeverCascTest {
             val before = directFileHashes(stage)
             val membership = specs.mapIndexed { i, spec -> spec.ekey to IndexedValue(i, spec) }.toMap()
             val prepared = File(root, "private/prepared")
+            var batchCalls = 0
+            var recordRevalidations = 0
             val result = ForeverCasc.prepareForeignStageCheckpoint(stage, prepared, "new-generation",
-                "ab".repeat(32), specs.size, { membership.getValue(it) }, { false }, {})
+                "ab".repeat(32), specs.size, { membership.getValue(it) }, { false }, {},
+                targetMembershipBatch = { keys ->
+                    batchCalls++
+                    keys.map { membership.getValue(it) }
+                },
+                revalidateRecordBinding = { recordRevalidations++ },
+                parallelAuthentication = true)
+            assertTrue("checkpoint preparation must use the batch membership callback", batchCalls > 0)
             assertEquals(specs.size.toLong(), result.objectCount)
+            assertEquals(specs.size, recordRevalidations)
             assertEquals(before, directFileHashes(stage))
             ForeverCasc.withResumableCheckpointObjects(stage, prepared, "new-generation", { false }) {
                 assertEquals(specs, it.toList())
@@ -1066,6 +1402,60 @@ class ForeverCascTest {
             ForeverCasc.writeTargetIncrementalResumable(null, stage, prepared, specs.asSequence(),
                 { error("authenticated retained objects must not be fetched") }, { false }, "new-generation")
             before.forEach { (name, hash) -> assertEquals(hash, directFileHashes(stage)[name]) }
+        } finally {
+            delete(root)
+        }
+    }
+
+    @Test
+    fun foreignCheckpointPreparationRecordBindingFailureDiscardsCandidateReadOnly() {
+        val root = tempDir()
+        try {
+            val (stage, specs) = foreignStageFixture(root)
+            val before = directFileHashes(stage)
+            val membership = specs.mapIndexed { i, spec -> spec.ekey to IndexedValue(i, spec) }.toMap()
+            val candidate = File(root, "private/record-binding-failure")
+            org.junit.Assert.assertThrows(IllegalStateException::class.java) {
+                ForeverCasc.prepareForeignStageCheckpoint(stage, candidate, "failed-generation",
+                    "ab".repeat(32), specs.size, { membership.getValue(it) }, { false }, {},
+                    targetMembershipBatch = { keys -> keys.map { membership.getValue(it) } },
+                    revalidateRecordBinding = { throw IllegalStateException("binding changed") })
+            }
+            assertFalse(candidate.exists())
+            assertEquals(before, directFileHashes(stage))
+        } finally {
+            delete(root)
+        }
+    }
+
+    @Test
+    fun batchedForeignCheckpointPreparationRejectsBadMembershipAndCancellationReadOnly() {
+        val root = tempDir()
+        try {
+            val (stage, specs) = foreignStageFixture(root)
+            val before = directFileHashes(stage)
+            val membership = specs.mapIndexed { i, spec -> spec.ekey to IndexedValue(i, spec) }.toMap()
+            val badCandidate = File(root, "private/bad-membership")
+            org.junit.Assert.assertThrows(IllegalArgumentException::class.java) {
+                ForeverCasc.prepareForeignStageCheckpoint(stage, badCandidate, "bad-generation",
+                    "ab".repeat(32), specs.size, { error("batched preparation must not use scalar lookup") }, { false }, {},
+                    targetMembershipBatch = { keys -> keys.reversed().map { membership.getValue(it) } })
+            }
+            assertFalse(badCandidate.exists())
+            assertEquals(before, directFileHashes(stage))
+
+            val cancelledCandidate = File(root, "private/cancelled-batch")
+            var cancelled = false
+            org.junit.Assert.assertThrows(java.util.concurrent.CancellationException::class.java) {
+                ForeverCasc.prepareForeignStageCheckpoint(stage, cancelledCandidate, "cancelled-generation",
+                    "ab".repeat(32), specs.size, { error("batched preparation must not use scalar lookup") },
+                    { cancelled }, {}, targetMembershipBatch = { keys ->
+                        cancelled = true
+                        keys.map { membership.getValue(it) }
+                    })
+            }
+            assertFalse(cancelledCandidate.exists())
+            assertEquals(before, directFileHashes(stage))
         } finally {
             delete(root)
         }
@@ -1086,6 +1476,94 @@ class ForeverCascTest {
             }
             assertFalse(prepared.exists())
             assertEquals(before, directFileHashes(stage))
+        } finally {
+            delete(root)
+        }
+    }
+
+    @Test
+    fun foreignCandidateOrdinalBitsetIsBoundedIdentityBoundAndCorruptionRejected() {
+        val identity = "operation-ordinals"
+        val catalog = "ab".repeat(32)
+        val ordinals = ByteArray((10 + 7) / 8).also {
+            it[0] = 0b0000_0101
+            it[1] = 0b0000_0010
+        }
+        val bytes = ForeverCasc.encodeForeignCandidateOrdinals(identity, catalog, 10, ordinals)
+        org.junit.Assert.assertArrayEquals(ordinals,
+            ForeverCasc.decodeForeignCandidateOrdinals(identity, catalog, 10, bytes))
+        org.junit.Assert.assertThrows(Exception::class.java) {
+            ForeverCasc.decodeForeignCandidateOrdinals("other-operation", catalog, 10, bytes)
+        }
+        org.junit.Assert.assertThrows(Exception::class.java) {
+            ForeverCasc.decodeForeignCandidateOrdinals(identity, "cd".repeat(32), 10, bytes)
+        }
+        org.junit.Assert.assertThrows(Exception::class.java) {
+            ForeverCasc.decodeForeignCandidateOrdinals(identity, catalog, 11, bytes)
+        }
+        val corrupt = bytes.copyOf().also { it[it.size - 1] = (it[it.size - 1].toInt() xor 1).toByte() }
+        org.junit.Assert.assertThrows(Exception::class.java) {
+            ForeverCasc.decodeForeignCandidateOrdinals(identity, catalog, 10, corrupt)
+        }
+        val stray = ByteArray(2).also { it[1] = 0b0000_0010 }
+        val strayBytes = ForeverCasc.encodeForeignCandidateOrdinals(identity, catalog, 9, stray)
+        org.junit.Assert.assertThrows(Exception::class.java) {
+            ForeverCasc.decodeForeignCandidateOrdinals(identity, catalog, 9, strayBytes)
+        }
+    }
+
+    @Test
+    fun foreignPrefixCheckpointPublishesTheCandidateBitsetAndRejectsMismatch() {
+        val root = tempDir()
+        try {
+            val (stage, specs) = foreignStageFixture(root)
+            val membership = specs.withIndex().associate { it.value.ekey to IndexedValue(it.index, it.value) }
+            val scan = ForeverCasc.inspectForeignStageCandidates(
+                stage, File(root, "private/bitset-scan"), "ef".repeat(32), specs.size,
+                { membership.getValue(it) }, { false }, {},
+            ) { }
+            val ordinals = ByteArray((specs.size + 7) / 8)
+            for (index in specs.indices) {
+                ordinals[index / 8] = (ordinals[index / 8].toInt() or (1 shl (index % 8))).toByte()
+            }
+            val prepared = File(root, "private/prepared-bitset")
+            ForeverCasc.prepareForeignPrefixCheckpoint(
+                stage, prepared, "checkpoint-identity", scan, specs.size, ordinals)
+            assertTrue(File(prepared, ForeverCasc.FOREIGN_CANDIDATE_ORDINALS_NAME).isFile)
+            org.junit.Assert.assertArrayEquals(ordinals, ForeverCasc.readAdoptedForeignCandidates(
+                prepared, "checkpoint-identity", "ef".repeat(32), specs.size))
+            org.junit.Assert.assertThrows(Exception::class.java) {
+                ForeverCasc.readAdoptedForeignCandidates(prepared, "other-identity", "ef".repeat(32), specs.size)
+            }
+            org.junit.Assert.assertThrows(Exception::class.java) {
+                ForeverCasc.prepareForeignPrefixCheckpoint(stage, File(root, "private/prepared-mismatch"),
+                    "checkpoint-identity", scan.copy(candidateCount = scan.candidateCount + 1), specs.size, ordinals)
+            }
+        } finally {
+            delete(root)
+        }
+    }
+
+    @Test
+    fun candidateTargetPlanCountsUnverifiedOrdinalsAsReusedAndTheRestAsMissing() {
+        val root = tempDir()
+        try {
+            val (stage, specs) = foreignStageFixture(root)
+            val membership = specs.withIndex().associate { it.value.ekey to IndexedValue(it.index, it.value) }
+            val scan = ForeverCasc.inspectForeignStageCandidates(
+                stage, File(root, "private/plan-scan"), "ef".repeat(32), specs.size,
+                { membership.getValue(it) }, { false }, {},
+            ) { }
+            val ordinals = ByteArray((specs.size + 7) / 8).also { it[0] = 1 }
+            val plan = ForeverCasc.planCandidateTarget(
+                stage, File(root, "private/plan-work"), scan.copy(candidateCount = 1), specs.size,
+                specs.asSequence(), ordinals, { false }, {},
+            )
+            assertEquals(specs.size.toLong(), plan.totalObjects)
+            assertEquals(1L, plan.verifiedObjects)
+            assertEquals((specs.size - 1).toLong(), plan.missingObjects)
+            assertEquals(specs[0].encodedSize, plan.reusedEncodedBytes)
+            assertEquals(specs.drop(1).sumOf { it.encodedSize }, plan.downloadBytes)
         } finally {
             delete(root)
         }
@@ -1171,6 +1649,62 @@ class ForeverCascTest {
             assertEquals(plan.missingObjects, result.writtenObjects)
             assertEquals(plan.newSegmentBytesUpperBound, File(outputData, "data.001").length())
             assertEquals(sourceBefore, directFileHashes(sourceData))
+        } finally {
+            delete(root)
+        }
+    }
+
+    @Test
+    fun checkpointReaderKeepsCapturedFinishAcrossRecoveryTruncationAndRejectsDamagedObject() {
+        val root = tempDir()
+        try {
+            for (tornTailBytes in listOf(0, 19)) {
+                val fixture = File(root, "case-$tornTailBytes")
+                val decoded = "finish-frame-race".toByteArray()
+                val raw = blteRaw(decoded)
+                val rawFile = file(fixture, "private/raw.blte", raw)
+                val spec = ForeverCasc.IncrementalObjectSpec(
+                    encodedEkey(raw), md5Hex(decoded), raw.size.toLong(), decoded.size.toLong(),
+                )
+                val output = File(fixture, "client/Data/data")
+                assertTrue(output.parentFile!!.mkdirs())
+                val checkpointDirectory = File(fixture, "private/checkpoint").apply { assertTrue(mkdirs()) }
+                ForeverCasc.writeTargetIncrementalResumable(
+                    null, output, checkpointDirectory, sequenceOf(spec), { rawFile }, { false }, "finish-race",
+                )
+                val checkpoint = File(checkpointDirectory, ".forever-casc-resume-checkpoint")
+                assertEquals(40L + 2L * 72L, checkpoint.length())
+                if (tornTailBytes > 0) {
+                    RandomAccessFile(checkpoint, "rw").use { file ->
+                        file.seek(file.length())
+                        file.write(ByteArray(tornTailBytes) { 7 })
+                    }
+                }
+
+                val keys = ForeverCasc.withResumableCheckpointObjects(
+                    output, checkpointDirectory, "finish-race", { false },
+                ) { saved ->
+                    // Model recovery truncating the partial tail and then the
+                    // validated final FINISH captured before callback execution.
+                    RandomAccessFile(checkpoint, "rw").use {
+                        it.setLength(it.length() - tornTailBytes - 72L)
+                    }
+                    saved.map { it.ekey }.toList()
+                }
+                assertEquals(listOf(spec.ekey), keys)
+
+                RandomAccessFile(checkpoint, "rw").use { file ->
+                    file.seek(48L)
+                    val first = file.read()
+                    file.seek(48L)
+                    file.write(first xor 1)
+                }
+                assertThrows(IllegalStateException::class.java) {
+                    ForeverCasc.withResumableCheckpointObjects(output, checkpointDirectory, "finish-race", { false }) {
+                        it.toList()
+                    }
+                }
+            }
         } finally {
             delete(root)
         }

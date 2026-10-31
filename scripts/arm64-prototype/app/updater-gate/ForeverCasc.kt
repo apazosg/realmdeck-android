@@ -2,6 +2,10 @@ package app.gamenative
 
 import java.io.BufferedInputStream
 import java.io.BufferedOutputStream
+import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
+import java.io.DataInputStream
+import java.io.DataOutputStream
 import java.io.File
 import java.io.InputStream
 import java.io.OutputStream
@@ -359,6 +363,16 @@ object ForeverCasc {
     private const val RESUME_FRAME_DATA_SIZE = 68
     private const val RESUME_OBJECT_FRAME = 1
     private const val RESUME_FINISH_FRAME = 2
+    /** One contiguous prefix-metadata run immediately after the checkpoint header. */
+    private const val RESUME_PREFIX_FRAME = 3
+    /** First prefix frame reserves four bytes for the record length. */
+    private const val RESUME_PREFIX_HEADER_BYTES = 4
+    private const val MAX_FOREIGN_PREFIX_BYTES = 1 shl 20
+    /** Private checkpoint entry holding the header-admitted candidate ordinals. */
+    internal const val FOREIGN_CANDIDATE_ORDINALS_NAME = ".forever-casc-candidate-ordinals"
+    private val FOREIGN_CANDIDATE_ORDINALS_MAGIC = "FWFCORD1".toByteArray(Charsets.US_ASCII)
+    /** ceil(2,000,000 ordinals / 8): the bitset never grows with segment or body size. */
+    private const val MAX_FOREIGN_CANDIDATE_ORDINAL_BYTES = 250_000
     private const val MAX_RESUME_CHECKPOINT_BYTES = RESUME_HEADER_SIZE.toLong() +
         MAX_TOTAL_INDEX_ENTRIES.toLong() * RESUME_FRAME_SIZE + RESUME_FRAME_SIZE
     private const val INCREMENTAL_TABLE_SLOT_SIZE = 40
@@ -455,6 +469,9 @@ object ForeverCasc {
         targetMembership: (String) -> IndexedValue<IncrementalObjectSpec>,
         cancelled: () -> Boolean,
         revalidateBinding: () -> Unit,
+        targetMembershipBatch: ((List<String>) -> List<IndexedValue<IncrementalObjectSpec>>)? = null,
+        revalidateRecordBinding: () -> Unit = revalidateBinding,
+        parallelAuthentication: Boolean = false,
     ): ForeignStageVerification {
         require(checkpointIdentity.isNotBlank() && checkpointIdentity.length <= 4096)
         validateTargetInspectionPaths(dataFiles, checkpointDirectory)
@@ -472,6 +489,9 @@ object ForeverCasc {
                 val verified = inspectForeignStage(
                     dataFiles, File(checkpointDirectory, "scan"), targetCatalogDigest,
                     targetObjectCount, targetMembership, cancelled, revalidateBinding,
+                    revalidateRecordBinding = revalidateRecordBinding,
+                    parallelAuthentication = parallelAuthentication,
+                    targetMembershipBatch = targetMembershipBatch,
                 ) { spec, archive, offset ->
                     writeSequential(channel, ByteBuffer.wrap(encodeResumeObject(spec, archive, offset)))
                 }
@@ -511,6 +531,73 @@ object ForeverCasc {
         }
     }
 
+    /**
+     * Prepare a fresh private checkpoint that records only the owned suffix of a
+     * foreign prefix. Unlike [prepareForeignStageCheckpoint], this does not read or
+     * authenticate any object body: it revalidates the exact immutable segment
+     * inventory and writes an empty, identity-bound checkpoint header. The caller
+     * must still hold the operation lease, publish the prefix record durably and
+     * authenticate every candidate before reuse.
+     */
+    internal fun prepareForeignPrefixCheckpoint(
+        dataFiles: File,
+        checkpointDirectory: File,
+        checkpointIdentity: String,
+        prefix: ForeignStageCandidateScan,
+        objectCount: Int,
+        ordinals: ByteArray,
+    ): ForeignStageCandidateScan {
+        require(checkpointIdentity.isNotBlank() && checkpointIdentity.length <= 4096)
+        validateForeignCandidatePrefix(prefix)
+        require(objectCount in 1..MAX_TOTAL_INDEX_ENTRIES) { "foreign CASC candidate count is outside its bounded target" }
+        require(ordinals.size == (objectCount + 7) / 8) { "foreign CASC candidate bitset length does not match its target" }
+        require(java.util.BitSet.valueOf(ordinals).cardinality().toLong() == prefix.candidateCount) {
+            "foreign CASC candidate bitset does not match its inventoried prefix"
+        }
+        validateTargetInspectionPaths(dataFiles, checkpointDirectory)
+        require(dataFiles.toPath().toAbsolutePath().normalize().toString() == prefix.canonicalDataFilesPath) {
+            "foreign CASC prefix does not belong to the prepared output"
+        }
+        check(checkpointDirectory.mkdir()) { "prepared checkpoint directory must be fresh" }
+        var completed = false
+        try {
+            revalidateForeignCandidatePrefix(dataFiles, prefix) {}
+            val identity = RESUME_MAGIC + MessageDigest.getInstance("SHA-256")
+                .digest(checkpointIdentity.toByteArray(Charsets.UTF_8))
+            val record = encodeForeignCandidatePrefix(checkpointIdentity, prefix)
+            require(record.size <= MAX_FOREIGN_PREFIX_BYTES) { "foreign CASC prefix record exceeds its checkpoint bound" }
+            FileChannel.open(File(checkpointDirectory, RESUME_CHECKPOINT_NAME).toPath(),
+                StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS).use { channel ->
+                writeSequential(channel, ByteBuffer.wrap(identity))
+                encodeResumePrefixFrames(record).forEach { frame ->
+                    writeSequential(channel, ByteBuffer.wrap(frame))
+                }
+                channel.force(true)
+            }
+            FileChannel.open(File(checkpointDirectory, RESUME_OWNER_NAME).toPath(),
+                StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS).use {
+                writeSequential(it, ByteBuffer.wrap(identity))
+                it.force(true)
+            }
+            // The ordinals file is written before the completion barrier on
+            // purpose: a failure here still removes the whole directory above,
+            // so a returned checkpoint never misses its bitset. It carries its
+            // own force plus a directory force before completion.
+            val ordinalRecord = encodeForeignCandidateOrdinals(
+                checkpointIdentity, prefix.targetCatalogDigest, objectCount, ordinals)
+            FileChannel.open(File(checkpointDirectory, FOREIGN_CANDIDATE_ORDINALS_NAME).toPath(),
+                StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS).use { channel ->
+                writeSequential(channel, ByteBuffer.wrap(ordinalRecord))
+                channel.force(true)
+            }
+            forceDirectory(checkpointDirectory.toPath())
+            completed = true
+            return prefix
+        } finally {
+            if (!completed) deleteOwnedScratch(checkpointDirectory)
+        }
+    }
+
     /** One no-follow snapshot of an admitted physical segment in its original route. */
     internal data class ForeignSegmentBinding(
         val archiveId: Int,
@@ -535,6 +622,345 @@ object ForeverCasc {
         val inventoryDigest: String,
         val segments: List<ForeignSegmentBinding>,
     )
+
+    /** A header-admitted location only; its encoded body has not been authenticated. */
+    internal data class ForeignStageCandidateLocation(
+        val target: IncrementalObjectSpec,
+        val archiveId: Int,
+        val offset: Long,
+        val ordinal: Int,
+    )
+
+    /** Inventory binding for candidate hints; it is not evidence of body integrity or reuse. */
+    internal data class ForeignStageCandidateScan(
+        val canonicalDataFilesPath: String,
+        val targetCatalogDigest: String,
+        val candidateCount: Long,
+        val sourceInventoryBinding: String,
+        val segments: List<ForeignSegmentBinding>,
+    )
+
+    /**
+     * Serialize a candidate-prefix binding for a private, identity-bound workspace.
+     * This checksum detects corruption, not tampering: the caller must durably bind
+     * the record to the operation transition and prove workspace/marker ownership.
+     * It carries no assertion that any encoded body has been authenticated.
+     */
+    internal fun encodeForeignCandidatePrefix(identity: String, prefix: ForeignStageCandidateScan): ByteArray {
+        require(identity.isNotBlank() && identity.length <= 4096)
+        validateForeignCandidatePrefix(prefix)
+        val body = ByteArrayOutputStream().also { bytes ->
+            DataOutputStream(bytes).use { output ->
+                output.write("FWFCP001".toByteArray(Charsets.US_ASCII))
+                output.write(MessageDigest.getInstance("SHA-256").digest(identity.toByteArray(Charsets.UTF_8)))
+                output.writeUTF(prefix.canonicalDataFilesPath)
+                output.writeUTF(prefix.targetCatalogDigest)
+                output.writeLong(prefix.candidateCount)
+                output.writeUTF(prefix.sourceInventoryBinding)
+                output.writeInt(prefix.segments.size)
+                prefix.segments.forEach { segment ->
+                    output.writeInt(segment.archiveId)
+                    output.writeUTF(segment.name)
+                    output.writeUTF(segment.fileKey)
+                    output.writeLong(segment.size)
+                    output.writeLong(segment.modifiedTime.to(TimeUnit.NANOSECONDS))
+                    output.writeUTF(segment.generatedHeaderSha256)
+                }
+            }
+        }.toByteArray()
+        require(body.size <= 1024 * 1024 - 32) { "foreign CASC prefix record exceeds its bound" }
+        return body + MessageDigest.getInstance("SHA-256").digest(body)
+    }
+
+    /** Decode only bounded, canonical records for the exact current operation identity. */
+    internal fun decodeForeignCandidatePrefix(identity: String, bytes: ByteArray): ForeignStageCandidateScan {
+        require(identity.isNotBlank() && identity.length <= 4096)
+        require(bytes.size in 72..1024 * 1024) { "foreign CASC prefix record size is invalid" }
+        val body = bytes.copyOfRange(0, bytes.size - 32)
+        require(MessageDigest.isEqual(bytes.copyOfRange(bytes.size - 32, bytes.size),
+            MessageDigest.getInstance("SHA-256").digest(body))) { "foreign CASC prefix checksum mismatch" }
+        val prefix = DataInputStream(ByteArrayInputStream(body)).use { input ->
+            val magic = ByteArray(8).also(input::readFully)
+            val storedIdentity = ByteArray(32).also(input::readFully)
+            require(magic.contentEquals("FWFCP001".toByteArray(Charsets.US_ASCII)) &&
+                MessageDigest.isEqual(storedIdentity, MessageDigest.getInstance("SHA-256")
+                    .digest(identity.toByteArray(Charsets.UTF_8)))) { "foreign CASC prefix identity mismatch" }
+            val path = input.readUTF()
+            val target = input.readUTF()
+            val count = input.readLong()
+            val inventory = input.readUTF()
+            val segmentCount = input.readInt()
+            require(segmentCount in 1..1024) { "foreign CASC prefix segment count is invalid" }
+            val segments = List(segmentCount) {
+                ForeignSegmentBinding(input.readInt(), input.readUTF(), input.readUTF(), input.readLong(),
+                    java.nio.file.attribute.FileTime.from(input.readLong(), TimeUnit.NANOSECONDS), input.readUTF())
+            }
+            require(input.available() == 0) { "foreign CASC prefix record has trailing data" }
+            ForeignStageCandidateScan(path, target, count, inventory, java.util.Collections.unmodifiableList(segments))
+        }
+        validateForeignCandidatePrefix(prefix)
+        require(encodeForeignCandidatePrefix(identity, prefix).contentEquals(bytes)) { "foreign CASC prefix record is not canonical" }
+        return prefix
+    }
+
+    /**
+     * Serialize the catalog ordinals admitted by a header-only candidate scan.
+     * Bit `o` (LSB-first within its byte) marks the `o`-th object of the
+     * admitted catalog cursor as a header-admitted candidate. This bitset is
+     * not evidence that any body was authenticated; it only records which
+     * cursor positions the scan admitted. The CRC detects corruption, not
+     * tampering: the caller must durably bind the file to the operation
+     * transition and prove workspace/marker ownership.
+     */
+    internal fun encodeForeignCandidateOrdinals(
+        identity: String,
+        targetCatalogDigest: String,
+        objectCount: Int,
+        ordinals: ByteArray,
+    ): ByteArray {
+        require(identity.isNotBlank() && identity.length <= 4096)
+        require(targetCatalogDigest.matches(Regex("[0-9a-f]{64}"))) { "foreign CASC candidate catalog digest is invalid" }
+        require(objectCount in 1..MAX_TOTAL_INDEX_ENTRIES) { "foreign CASC candidate count is outside its bounded target" }
+        require(ordinals.size == (objectCount + 7) / 8) { "foreign CASC candidate bitset length does not match its target" }
+        val body = ByteArrayOutputStream().also { bytes ->
+            DataOutputStream(bytes).use { output ->
+                output.write(FOREIGN_CANDIDATE_ORDINALS_MAGIC)
+                output.write(MessageDigest.getInstance("SHA-256").digest(identity.toByteArray(Charsets.UTF_8)))
+                output.writeUTF(targetCatalogDigest)
+                output.writeInt(objectCount)
+                output.writeInt(ordinals.size)
+                output.write(ordinals)
+            }
+        }.toByteArray()
+        val crc = CRC32().also { it.update(body) }.value.toInt()
+        return body + ByteBuffer.allocate(4).order(ByteOrder.BIG_ENDIAN).putInt(crc).array()
+    }
+
+    /** Decode only bounded, canonical ordinal bitsets for the exact current operation identity. */
+    internal fun decodeForeignCandidateOrdinals(
+        identity: String,
+        targetCatalogDigest: String,
+        objectCount: Int,
+        bytes: ByteArray,
+    ): ByteArray {
+        require(identity.isNotBlank() && identity.length <= 4096)
+        require(targetCatalogDigest.matches(Regex("[0-9a-f]{64}"))) { "foreign CASC candidate catalog digest is invalid" }
+        require(objectCount in 1..MAX_TOTAL_INDEX_ENTRIES) { "foreign CASC candidate count is outside its bounded target" }
+        val expectedSize = (objectCount + 7) / 8
+        require(bytes.size == 8 + 32 + 2 + 64 + 4 + 4 + expectedSize + 4) {
+            "foreign CASC candidate bitset size does not match its target"
+        }
+        val body = bytes.copyOfRange(0, bytes.size - 4)
+        val storedCrc = ByteBuffer.wrap(bytes, bytes.size - 4, 4).order(ByteOrder.BIG_ENDIAN).int
+        require(CRC32().also { it.update(body) }.value.toInt() == storedCrc) {
+            "foreign CASC candidate bitset CRC mismatch"
+        }
+        val ordinals = DataInputStream(ByteArrayInputStream(body)).use { input ->
+            val magic = ByteArray(8).also(input::readFully)
+            val storedIdentity = ByteArray(32).also(input::readFully)
+            require(magic.contentEquals(FOREIGN_CANDIDATE_ORDINALS_MAGIC) &&
+                MessageDigest.isEqual(storedIdentity, MessageDigest.getInstance("SHA-256")
+                    .digest(identity.toByteArray(Charsets.UTF_8)))) { "foreign CASC candidate bitset identity mismatch" }
+            val catalog = input.readUTF()
+            val count = input.readInt()
+            val length = input.readInt()
+            require(catalog == targetCatalogDigest && count == objectCount && length == expectedSize) {
+                "foreign CASC candidate bitset binding mismatch"
+            }
+            ByteArray(length).also(input::readFully).also {
+                require(input.available() == 0) { "foreign CASC candidate bitset has trailing data" }
+            }
+        }
+        for (ordinal in objectCount until expectedSize * 8) {
+            require(!isCandidateOrdinal(ordinals, ordinal)) { "foreign CASC candidate bitset has out-of-range bits set" }
+        }
+        return ordinals
+    }
+
+    /** Read one header-admitted ordinal bit of a decoded candidate bitset (LSB-first within its byte). */
+    internal fun isCandidateOrdinal(ordinals: ByteArray, ordinal: Int): Boolean {
+        require(ordinal >= 0) { "foreign CASC candidate ordinal is negative" }
+        val byte = ordinal / 8
+        require(byte < ordinals.size) { "foreign CASC candidate ordinal is outside its bitset" }
+        return (ordinals[byte].toInt() shr (ordinal % 8)) and 1 != 0
+    }
+
+    /**
+     * Read the adopted candidate-ordinals file from a private checkpoint
+     * directory, or null when this checkpoint has no foreign prefix. A present
+     * but invalid file fails closed: it is never treated as "no candidates".
+     * Callers must only consult this after proving checkpoint receipt/identity
+     * ownership; the bitset alone never authorizes reuse.
+     */
+    internal fun readAdoptedForeignCandidates(
+        checkpointDirectory: File,
+        identity: String,
+        targetCatalogDigest: String,
+        objectCount: Int,
+    ): ByteArray? {
+        val file = File(checkpointDirectory, FOREIGN_CANDIDATE_ORDINALS_NAME)
+        if (!file.isFile) return null
+        require(file.length() <= 8L + 32 + 2 + 64 + 4 + 4 + MAX_FOREIGN_CANDIDATE_ORDINAL_BYTES + 4) {
+            "foreign CASC candidate bitset exceeds its bound"
+        }
+        return decodeForeignCandidateOrdinals(identity, targetCatalogDigest, objectCount, file.readBytes())
+    }
+
+    private fun validateForeignCandidatePrefix(prefix: ForeignStageCandidateScan) {
+        val path = java.nio.file.Paths.get(prefix.canonicalDataFilesPath)
+        require(path.isAbsolute && path.normalize().toString() == prefix.canonicalDataFilesPath &&
+            prefix.canonicalDataFilesPath.length <= 4096 &&
+            prefix.targetCatalogDigest.matches(Regex("[0-9a-f]{64}")) &&
+            prefix.sourceInventoryBinding.matches(Regex("[0-9a-f]{64}")) &&
+            prefix.candidateCount in 1..MAX_TOTAL_INDEX_ENTRIES.toLong() && prefix.segments.size in 1..1024
+        ) { "foreign CASC prefix binding is invalid" }
+        prefix.segments.forEachIndexed { index, segment ->
+            val nanos = segment.modifiedTime.to(TimeUnit.NANOSECONDS)
+            require(segment.archiveId == index && segment.name == "data.%03d".format(index) &&
+                segment.fileKey.isNotBlank() && segment.fileKey.length <= 512 &&
+                segment.size in SEGMENT_HEADER_SIZE.toLong() + 1L..ARCHIVE_LIMIT &&
+                segment.modifiedTime == java.nio.file.attribute.FileTime.from(nanos, TimeUnit.NANOSECONDS) &&
+                segment.generatedHeaderSha256.matches(Regex("[0-9a-f]{64}"))
+            ) { "foreign CASC prefix segment binding is invalid" }
+        }
+    }
+
+    /**
+     * Cheap boundary check for an already admitted, durably bound prefix. This does
+     * not rescan the record inventory, authenticate bodies, establish operation
+     * ownership, or authorize writes to any other entry in the same directory.
+     * A caller must hold exclusion and check this before any suffix recovery.
+     */
+    internal fun revalidateForeignCandidatePrefix(
+        dataFiles: File,
+        prefix: ForeignStageCandidateScan,
+        revalidateBinding: () -> Unit,
+    ) {
+        validateForeignCandidatePrefix(prefix)
+        val dataPath = dataFiles.toPath().toAbsolutePath().normalize()
+        require(dataPath.toString() == prefix.canonicalDataFilesPath) { "foreign CASC prefix path changed" }
+        rejectSymlinkParents(dataFiles)
+        if (Files.isSymbolicLink(dataPath) || !Files.isDirectory(dataPath, LinkOption.NOFOLLOW_LINKS)) {
+            throw IllegalStateException("foreign CASC prefix directory is unavailable")
+        }
+        revalidateBinding()
+        prefix.segments.forEach { binding ->
+            val path = dataPath.resolve(binding.name)
+            if (Files.isSymbolicLink(path) || !Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) {
+                throw IllegalStateException("foreign CASC prefix segment is unavailable")
+            }
+            fun checkAttributes() {
+                val attrs = Files.readAttributes(path, java.nio.file.attribute.BasicFileAttributes::class.java, LinkOption.NOFOLLOW_LINKS)
+                if (!attrs.isRegularFile || attrs.fileKey()?.toString() != binding.fileKey ||
+                    attrs.size() != binding.size || attrs.lastModifiedTime() != binding.modifiedTime
+                ) throw IllegalStateException("foreign CASC prefix segment binding changed")
+            }
+            checkAttributes()
+            val header = ByteArray(SEGMENT_HEADER_SIZE)
+            FileChannel.open(path, StandardOpenOption.READ, LinkOption.NOFOLLOW_LINKS).use { channel ->
+                if (channel.size() != binding.size) throw IllegalStateException("foreign CASC prefix open size changed")
+                readFullyAt(channel, ByteBuffer.wrap(header), 0L)
+            }
+            val headerHash = MessageDigest.getInstance("SHA-256").digest(header)
+                .joinToString("") { "%02x".format(it.toInt() and 0xff) }
+            if (headerHash != binding.generatedHeaderSha256) throw IllegalStateException("foreign CASC prefix segment header changed")
+            checkAttributes()
+            revalidateBinding()
+        }
+    }
+
+    internal enum class ForeignCandidateVerdict { DECODED, ENCRYPTED, INVALID_BODY, ENCRYPTED_SIZE_UNAVAILABLE }
+
+    /**
+     * Read-only, per-object verification for a previously inventoried foreign prefix.
+     * The caller owns [reader], holds the operation lease, and must separately prove
+     * the durable prefix/operation binding and supply the current official target
+     * member. This helper neither authorizes writes nor establishes suffix ownership.
+     * Encrypted success verifies the EKey-bound table and encoded bytes, not CKey or
+     * decrypted length. A missing encrypted size table is not evidence of corruption.
+     * Instances and their readers are confined to one thread.
+     */
+    internal class ForeignCandidateVerifier(
+        private val dataFiles: File,
+        prefix: ForeignStageCandidateScan,
+        private val reader: CascReplayReader,
+        private val cancelled: () -> Boolean,
+        private val revalidateBinding: () -> Unit,
+    ) {
+        private val prefix = prefix.copy(segments = prefix.segments.toList())
+
+        init {
+            checkCancelled(cancelled)
+            revalidateForeignCandidatePrefix(dataFiles, this.prefix, revalidateBinding)
+        }
+
+        fun verify(candidate: ForeignStageCandidateLocation, official: IncrementalObjectSpec): ForeignCandidateVerdict {
+            checkCancelled(cancelled)
+            val spec = normalizeIncrementalSpec(official)
+            validateIncrementalSpec(spec)
+            require(normalizeIncrementalSpec(candidate.target) == spec) { "foreign candidate does not match the official target" }
+            val segment = prefix.segments.getOrNull(candidate.archiveId)
+                ?: throw IllegalStateException("foreign candidate is outside the bound prefix")
+            val totalSize = Math.addExact(LOCAL_HEADER_SIZE.toLong(), spec.encodedSize)
+            val bodyStart = Math.addExact(candidate.offset, LOCAL_HEADER_SIZE.toLong())
+            val end = Math.addExact(bodyStart, spec.encodedSize)
+            require(candidate.offset >= SEGMENT_HEADER_SIZE && end <= segment.size && end <= ARCHIVE_LIMIT) {
+                "foreign candidate location is outside the bound segment"
+            }
+            val file = File(dataFiles, segment.name)
+            fun checkSegment() {
+                checkCancelled(cancelled)
+                revalidateBinding()
+                rejectSymlinkParents(dataFiles)
+                val directory = dataFiles.toPath().toAbsolutePath().normalize()
+                if (directory.toString() != prefix.canonicalDataFilesPath || Files.isSymbolicLink(directory) ||
+                    !Files.isDirectory(directory, LinkOption.NOFOLLOW_LINKS) || Files.isSymbolicLink(file.toPath())
+                ) throw IllegalStateException("foreign candidate path binding changed")
+                val attrs = Files.readAttributes(file.toPath(), java.nio.file.attribute.BasicFileAttributes::class.java, LinkOption.NOFOLLOW_LINKS)
+                if (!attrs.isRegularFile || attrs.fileKey()?.toString() != segment.fileKey ||
+                    attrs.size() != segment.size || attrs.lastModifiedTime() != segment.modifiedTime
+                ) throw IllegalStateException("foreign candidate segment binding changed")
+            }
+            checkSegment()
+            reader.ensureSegment(file)
+            reader.checkSealedBinding(segment.size)
+            val header = ByteArray(LOCAL_HEADER_SIZE)
+            readAtFully(reader, header, 0, header.size, candidate.offset, cancelled)
+            val key = spec.ekey.hexBytes()
+            validateLocalHeader(header, IndexEntry(key.copyOfRange(0, 9), candidate.archiveId, candidate.offset, totalSize))
+            check(u16(header, 0x14) == 0 && header.copyOfRange(0, 16).reversedArray().contentEquals(key)) {
+                "foreign candidate flags or full EKey changed"
+            }
+
+            val bounded = BoundedReplayInputStream(reader, bodyStart, spec.encodedSize, cancelled)
+            // Reader failures must abort the operation, not be mistaken for an
+            // invalid BLTE body eligible for replacement.
+            val input = object : InputStream() {
+                override fun read(): Int = try { bounded.read() } catch (e: IllegalArgumentException) {
+                    throw IllegalStateException("foreign candidate read failed", e)
+                }
+                override fun read(buffer: ByteArray, off: Int, len: Int): Int = try { bounded.read(buffer, off, len) }
+                catch (e: IllegalArgumentException) { throw IllegalStateException("foreign candidate read failed", e) }
+            }
+            val verdict = try {
+                when (ForeverBlte.verifyForeignPartialEncodedRange(input, spec.encodedSize, spec.ekey,
+                    spec.decodedSize, spec.contentKey, cancelled)) {
+                    "decoded" -> ForeignCandidateVerdict.DECODED
+                    "encrypted" -> ForeignCandidateVerdict.ENCRYPTED
+                    else -> throw IllegalStateException("unexpected foreign BLTE verification result")
+                }.also { check(bounded.remaining == 0L) { "foreign candidate verification did not consume its body" } }
+            } catch (_: ForeverBlte.ForeignEncryptedSizeTableMissingException) {
+                ForeignCandidateVerdict.ENCRYPTED_SIZE_UNAVAILABLE
+            } catch (_: IllegalArgumentException) {
+                ForeignCandidateVerdict.INVALID_BODY
+            }
+            reader.checkSealedBinding(segment.size)
+            checkSegment()
+            return verdict
+        }
+    }
+
+    private enum class ForeignStageScanMode { AUTHENTICATE_BODIES, ENUMERATE_CANDIDATES }
 
     /**
      * Authenticate a foreign partial stage without loading or changing updater
@@ -571,6 +997,60 @@ object ForeverCasc {
         expectedInventoryDigest: String? = null,
         onVerifiedRecord: (IncrementalObjectSpec, Int, Long) -> Unit,
     ): ForeignStageVerification {
+        return scanForeignStage(dataFiles, workDirectory, targetCatalogDigest, targetObjectCount,
+            targetMembership, cancelled, revalidateBinding, revalidateRecordBinding,
+            parallelAuthentication, targetMembershipBatch, expectedInventoryDigest,
+            ForeignStageScanMode.AUTHENTICATE_BODIES, onVerifiedRecord, {})
+    }
+
+    /**
+     * Enumerate header-admitted foreign locations without reading/authenticating their bodies.
+     * Callback rows and the returned inventory binding are unverified location hints, provisional
+     * until a successful return. They neither authorize ownership nor count as reusable content.
+     * Callers must retain exclusion and revalidate source/target bindings before using any hint.
+     * When [expectedPrefix] is supplied, scan only those original segments, allowing an
+     * independently owned suffix to coexist in the directory. The caller must first recover
+     * and validate the durable operation/ownership binding; this API does not admit or
+     * authorize any other directory entry. A mismatched prefix invalidates all callbacks.
+     */
+    internal fun inspectForeignStageCandidates(
+        dataFiles: File,
+        workDirectory: File,
+        targetCatalogDigest: String,
+        targetObjectCount: Int,
+        targetMembership: (String) -> IndexedValue<IncrementalObjectSpec>,
+        cancelled: () -> Boolean,
+        revalidateBinding: () -> Unit,
+        revalidateRecordBinding: () -> Unit = revalidateBinding,
+        targetMembershipBatch: ((List<String>) -> List<IndexedValue<IncrementalObjectSpec>>)? = null,
+        expectedPrefix: ForeignStageCandidateScan? = null,
+        onCandidateLocation: (ForeignStageCandidateLocation) -> Unit,
+    ): ForeignStageCandidateScan {
+        val scan = scanForeignStage(dataFiles, workDirectory, targetCatalogDigest, targetObjectCount,
+            targetMembership, cancelled, revalidateBinding, revalidateRecordBinding,
+            false, targetMembershipBatch, expectedPrefix?.sourceInventoryBinding,
+            ForeignStageScanMode.ENUMERATE_CANDIDATES, { _, _, _ -> }, onCandidateLocation, expectedPrefix)
+        return ForeignStageCandidateScan(scan.canonicalDataFilesPath, scan.targetCatalogDigest,
+            scan.objectCount, scan.inventoryDigest, scan.segments)
+    }
+
+    private fun scanForeignStage(
+        dataFiles: File,
+        workDirectory: File,
+        targetCatalogDigest: String,
+        targetObjectCount: Int,
+        targetMembership: (String) -> IndexedValue<IncrementalObjectSpec>,
+        cancelled: () -> Boolean,
+        revalidateBinding: () -> Unit,
+        revalidateRecordBinding: () -> Unit,
+        parallelAuthentication: Boolean,
+        targetMembershipBatch: ((List<String>) -> List<IndexedValue<IncrementalObjectSpec>>)? ,
+        expectedInventoryDigest: String?,
+        mode: ForeignStageScanMode,
+        onVerifiedRecord: (IncrementalObjectSpec, Int, Long) -> Unit,
+        onCandidateLocation: (ForeignStageCandidateLocation) -> Unit,
+        expectedPrefix: ForeignStageCandidateScan? = null,
+    ): ForeignStageVerification {
         require(targetCatalogDigest.matches(Regex("[0-9a-f]{64}"))) { "foreign-stage target catalog digest is invalid" }
         require(expectedInventoryDigest == null || expectedInventoryDigest.matches(Regex("[0-9a-f]{64}"))) {
             "foreign-stage expected inventory digest is invalid"
@@ -583,23 +1063,35 @@ object ForeverCasc {
         if (!Files.isDirectory(dataPath, LinkOption.NOFOLLOW_LINKS)) {
             throw IllegalStateException("foreign CASC stage is not a regular data directory")
         }
+        if (expectedPrefix != null) {
+            validateForeignCandidatePrefix(expectedPrefix)
+            require(mode == ForeignStageScanMode.ENUMERATE_CANDIDATES &&
+                expectedPrefix.canonicalDataFilesPath == dataPath.toString() &&
+                expectedPrefix.targetCatalogDigest == targetCatalogDigest &&
+                expectedPrefix.candidateCount <= targetObjectCount.toLong()
+            ) { "foreign CASC prefix binding does not match this stage or target" }
+        }
         val scratchCreated = expectedInventoryDigest == null
         if (scratchCreated && !workDirectory.mkdir()) throw IllegalStateException("foreign-stage work directory must be fresh")
         return try {
             checkCancelled(cancelled)
             revalidateBinding()
             val names = ArrayList<Pair<Int, File>>(1024)
-            Files.newDirectoryStream(dataPath).use { children ->
-                children.forEach { child ->
-                    val name = child.fileName.toString()
-                    val match = Regex("^data\\.(\\d{3,})$").matchEntire(name)
-                        ?: throw IllegalStateException("foreign CASC stage contains an unsupported data-directory entry")
-                    val id = match.groupValues[1].toInt()
-                    if (id !in 0..1023 || name != "data.%03d".format(id) || names.size >= 1024) {
-                        throw IllegalStateException("foreign CASC stage segment count or ID exceeds its bound")
+            if (expectedPrefix == null) {
+                Files.newDirectoryStream(dataPath).use { children ->
+                    children.forEach { child ->
+                        val name = child.fileName.toString()
+                        val match = Regex("^data\\.(\\d{3,})$").matchEntire(name)
+                            ?: throw IllegalStateException("foreign CASC stage contains an unsupported data-directory entry")
+                        val id = match.groupValues[1].toInt()
+                        if (id !in 0..1023 || name != "data.%03d".format(id) || names.size >= 1024) {
+                            throw IllegalStateException("foreign CASC stage segment count or ID exceeds its bound")
+                        }
+                        names += id to child.toFile()
                     }
-                    names += id to child.toFile()
                 }
+            } else {
+                expectedPrefix.segments.forEach { segment -> names += segment.archiveId to dataPath.resolve(segment.name).toFile() }
             }
             names.sortBy { it.first }
             if (names.isEmpty() || names.indices.any { names[it].first != it }) {
@@ -621,11 +1113,23 @@ object ForeverCasc {
                     throw IllegalStateException("foreign CASC segment is header-only, truncated or over its bound")
                 }
                 val expected = segmentHeader(id, pathHash)
+                expectedPrefix?.segments?.get(id)?.let { binding ->
+                    val headerHash = MessageDigest.getInstance("SHA-256").digest(expected)
+                        .joinToString("") { "%02x".format(it.toInt() and 0xff) }
+                    if (binding.fileKey != key || binding.size != attributes.size() ||
+                        binding.modifiedTime != attributes.lastModifiedTime() || binding.generatedHeaderSha256 != headerHash
+                    ) throw IllegalStateException("foreign CASC prefix segment binding changed")
+                }
                 SegmentSnapshot(id, file, key, attributes.size(), attributes.lastModifiedTime(), expected)
             }
             val targetSeen = java.util.BitSet(targetObjectCount)
             val inventory = MessageDigest.getInstance("SHA-256")
-            inventory.update("FW-FOREIGN-CASC-INVENTORY-v1\u0000".toByteArray(Charsets.US_ASCII))
+            val inventoryDomain = if (mode == ForeignStageScanMode.ENUMERATE_CANDIDATES) {
+                "FW-FOREIGN-CASC-CANDIDATE-INVENTORY-v1\u0000"
+            } else {
+                "FW-FOREIGN-CASC-INVENTORY-v1\u0000"
+            }
+            inventory.update(inventoryDomain.toByteArray(Charsets.US_ASCII))
             inventory.update(targetCatalogDigest.hexBytes())
             updateForeignDigestText(inventory, canonicalPath)
             val duplicateTable = if (expectedInventoryDigest == null) {
@@ -755,43 +1259,54 @@ object ForeverCasc {
                             ) throw IllegalStateException("foreign CASC record is duplicate or not an exact official target member")
                             validateIncrementalSpec(spec)
                             val prior = ExistingIndexRecord(ekey, entry, 0, 0)
-                             if (duplicateTable != null && !duplicateTable.put(prior)) {
-                                 throw IllegalStateException("foreign CASC stage contains a duplicate full EKey")
-                             }
-                            val bodyStart = Math.addExact(offset, LOCAL_HEADER_SIZE.toLong())
-                            val bounded = object : InputStream() {
-                                private var position = bodyStart
-                                var remaining = encodedSize
-                                    private set
-                                override fun read(): Int {
-                                    val one = ByteArray(1)
-                                    return if (read(one, 0, 1) < 0) -1 else one[0].toInt() and 0xff
-                                }
-                                override fun read(buffer: ByteArray, off: Int, len: Int): Int {
-                                    if (off < 0 || len < 0 || off > buffer.size || len > buffer.size - off) throw IndexOutOfBoundsException()
-                                    if (len == 0) return 0
-                                    if (remaining == 0L) return -1
-                                    checkCancelled(workerCancelled)
-                                    val amount = min(len.toLong(), remaining).toInt()
-                                    val target = ByteBuffer.wrap(buffer, off, amount)
-                                    readFullyAt(channel, target, position)
-                                    position = Math.addExact(position, amount.toLong())
-                                    remaining -= amount
-                                    return amount
-                                }
-                                override fun close() { }
+                            if (duplicateTable != null && !duplicateTable.put(prior)) {
+                                throw IllegalStateException("foreign CASC stage contains a duplicate full EKey")
                             }
                             targetSeen.set(ordinal)
                             val recordOffset = offset
-                            val authenticate = {
-                                ForeverBlte.verifyEncodedRange(bounded, encodedSize, ekey, spec.decodedSize, spec.contentKey, workerCancelled)
-                                if (bounded.remaining != 0L) throw IllegalStateException("foreign CASC BLTE verifier did not consume the exact encoded body")
-                            }
-                            val future = authentications?.submit<Unit> { authenticate() }
-                                ?: java.util.concurrent.CompletableFuture.completedFuture(authenticate())
-                            pending.addLast(PendingAuthentication(future, spec, recordOffset))
-                            if (authentications == null || pending.size >= FOREIGN_AUTH_WORKERS) {
-                                publishAuthenticated(pending.removeFirst())
+                            if (mode == ForeignStageScanMode.ENUMERATE_CANDIDATES) {
+                                updateForeignObjectDigest(inventory, spec, snapshot.id, recordOffset)
+                                onCandidateLocation(ForeignStageCandidateLocation(spec, snapshot.id, recordOffset, ordinal))
+                                count = Math.addExact(count, 1L)
+                                encodedBytes = Math.addExact(encodedBytes, spec.encodedSize)
+                                decodedBytes = Math.addExact(decodedBytes, spec.decodedSize)
+                            } else {
+                                val bodyStart = Math.addExact(offset, LOCAL_HEADER_SIZE.toLong())
+                                val bounded = object : InputStream() {
+                                    private var position = bodyStart
+                                    var remaining = encodedSize
+                                        private set
+
+                                    override fun read(): Int {
+                                        val one = ByteArray(1)
+                                        return if (read(one, 0, 1) < 0) -1 else one[0].toInt() and 0xff
+                                    }
+
+                                    override fun read(buffer: ByteArray, off: Int, len: Int): Int {
+                                        if (off < 0 || len < 0 || off > buffer.size || len > buffer.size - off) throw IndexOutOfBoundsException()
+                                        if (len == 0) return 0
+                                        if (remaining == 0L) return -1
+                                        checkCancelled(workerCancelled)
+                                        val amount = min(len.toLong(), remaining).toInt()
+                                        val target = ByteBuffer.wrap(buffer, off, amount)
+                                        readFullyAt(channel, target, position)
+                                        position = Math.addExact(position, amount.toLong())
+                                        remaining -= amount
+                                        return amount
+                                    }
+
+                                    override fun close() { }
+                                }
+                                val authenticate = {
+                                    ForeverBlte.verifyEncodedRange(bounded, encodedSize, ekey, spec.decodedSize, spec.contentKey, workerCancelled)
+                                    if (bounded.remaining != 0L) throw IllegalStateException("foreign CASC BLTE verifier did not consume the exact encoded body")
+                                }
+                                val future = authentications?.submit<Unit> { authenticate() }
+                                    ?: java.util.concurrent.CompletableFuture.completedFuture(authenticate())
+                                pending.addLast(PendingAuthentication(future, spec, recordOffset))
+                                if (authentications == null || pending.size >= FOREIGN_AUTH_WORKERS) {
+                                    publishAuthenticated(pending.removeFirst())
+                                }
                             }
                             offset = Math.addExact(offset, totalSize)
                             segmentObjects++
@@ -828,13 +1343,16 @@ object ForeverCasc {
                 }
                 checkCancelled(cancelled)
                 revalidateBinding()
-                checkForeignStageNames(dataPath, snapshots)
+                checkForeignStageNames(dataPath, snapshots, allowAdditional = expectedPrefix != null)
                 snapshots.forEach(::checkForeignSegmentSnapshot)
                 checkCancelled(cancelled)
                 revalidateBinding()
                 val digest = inventory.digest().joinToString("") { "%02x".format(it.toInt() and 0xff) }
                 require(expectedInventoryDigest == null || digest == expectedInventoryDigest) {
                     "foreign CASC inventory does not match the durable recovery binding"
+                }
+                require(expectedPrefix == null || count == expectedPrefix.candidateCount) {
+                    "foreign CASC prefix candidate count changed"
                 }
                 ForeignStageVerification(
                     canonicalPath, targetCatalogDigest, count, encodedBytes, decodedBytes, digest,
@@ -878,7 +1396,7 @@ object ForeverCasc {
         ) throw IllegalStateException("foreign CASC segment metadata binding changed during inspection")
     }
 
-    private fun checkForeignStageNames(directory: java.nio.file.Path, snapshots: List<SegmentSnapshot>) {
+    private fun checkForeignStageNames(directory: java.nio.file.Path, snapshots: List<SegmentSnapshot>, allowAdditional: Boolean = false) {
         if (Files.isSymbolicLink(directory) || !Files.isDirectory(directory, LinkOption.NOFOLLOW_LINKS)) {
             throw IllegalStateException("foreign CASC stage directory identity changed during inspection")
         }
@@ -887,6 +1405,7 @@ object ForeverCasc {
         Files.newDirectoryStream(directory).use { children ->
             children.forEach { child ->
                 val name = child.fileName.toString()
+                if (name !in expected && allowAdditional) return@forEach
                 if (name !in expected || ++actualCount > snapshots.size) {
                     throw IllegalStateException("foreign CASC stage entry set changed during inspection")
                 }
@@ -1138,6 +1657,7 @@ object ForeverCasc {
         targetMembershipBatch: ((List<String>) -> List<IndexedValue<IncrementalObjectSpec>>)? = null,
         beforeSegmentOpen: () -> Unit = {},
         beforeDurableGroup: () -> Unit = {},
+        revalidateForeignPrefixBinding: (() -> Unit)? = null,
     ): IncrementalResult = writeIncrementalInternal(
         sourceDataFiles,
         outputDataFiles,
@@ -1157,6 +1677,7 @@ object ForeverCasc {
         targetMembershipBatch = targetMembershipBatch,
         beforeSegmentOpen = beforeSegmentOpen,
         beforeDurableGroup = beforeDurableGroup,
+        revalidateForeignPrefixBinding = revalidateForeignPrefixBinding,
     )
 
     /**
@@ -1211,6 +1732,7 @@ object ForeverCasc {
             if (!header.copyOfRange(0, RESUME_MAGIC.size).contentEquals(RESUME_MAGIC) ||
                 !header.copyOfRange(RESUME_MAGIC.size, RESUME_HEADER_SIZE).contentEquals(identityHash)
             ) throw IllegalStateException("resumable CASC checkpoint belongs to a different target or source revision")
+            val (_, framesStart) = readResumePrefixRecord(channel, size, checkpointIdentity, cancelled)
             val target = objects.iterator()
             var next = if (targetMembership == null && target.hasNext()) normalizeIncrementalSpec(target.next()) else null
             var previous = ""
@@ -1262,7 +1784,7 @@ object ForeverCasc {
                 pending.forEach { saved -> checkCancelled(cancelled); applyObject(saved) }
                 pending.clear()
             }
-            var position = RESUME_HEADER_SIZE.toLong()
+            var position = framesStart
             while (size - position >= RESUME_FRAME_SIZE) {
                 checkCancelled(cancelled)
                 val frame = ByteArray(RESUME_FRAME_SIZE)
@@ -1392,13 +1914,31 @@ object ForeverCasc {
             if (!header.copyOfRange(0, RESUME_MAGIC.size).contentEquals(RESUME_MAGIC) ||
                 !header.copyOfRange(RESUME_MAGIC.size, RESUME_HEADER_SIZE).contentEquals(identityHash)
             ) throw IllegalStateException("resumable CASC checkpoint belongs to a different target or source revision")
+            val (_, framesStart) = readResumePrefixRecord(channel, size, checkpointIdentity, cancelled)
+            // Recovery may remove only the terminal FINISH frame after this
+            // reader captured `size`. Preserve that one bounded frame before
+            // invoking the callback, which may wait for recovery to finish.
+            // Object frames remain read from the checkpoint and fail closed.
+            val completeFrameCount = (size - framesStart) / RESUME_FRAME_SIZE
+            val finalCompleteFramePosition = if (completeFrameCount > 0L) {
+                framesStart + (completeFrameCount - 1L) * RESUME_FRAME_SIZE
+            } else null
+            checkCancelled(cancelled)
+            val capturedFinish = if (finalCompleteFramePosition != null) {
+                ByteArray(RESUME_FRAME_SIZE).also { frame ->
+                    readFullyAt(channel, ByteBuffer.wrap(frame), finalCompleteFramePosition)
+                }.takeIf { (it[0].toInt() and 0xff) == RESUME_FINISH_FRAME }
+            } else null
             val objects = sequence {
-                var position = RESUME_HEADER_SIZE.toLong()
+                var position = framesStart
                 var finalizing = false
                 while (size - position >= RESUME_FRAME_SIZE) {
                     checkCancelled(cancelled)
-                    val frame = ByteArray(RESUME_FRAME_SIZE)
-                    readFullyAt(channel, ByteBuffer.wrap(frame), position)
+                    val frame = if (position == finalCompleteFramePosition && capturedFinish != null) {
+                        capturedFinish
+                    } else {
+                        ByteArray(RESUME_FRAME_SIZE).also { readFullyAt(channel, ByteBuffer.wrap(it), position) }
+                    }
                     val expectedCrc = ByteBuffer.wrap(frame, RESUME_FRAME_DATA_SIZE, 4).order(ByteOrder.BIG_ENDIAN).int
                     val crc = CRC32().also { it.update(frame, 0, RESUME_FRAME_DATA_SIZE) }.value.toInt()
                     if (crc != expectedCrc || frame.copyOfRange(1, 8).any { it.toInt() != 0 }) {
@@ -1756,6 +2296,101 @@ object ForeverCasc {
     }
 
     /**
+     * Plan the missing-object download for a header-only candidate scan without
+     * reading or authenticating any source body. [catalogObjects] is the same
+     * archive-ordered admitted cursor the writer consumes; [candidateOrdinals]
+     * marks the cursor positions the scan header-admitted (bit `o`, LSB-first
+     * within its byte). Candidate ordinals count as reused with their encoded
+     * size but stay unverified: only [ForeignCandidateVerifier] may accredit a
+     * body at write time. All other cursor objects pack as missing through the
+     * shared [TargetPlanPacking], so segment/index accounting is identical to
+     * the from-scratch plan. Retained prefix reconstruction records are
+     * re-derived from the bound segment headers (metadata, never bodies).
+     */
+    internal fun planCandidateTarget(
+        dataFiles: File,
+        workDirectory: File,
+        prefix: ForeignStageCandidateScan,
+        targetObjectCount: Int,
+        catalogObjects: Sequence<IncrementalObjectSpec>,
+        candidateOrdinals: ByteArray,
+        cancelled: () -> Boolean,
+        revalidateBinding: () -> Unit,
+    ): TargetScanResult {
+        validateForeignCandidatePrefix(prefix)
+        require(targetObjectCount in 1..MAX_TOTAL_INDEX_ENTRIES) { "candidate target count is outside its bounded target" }
+        require(candidateOrdinals.size == (targetObjectCount + 7) / 8) {
+            "candidate bitset length does not match its target"
+        }
+        require(java.util.BitSet.valueOf(candidateOrdinals).cardinality().toLong() == prefix.candidateCount) {
+            "candidate bitset does not match its inventoried prefix"
+        }
+        validateTargetInspectionPaths(dataFiles, workDirectory)
+        check(workDirectory.mkdir()) { "candidate target planner requires fresh private scratch" }
+        try {
+            checkCancelled(cancelled)
+            revalidateBinding()
+            // Starting a fresh segment is conservative: the actual writer may
+            // use free space in the last retained segment, but cannot need
+            // more than this plan.
+            val packing = TargetPlanPacking(prefix.segments.last().archiveId + 1)
+            val table = DiskIndexTable(File(workDirectory, "target.bin"), targetObjectCount, cancelled)
+            table.use {
+                prefix.segments.forEach { segment ->
+                    segmentIndexRecords(readSegmentPrefix(File(dataFiles, segment.name)), segment.archiveId).forEach { record ->
+                        check(table.put(record)) { "duplicate retained reconstruction record" }
+                        val bucket = computeBucket(record.entry.key, 1)
+                        packing.bucketCounts[bucket] = Math.addExact(packing.bucketCounts[bucket], 1)
+                        requireIndexCapacity(bucket, packing.bucketCounts[bucket])
+                        packing.totalRecords = Math.addExact(packing.totalRecords, 1L)
+                    }
+                }
+                var ordinal = 0
+                var verifiedCount = 0L
+                var reusedBytes = 0L
+                catalogObjects.forEach { original ->
+                    checkCancelled(cancelled)
+                    require(ordinal < targetObjectCount) { "candidate target cursor exceeds admitted count" }
+                    val spec = normalizeIncrementalSpec(original)
+                    validateIncrementalSpec(spec)
+                    val key = spec.ekey.hexBytes()
+                    require(table.find(key) == null) { "target EKey duplicates or conflicts with a reconstruction record" }
+                    val bucket = computeBucket(key)
+                    if (isCandidateOrdinal(candidateOrdinals, ordinal)) {
+                        // Rebind ordinal and contents: a caller cannot reorder
+                        // the target cursor and accidentally credit a different
+                        // object as a candidate. Bodies stay unverified here.
+                        packing.bucketCounts[bucket] = Math.addExact(packing.bucketCounts[bucket], 1)
+                        requireIndexCapacity(bucket, packing.bucketCounts[bucket])
+                        packing.totalRecords = Math.addExact(packing.totalRecords, 1L)
+                        packing.totalObjects = Math.addExact(packing.totalObjects, 1L)
+                        verifiedCount = Math.addExact(verifiedCount, 1L)
+                        reusedBytes = Math.addExact(reusedBytes, spec.encodedSize)
+                    } else {
+                        val size = packing.beginMissingObject(spec, bucket)
+                        packing.commitMissingObject(spec, bucket, size)
+                    }
+                    require(packing.totalRecords <= MAX_TOTAL_INDEX_ENTRIES)
+                    check(table.put(ExistingIndexRecord(spec.ekey,
+                        IndexEntry(key.copyOfRange(0, 9), 0, 0L, LOCAL_HEADER_SIZE.toLong() + spec.encodedSize),
+                        0, Long.MAX_VALUE, targetSeen = true)))
+                    ordinal++
+                }
+                require(ordinal == targetObjectCount && verifiedCount == prefix.candidateCount) {
+                    "candidate target coverage changed"
+                }
+                revalidateBinding()
+                checkCancelled(cancelled)
+                return TargetScanResult(packing.totalObjects, verifiedCount, packing.missingObjects,
+                    packing.downloadBytes, reusedBytes, packing.newSegmentBytes,
+                    packing.indexBytesUpperBound(), packing.newSegmentCount)
+            }
+        } finally {
+            deleteOwnedScratch(workDirectory)
+        }
+    }
+
+    /**
      * Canonical missing-object packing shared by the generic planner and the
      * sourceless ordered planner. The 480-byte segment header, the 30-byte
      * local header, the 16 virtual reconstruction records counted per new
@@ -1920,7 +2555,11 @@ object ForeverCasc {
         targetMembershipBatch: ((List<String>) -> List<IndexedValue<IncrementalObjectSpec>>)? = null,
         beforeSegmentOpen: () -> Unit = {},
         beforeDurableGroup: () -> Unit = {},
+        revalidateForeignPrefixBinding: (() -> Unit)? = null,
     ): IncrementalResult {
+        require(checkpointIdentity != null || revalidateForeignPrefixBinding == null) {
+            "foreign-prefix revalidation requires an identity-bound checkpoint"
+        }
         val writerStarted = System.nanoTime()
         var firstSourceRequested = false
         diagnostics.info("CASC writer begin resumable=${checkpointIdentity != null}")
@@ -1963,6 +2602,22 @@ object ForeverCasc {
         } else {
             prepareResumableOutput(outputDataFiles, requireNotNull(checkpointDirectory), checkpointIdentity)
         }
+        // Prefix authority is read from the immutable checkpoint header run, not
+        // from a cache or a same-device file name. It authorizes candidate
+        // locations only; every reused object still passes per-object proof.
+        val declaredPrefix = if (checkpointIdentity != null) {
+            readForeignPrefixRecord(outputDataFiles, requireNotNull(checkpointDirectory), checkpointIdentity, cancelled)
+        } else null
+        if (declaredPrefix != null) {
+            require(sourceDataFiles == null) { "a foreign prefix cannot share an indexed incremental source" }
+            require(replayReaderFactory != null) { "foreign-prefix reuse requires a replay reader" }
+            require(declaredPrefix.canonicalDataFilesPath == outputDataFiles.toPath().toAbsolutePath().normalize().toString()) {
+                "foreign CASC prefix does not belong to this output directory"
+            }
+            revalidateForeignCandidatePrefix(outputDataFiles, declaredPrefix) {
+                revalidateForeignPrefixBinding?.invoke() ?: checkCancelled(cancelled)
+            }
+        }
         val scratch = File(outputDataFiles, INCREMENTAL_SCRATCH_NAME)
         if (!scratch.mkdir()) throw IllegalStateException("cannot create owned CASC index work directory")
         val table = try {
@@ -1976,7 +2631,7 @@ object ForeverCasc {
             throw t
         }
         val candidates = try {
-            if (canonicalTarget && sourceDataFiles != null) {
+            if (canonicalTarget && (sourceDataFiles != null || declaredPrefix != null)) {
                 CandidateHintStore.create(
                     File(scratch, "candidate-prefixes.bin"),
                     File(scratch, "candidate-hints.bin"),
@@ -2004,9 +2659,13 @@ object ForeverCasc {
             File(outputDataFiles, INCREMENTAL_OBJECT_TEMP_NAME)
         }
         var archive: BufferedOutputStream? = null
+        // Owned by this writer; kept outside the body so the shared cleanup can
+        // always close it. The verifier is bound to the durable prefix only.
+        var foreignReader: CascReplayReader? = null
+        var foreignCandidateVerifier: ForeignCandidateVerifier? = null
         var archiveId = -1
         var offset = SEGMENT_HEADER_SIZE.toLong()
-        var nextArchiveId = source.maxArchiveId + 1
+        var nextArchiveId = (declaredPrefix?.segments?.last()?.archiveId ?: source.maxArchiveId) + 1
         var reused = 0L
         var written = 0L
         var segmentCount = 0
@@ -2124,7 +2783,11 @@ object ForeverCasc {
         try {
             try {
                 if (canonicalTarget) {
-                    if (sourceDataFiles != null) buildCandidateHints(source, candidates!!, cancelled)
+                    if (declaredPrefix != null) {
+                        buildForeignPrefixHints(declaredPrefix, candidates!!, cancelled)
+                    } else if (sourceDataFiles != null) {
+                        buildCandidateHints(source, candidates!!, cancelled)
+                    }
                 } else {
                     readExistingIndexRecords(source, requireNotNull(sourceDataFiles), table, cancelled).copyInto(bucketCounts)
                 }
@@ -2148,6 +2811,9 @@ object ForeverCasc {
                         targetMembership,
                         targetMembershipBatch,
                     )
+                    require(loaded.foreignPrefix == declaredPrefix) {
+                        "resumable CASC prefix changed between checkpoint reads"
+                    }
                     diagnostics.info("CASC checkpoint loaded objects=${loaded.objectCount} elapsedMs=${(System.nanoTime() - checkpointStarted) / 1_000_000}")
                     checkpoint = loaded.checkpoint
                     archiveId = loaded.lastArchiveId
@@ -2172,7 +2838,7 @@ object ForeverCasc {
                         ) {
                             throw IllegalStateException("overlap CASC run is partially armed; refusing silent fallback to serial replay")
                         }
-                        if (loaded.objectCount <= 0) {
+                        if (loaded.objectCount <= 0 && declaredPrefix == null) {
                             throw IllegalStateException("overlap CASC run armed without a checkpointed prefix; refusing silent fallback")
                         }
                     }
@@ -2207,6 +2873,7 @@ object ForeverCasc {
                                 runOverlapPrefixVerify(
                                     outputDataFiles,
                                     checkpointFile,
+                                    checkpointIdentity!!,
                                     freeze,
                                     overlapOfficialStream,
                                     requireNotNull(replayReaderFactory),
@@ -2231,18 +2898,51 @@ object ForeverCasc {
                     }
                 }
                 if (checkpointIdentity != null) commitFlushRequest?.set(flushPendingResumeCommits)
+                val candidateDataFiles = sourceDataFiles ?: declaredPrefix?.let { File(it.canonicalDataFilesPath) }
+                fun prefixCandidateVerifier(): ForeignCandidateVerifier {
+                    foreignCandidateVerifier?.let { return it }
+                    val prefix = declaredPrefix
+                        ?: throw IllegalStateException("foreign candidate verifier is not bound to a prefix")
+                    val factory = replayReaderFactory
+                        ?: throw IllegalStateException("foreign-prefix reuse requires a replay reader")
+                    checkCancelled(cancelled)
+                    val reader = factory(cancelled)
+                    foreignReader = reader
+                    return ForeignCandidateVerifier(
+                        outputDataFiles,
+                        prefix,
+                        reader,
+                        cancelled,
+                        {
+                            revalidateForeignPrefixBinding?.invoke()
+                            checkCancelled(cancelled)
+                        },
+                    ).also { foreignCandidateVerifier = it }
+                }
+                val strictPrefixVerifier: ((ExistingIndexRecord, IncrementalObjectSpec, Int) -> Boolean)? =
+                    if (declaredPrefix == null) null else { record, spec, ordinal ->
+                        when (prefixCandidateVerifier().verify(
+                            ForeignStageCandidateLocation(spec, record.entry.archiveId, record.entry.archiveOffset, ordinal),
+                            spec,
+                        )) {
+                            ForeignCandidateVerdict.DECODED, ForeignCandidateVerdict.ENCRYPTED -> true
+                            else -> false
+                        }
+                    }
                 for (originalSpec in objects) {
                     checkCancelled(cancelled)
                     if (overlap) overlapCoordinator?.failure?.get()?.let { throw it }
                     val spec = normalizeIncrementalSpec(originalSpec)
                     validateIncrementalSpec(spec)
-                    if (targetOrdinalsSeen != null) {
+                    val memberOrdinal = if (targetOrdinalsSeen != null) {
                         verifyTargetMembership(
                             spec,
                             targetObjectCount,
                             requireNotNull(targetMembership),
                             targetOrdinalsSeen,
                         )
+                    } else {
+                        null
                     }
                     val ekeyBytes = spec.ekey.hexBytes()
                     val prefix = spec.ekey.substring(0, 18)
@@ -2313,12 +3013,12 @@ object ForeverCasc {
                             diagnostics.info("CASC staged verification mode=$replayMode objects=$checkpointObjectsReused elapsedMs=${(System.nanoTime() - writerStarted) / 1_000_000} replayIndexMs=${stagedReplayTimings.replayIndexNanos / 1_000_000} openHeaderMs=${stagedReplayTimings.openHeaderNanos / 1_000_000} copyMs=${stagedReplayTimings.copyNanos / 1_000_000} ekeyMs=${stagedReplayTimings.ekeyNanos / 1_000_000} blteMs=${stagedReplayTimings.blteNanos / 1_000_000} cleanupMs=${stagedReplayTimings.cleanupNanos / 1_000_000} rangeVerifyMs=${stagedReplayTimings.rangeVerifyNanos / 1_000_000} bindingMs=${stagedReplayTimings.bindingNanos / 1_000_000} totalVerifyMs=${stagedReplayTimings.totalVerifyNanos / 1_000_000}")
                         }
                         continue
-                    } else if (canonicalTarget && existing == null && sourceDataFiles != null) {
+                    } else if (canonicalTarget && existing == null && candidateDataFiles != null) {
                         // Leaving the staged prefix: the replay FD must not
                         // stay open across candidate verification or writes.
                         closeReplayReader()
                         val candidateMatch = findCanonicalCandidate(
-                            sourceDataFiles!!,
+                            candidateDataFiles,
                             candidates!!,
                             spec,
                             temporary,
@@ -2329,6 +3029,8 @@ object ForeverCasc {
                             outputSegmentHeadersAdded,
                             sourceSegmentHeaders,
                             sourceSegmentHeaderChecked,
+                            strictPrefixVerifier,
+                            memberOrdinal,
                         )
                         val candidateSearch = candidateMatch.search
                         candidateHintsExamined += candidateSearch.examined
@@ -2597,6 +3299,12 @@ object ForeverCasc {
                 } catch (closeError: Throwable) {
                     cleanupFailure = closeError
                 }
+                try {
+                    foreignReader?.close()
+                } catch (closeError: Throwable) {
+                    if (cleanupFailure == null) cleanupFailure = closeError
+                    else cleanupFailure.addSuppressed(closeError)
+                }
                 run {
                     try {
                         archive?.close()
@@ -2694,6 +3402,7 @@ object ForeverCasc {
         val lastEkey: String?,
         val segmentEnds: Map<Int, Long>,
         val rawKeyRecords: Map<String, OverlapRawKeyRecord>,
+        val foreignPrefix: ForeignStageCandidateScan? = null,
     )
 
     private data class ResumableCheckpoint(val file: File, val identityHash: ByteArray)
@@ -2974,11 +3683,18 @@ object ForeverCasc {
         val channel = FileChannel.open(checkpointPath, StandardOpenOption.READ, StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS)
         var lastArchiveId = -1
         var lastOffset = SEGMENT_HEADER_SIZE.toLong()
-        var expectedArchiveId = sourceMaxArchiveId + 1
+        val (foreignPrefix, framesStart) = readResumePrefixRecord(channel, size, identity, cancelled)
+        val prefixSegmentIds = foreignPrefix?.segments?.map { it.archiveId }?.toSet() ?: emptySet()
+        if (foreignPrefix != null) {
+            require(sourceMaxArchiveId == -1) { "a foreign prefix cannot be combined with an indexed source generation" }
+            require(foreignPrefix.segments.last().archiveId >= 0) { "foreign CASC prefix has no segment range" }
+        }
+        val effectiveSourceMaxArchiveId = foreignPrefix?.segments?.last()?.archiveId ?: sourceMaxArchiveId
+        var expectedArchiveId = effectiveSourceMaxArchiveId + 1
         var objectCount = 0L
         var lastEkey: String? = null
         var sawFinalizing = false
-        var validEnd = RESUME_HEADER_SIZE.toLong()
+        var validEnd = framesStart
         val batchLimit = if (targetMembershipBatch == null) 1 else CHECKPOINT_MEMBERSHIP_BATCH_OBJECTS
         val pending = ArrayList<ResumeObject>(batchLimit)
         fun applyObject(record: ResumeObject) {
@@ -3043,7 +3759,7 @@ object ForeverCasc {
             if (!header.copyOfRange(0, RESUME_MAGIC.size).contentEquals(RESUME_MAGIC) ||
                 !header.copyOfRange(RESUME_MAGIC.size, RESUME_HEADER_SIZE).contentEquals(identityHash)
             ) throw IllegalStateException("resumable CASC checkpoint belongs to a different target or source revision")
-            var position = RESUME_HEADER_SIZE.toLong()
+            var position = framesStart
             while (position < size) {
                 checkCancelled(cancelled)
                 val remaining = size - position
@@ -3135,11 +3851,12 @@ object ForeverCasc {
             }
 
             val loggedIds = segmentIds.toSet()
-            val maxLogged = segmentIds.lastOrNull() ?: sourceMaxArchiveId
-            if (actualSegmentIds.any { it !in loggedIds && it != maxLogged + 1 }) {
+            foreignPrefix?.let { revalidateForeignCandidatePrefix(outputDataFiles, it) {} }
+            val maxLogged = segmentIds.lastOrNull() ?: effectiveSourceMaxArchiveId
+            if (actualSegmentIds.any { it !in loggedIds && it !in prefixSegmentIds && it != maxLogged + 1 }) {
                 throw IllegalStateException("resumable CASC stage contains a segment outside the checkpoint tail")
             }
-            actualSegmentIds.filter { it !in loggedIds }.forEach { id ->
+            actualSegmentIds.filter { it !in loggedIds && it !in prefixSegmentIds }.forEach { id ->
                 if (id != maxLogged + 1) throw IllegalStateException("resumable CASC torn segment is not the final segment")
                 val torn = File(outputDataFiles, "data.%03d".format(id))
                 if (Files.size(torn.toPath()) > ARCHIVE_LIMIT) throw IllegalStateException("resumable CASC torn segment exceeds its bound")
@@ -3161,7 +3878,7 @@ object ForeverCasc {
                     }
                 }
             }
-            if (segmentIds.size > 1024 || (segmentIds.isNotEmpty() && segmentIds.first() != sourceMaxArchiveId + 1)) {
+            if (segmentIds.size > 1024 || (segmentIds.isNotEmpty() && segmentIds.first() != effectiveSourceMaxArchiveId + 1)) {
                 throw IllegalStateException("resumable CASC stage exceeds the available archive ID range")
             }
         } finally {
@@ -3171,13 +3888,14 @@ object ForeverCasc {
             ResumableCheckpoint(checkpointPath.toFile(), identityHash),
             lastArchiveId,
             lastOffset,
-            if (lastArchiveId >= 0) Math.addExact(lastArchiveId, 1) else sourceMaxArchiveId + 1,
+            if (lastArchiveId >= 0) Math.addExact(lastArchiveId, 1) else effectiveSourceMaxArchiveId + 1,
             segmentIds.size,
             segmentIds,
             objectCount,
             lastEkey,
             segmentIds.associateWith { segmentEnd[it] },
             rawKeyRecords,
+            foreignPrefix,
         )
     }
 
@@ -3217,6 +3935,122 @@ object ForeverCasc {
             channel.force(true)
         }
         forceDirectory(requireNotNull(checkpoint.file.parentFile).toPath())
+    }
+
+    /**
+     * Encode one prefix inventory as a contiguous run of checkpoint frame type 3.
+     * The first frame reserves four big-endian bytes for the exact record length;
+     * every frame is CRC-covered and zero-padded, so a torn or altered run fails
+     * closed instead of being mistaken for a shorter record.
+     */
+    private fun encodeResumePrefixFrames(record: ByteArray): List<ByteArray> {
+        require(record.size in 1..MAX_FOREIGN_PREFIX_BYTES) { "foreign CASC prefix record size is invalid" }
+        val frames = ArrayList<ByteArray>((record.size + 55) / 56 + 1)
+        var at = 0
+        var first = true
+        while (at < record.size) {
+            val frame = ByteArray(RESUME_FRAME_SIZE)
+            frame[0] = RESUME_PREFIX_FRAME.toByte()
+            val payloadAt = if (first) {
+                ByteBuffer.wrap(frame, 8, RESUME_PREFIX_HEADER_BYTES).order(ByteOrder.BIG_ENDIAN).putInt(record.size)
+                8 + RESUME_PREFIX_HEADER_BYTES
+            } else {
+                8
+            }
+            val count = minOf(RESUME_FRAME_DATA_SIZE - payloadAt, record.size - at)
+            System.arraycopy(record, at, frame, payloadAt, count)
+            putResumeCrc(frame)
+            frames += frame
+            at += count
+            first = false
+        }
+        return frames
+    }
+
+    /**
+     * Read the optional prefix run immediately after the checkpoint header. The
+     * run is immutable metadata, never truncated or repaired here: only a complete,
+     * canonical record for the exact operation identity is accepted.
+     */
+    private fun readResumePrefixRecord(
+        channel: FileChannel,
+        size: Long,
+        identity: String,
+        cancelled: () -> Boolean,
+    ): Pair<ForeignStageCandidateScan?, Long> {
+        var position = RESUME_HEADER_SIZE.toLong()
+        if (size - position < RESUME_FRAME_SIZE) return null to position
+        var frame = ByteArray(RESUME_FRAME_SIZE)
+        readFullyAt(channel, ByteBuffer.wrap(frame), position)
+        if ((frame[0].toInt() and 0xff) != RESUME_PREFIX_FRAME) return null to position
+        validateResumeFrame(frame, "foreign CASC prefix checkpoint frame")
+        val length = ByteBuffer.wrap(frame, 8, RESUME_PREFIX_HEADER_BYTES).order(ByteOrder.BIG_ENDIAN).int
+        require(length in 1..MAX_FOREIGN_PREFIX_BYTES) { "foreign CASC prefix checkpoint length is invalid" }
+        val record = ByteArray(length)
+        var written = 0
+        var payloadAt = 8 + RESUME_PREFIX_HEADER_BYTES
+        while (true) {
+            checkCancelled(cancelled)
+            val count = minOf(RESUME_FRAME_DATA_SIZE - payloadAt, length - written)
+            System.arraycopy(frame, payloadAt, record, written, count)
+            if (payloadAt + count < RESUME_FRAME_DATA_SIZE &&
+                frame.copyOfRange(payloadAt + count, RESUME_FRAME_DATA_SIZE).any { it.toInt() != 0 }
+            ) throw IllegalStateException("foreign CASC prefix checkpoint frame padding is invalid")
+            written += count
+            position += RESUME_FRAME_SIZE
+            if (written == length) break
+            if (size - position < RESUME_FRAME_SIZE) {
+                throw IllegalStateException("foreign CASC prefix checkpoint record is truncated")
+            }
+            frame = ByteArray(RESUME_FRAME_SIZE)
+            readFullyAt(channel, ByteBuffer.wrap(frame), position)
+            if ((frame[0].toInt() and 0xff) != RESUME_PREFIX_FRAME) {
+                throw IllegalStateException("foreign CASC prefix checkpoint record is interrupted")
+            }
+            validateResumeFrame(frame, "foreign CASC prefix checkpoint frame")
+            payloadAt = 8
+        }
+        return decodeForeignCandidatePrefix(identity, record) to position
+    }
+
+    /**
+     * Read only the immutable prefix run of an existing checkpoint, bound to the
+     * exact operation identity. It never creates, repairs, truncates or extends the
+     * checkpoint: a missing owner, malformed header or torn record fails closed.
+     */
+    internal fun readForeignPrefixRecord(
+        outputDataFiles: File,
+        checkpointDirectory: File,
+        checkpointIdentity: String,
+        cancelled: () -> Boolean,
+    ): ForeignStageCandidateScan? {
+        val checkpoint = checkpointDirectory.toPath().resolve(RESUME_CHECKPOINT_NAME)
+        if (Files.isSymbolicLink(checkpoint) || !Files.isRegularFile(checkpoint, LinkOption.NOFOLLOW_LINKS)) {
+            throw IllegalStateException("resumable CASC checkpoint is missing or unsafe")
+        }
+        val identityHash = MessageDigest.getInstance("SHA-256")
+            .digest(checkpointIdentity.toByteArray(Charsets.UTF_8))
+        FileChannel.open(checkpoint, StandardOpenOption.READ, LinkOption.NOFOLLOW_LINKS).use { channel ->
+            val size = channel.size()
+            if (size !in RESUME_HEADER_SIZE.toLong()..MAX_RESUME_CHECKPOINT_BYTES) {
+                throw IllegalStateException("resumable CASC checkpoint length is invalid")
+            }
+            val header = ByteArray(RESUME_HEADER_SIZE)
+            readFullyAt(channel, ByteBuffer.wrap(header), 0L)
+            if (!header.copyOfRange(0, RESUME_MAGIC.size).contentEquals(RESUME_MAGIC) ||
+                !header.copyOfRange(RESUME_MAGIC.size, RESUME_HEADER_SIZE).contentEquals(identityHash)
+            ) throw IllegalStateException("resumable CASC checkpoint identity does not match the operation")
+            if (channel.size() != size) throw IllegalStateException("resumable CASC checkpoint changed while being read")
+            return readResumePrefixRecord(channel, size, checkpointIdentity, cancelled).first
+        }
+    }
+
+    private fun validateResumeFrame(frame: ByteArray, label: String) {
+        val expectedCrc = ByteBuffer.wrap(frame, RESUME_FRAME_DATA_SIZE, 4).order(ByteOrder.BIG_ENDIAN).int
+        val crc = CRC32().also { it.update(frame, 0, RESUME_FRAME_DATA_SIZE) }.value.toInt()
+        if (crc != expectedCrc || frame.copyOfRange(1, 8).any { it.toInt() != 0 }) {
+            throw IllegalStateException("$label checksum or reserved fields are invalid")
+        }
     }
 
     private fun encodeResumeObject(spec: IncrementalObjectSpec, archiveId: Int, offset: Long): ByteArray {
@@ -3387,7 +4221,7 @@ object ForeverCasc {
         targetMembership: (String) -> IndexedValue<IncrementalObjectSpec>,
         seenOrdinals: java.util.BitSet,
         source: String = "incremental manifest",
-    ) {
+    ): Int {
         val admitted = try {
             targetMembership(spec.ekey)
         } catch (missing: NoSuchElementException) {
@@ -3403,6 +4237,7 @@ object ForeverCasc {
             throw IllegalStateException("$source repeats a target membership ordinal")
         }
         seenOrdinals.set(admitted.index)
+        return admitted.index
     }
 
     private fun validateIncrementalSpec(spec: IncrementalObjectSpec) {
@@ -3561,6 +4396,64 @@ object ForeverCasc {
             }
             forEachV7IndexLocationHint(bytes, recordCount, cancelled) { hint ->
                 candidates.add(hint.keyPrefix, hint.archiveId, hint.archiveOffset, hint.size)
+            }
+        }
+    }
+
+    /**
+     * Rebuild candidate hints from the immutable foreign prefix inventory after a
+     * resume, when the original scan workspace no longer exists. Only local header
+     * locations are collected: every candidate still needs body proof at use, so a
+     * corrupt or truncated header fails the operation instead of being skipped.
+     */
+    private fun buildForeignPrefixHints(
+        prefix: ForeignStageCandidateScan,
+        candidates: CandidateHintStore,
+        cancelled: () -> Boolean,
+    ) {
+        val directory = File(prefix.canonicalDataFilesPath)
+        prefix.segments.forEach { binding ->
+            checkCancelled(cancelled)
+            require(binding.archiveId in 0..1023) { "foreign CASC prefix archive id is outside V7 bounds" }
+            val path = directory.toPath().resolve(binding.name)
+            if (Files.isSymbolicLink(path) || !Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) {
+                throw IllegalStateException("foreign CASC prefix segment is unavailable")
+            }
+            FileChannel.open(path, StandardOpenOption.READ, LinkOption.NOFOLLOW_LINKS).use { channel ->
+                val size = channel.size()
+                fun checkBinding() {
+                    val attrs = Files.readAttributes(path, java.nio.file.attribute.BasicFileAttributes::class.java, LinkOption.NOFOLLOW_LINKS)
+                    if (!attrs.isRegularFile || attrs.fileKey()?.toString() != binding.fileKey ||
+                        attrs.size() != binding.size || attrs.lastModifiedTime() != binding.modifiedTime ||
+                        channel.size() != binding.size
+                    ) throw IllegalStateException("foreign CASC prefix segment binding changed")
+                }
+                checkBinding()
+                val segmentHeader = ByteArray(SEGMENT_HEADER_SIZE)
+                readFullyAt(channel, ByteBuffer.wrap(segmentHeader), 0L)
+                val headerHash = MessageDigest.getInstance("SHA-256").digest(segmentHeader)
+                    .joinToString("") { "%02x".format(it.toInt() and 0xff) }
+                if (headerHash != binding.generatedHeaderSha256) {
+                    throw IllegalStateException("foreign CASC prefix segment header changed")
+                }
+                var cursor = SEGMENT_HEADER_SIZE.toLong()
+                while (cursor < size) {
+                    checkCancelled(cancelled)
+                    if (size - cursor < LOCAL_HEADER_SIZE) {
+                        throw IllegalStateException("foreign CASC prefix segment ends in a truncated local header")
+                    }
+                    val header = ByteArray(LOCAL_HEADER_SIZE)
+                    readFullyAt(channel, ByteBuffer.wrap(header), cursor)
+                    val fullKey = header.copyOfRange(0, 16).reversedArray()
+                    val totalSize = u32(header, 0x10).toLong() and 0xffffffffL
+                    if (u16(header, 0x14) != 0 || totalSize < LOCAL_HEADER_SIZE + 4L ||
+                        totalSize > ARCHIVE_LIMIT || totalSize > size - cursor
+                    ) throw IllegalStateException("foreign CASC prefix local record flags or exact size are unsupported")
+                    validateLocalHeader(header, IndexEntry(fullKey.copyOfRange(0, 9), binding.archiveId, cursor, totalSize))
+                    candidates.add(fullKey.copyOfRange(0, 9), binding.archiveId, cursor, totalSize)
+                    cursor = Math.addExact(cursor, totalSize)
+                }
+                checkBinding()
             }
         }
     }
@@ -4255,6 +5148,7 @@ object ForeverCasc {
     private fun runOverlapPrefixVerify(
         outputDataFiles: File,
         checkpointFile: File,
+        checkpointIdentity: String,
         freeze: OverlapPrefixFreeze,
         officialStream: OverlapOfficialStream?,
         readerFactory: ((() -> Boolean) -> CascReplayReader),
@@ -4276,7 +5170,8 @@ object ForeverCasc {
             FileChannel.open(path, StandardOpenOption.READ, LinkOption.NOFOLLOW_LINKS).use { channel ->
                 val reader = readerFactory(cancelled)
                 try {
-                    var position = RESUME_HEADER_SIZE.toLong()
+                    val (_, framesStart) = readResumePrefixRecord(channel, channel.size(), checkpointIdentity, cancelled)
+                    var position = framesStart
                     var expectedArchiveId = freeze.firstArchiveId
                     var groupId = -1
                     var groupEnd = -1L
@@ -4666,9 +5561,29 @@ object ForeverCasc {
         outputSegmentHeadersAdded: BooleanArray,
         sourceSegmentHeaders: Array<List<ExistingIndexRecord>?>,
         sourceSegmentHeaderChecked: BooleanArray,
+        strictPrefixVerifier: ((ExistingIndexRecord, IncrementalObjectSpec, Int) -> Boolean)? = null,
+        memberOrdinal: Int? = null,
     ): CanonicalCandidateMatch {
         var reconstructionRecords: List<ExistingIndexRecord> = emptyList()
-        val search = findVerifiedCandidate(sourceDataFiles, candidates, spec, temporary, cancelled) { candidate ->
+        // A durable foreign prefix has no reconstruction indexes: each location is
+        // proven by the strict prefix verifier instead of a copied canonical check.
+        // The ordinal travels from the writer's own target admission of this spec;
+        // it is never re-resolved here.
+        val prefixProof: ((ExistingIndexRecord) -> Boolean)? = strictPrefixVerifier?.let { verifier ->
+            val ordinal = requireNotNull(memberOrdinal) {
+                "foreign prefix verification requires the admitted target ordinal"
+            }
+            val proof: (ExistingIndexRecord) -> Boolean = { candidate -> verifier(candidate, spec, ordinal) }
+            proof
+        }
+        val search = findVerifiedCandidate(
+            sourceDataFiles, candidates, spec, temporary, cancelled, proof = prefixProof,
+        ) { candidate ->
+            if (prefixProof != null) {
+                return@findVerifiedCandidate canAddCanonicalTarget(
+                    table, bucketCounts, totalRecords, emptyList(), candidate, computeBucket(spec.ekey.hexBytes()),
+                )
+            }
             val sourceId = candidate.entry.archiveId
             if (!sourceSegmentHeaderChecked[sourceId]) {
                 sourceSegmentHeaderChecked[sourceId] = true
@@ -4693,6 +5608,7 @@ object ForeverCasc {
         spec: IncrementalObjectSpec,
         temporary: File,
         cancelled: () -> Boolean,
+        proof: ((ExistingIndexRecord) -> Boolean)? = null,
         acceptCandidate: (ExistingIndexRecord) -> Boolean = { true },
     ): CandidateSearchResult = findVerifiedCandidate(
         sourceDataFiles,
@@ -4703,6 +5619,7 @@ object ForeverCasc {
         spec.encodedSize,
         temporary,
         cancelled,
+        proof,
         acceptCandidate,
     )
 
@@ -4732,6 +5649,7 @@ object ForeverCasc {
         expectedEncodedSize: Long?,
         temporary: File,
         cancelled: () -> Boolean,
+        proof: ((ExistingIndexRecord) -> Boolean)? = null,
         acceptCandidate: (ExistingIndexRecord) -> Boolean = { true },
     ): CandidateSearchResult {
         var verified: ExistingIndexRecord? = null
@@ -4751,7 +5669,9 @@ object ForeverCasc {
                 candidate.entry.size - LOCAL_HEADER_SIZE,
                 decodedSize,
             )
-            if (!verifyExistingIncrementalObject(sourceDataFiles, candidate, verificationSpec, temporary, cancelled)) {
+            val proven = proof?.invoke(candidate)
+                ?: verifyExistingIncrementalObject(sourceDataFiles, candidate, verificationSpec, temporary, cancelled)
+            if (!proven) {
                 rejected++
                 return@forEachCandidate true
             }

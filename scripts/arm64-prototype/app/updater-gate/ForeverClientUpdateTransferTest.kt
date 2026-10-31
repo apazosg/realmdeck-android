@@ -24,6 +24,74 @@ import org.junit.Test
 
 class ForeverClientUpdateTransferTest {
     @Test
+    fun exhaustedBudgetDeniesBeforeCreatingConnection() {
+        Fixture().use { fixture ->
+            val item = objectData()
+            val budget = ForeverClientPayloadBudget.create(fixture.root, "ab".repeat(32), item.record.encodedSize)
+            var connections = 0
+            val transfer = ForeverClientUpdateTransfer(budget) {
+                connections++
+                FakeConnection(HttpURLConnection.HTTP_OK, item.bytes)
+            }
+
+            assertThrows(ForeverClientPayloadBudget.PayloadBudgetExhaustedException::class.java) {
+                transfer.fetch(item.record, fixture.workDir, { false }) { }
+            }
+            assertEquals(0, connections)
+            assertEquals(0L, budget.reservedBytes())
+        }
+    }
+
+    @Test
+    fun sharedBudgetConstructorUsesOfficialConnectionFactoryWithoutStartingExhaustedRequest() {
+        Fixture().use { fixture ->
+            val item = objectData()
+            val budget = ForeverClientPayloadBudget.create(fixture.root, "ab".repeat(32), 0)
+            val transfer = ForeverClientUpdateTransfer(budget)
+
+            assertThrows(ForeverClientPayloadBudget.PayloadBudgetExhaustedException::class.java) {
+                transfer.fetch(item.record, fixture.workDir, { false }) { }
+            }
+            assertEquals(0L, budget.reservedBytes())
+        }
+    }
+
+    @Test
+    fun retriesAndArchiveBatchChargeTheSameSharedBudgetBeforeEachRequest() {
+        Fixture().use { fixture ->
+            val retryItem = objectData("retry-only encoded object".toByteArray())
+            val retryAttempts = listOf(retryItem.bytes.size.toLong() + 1L, 5L)
+            var retryCalls = 0
+            val batchItems = archiveObjects()
+            val batchBytes = batchItems.sumOf { it.bytes.size.toLong() }
+            val expected = retryAttempts.sum() + batchBytes + 1L
+            val budget = ForeverClientPayloadBudget.create(fixture.root, "cd".repeat(32), expected)
+            val transfer = ForeverClientUpdateTransfer(budget) { url ->
+                if (url == retryItem.directUrl) {
+                    retryCalls++
+                    if (retryCalls == 1) FakeConnection(200, retryItem.bytes.copyOfRange(0, retryItem.bytes.size - 4),
+                        declaredLength = retryItem.bytes.size.toLong())
+                    else {
+                        val start = retryItem.bytes.size - 4
+                        FakeConnection(206, retryItem.bytes.copyOfRange(start, retryItem.bytes.size),
+                            "bytes $start-${retryItem.bytes.size - 1}/${retryItem.bytes.size}")
+                    }
+                } else {
+                    val body = batchItems.fold(ByteArray(0)) { acc, item -> acc + item.bytes }
+                    val start = batchItems.first().record.sourceOffset
+                    FakeConnection(206, body, "bytes $start-${start + body.size - 1}/${start + body.size}")
+                }
+            }
+
+            transfer.fetch(retryItem.record, fixture.workDir, { false }) { }
+            transfer.fetchBatch(batchItems.map { it.record }, fixture.workDir, { false }) { _, _ -> }
+
+            assertEquals(2, retryCalls)
+            assertEquals(expected, budget.reservedBytes())
+        }
+    }
+
+    @Test
     fun downloadsDirectZeroHeaderObjectAndReusesOnlyVerifiedFinalOutput() {
         Fixture().use { fixture ->
             val objectData = objectData()
@@ -495,6 +563,54 @@ class ForeverClientUpdateTransferTest {
     }
 
     @Test
+    fun overlongResponsesCannotPrefetchBeyondSingleOrBatchBudgetReservation() {
+        Fixture().use { fixture ->
+            val item = objectData()
+            val singleExpected = item.bytes.size.toLong()
+            val singleConnection = FakeConnection(
+                HttpURLConnection.HTTP_OK,
+                item.bytes + ByteArray(128 * 1024) { 7 },
+                declaredLength = singleExpected,
+            )
+            val singleBudget = ForeverClientPayloadBudget.create(
+                fixture.root, "ef".repeat(32), singleExpected + 1,
+            )
+            assertThrows(IllegalArgumentException::class.java) {
+                ForeverClientUpdateTransfer(singleBudget) { singleConnection }
+                    .fetch(item.record, fixture.workDir, { false }) { }
+            }
+            assertEquals(singleExpected + 1, singleBudget.reservedBytes())
+            assertEquals(singleExpected + 1, singleConnection.underlyingBytesRead.toLong())
+            assertTrue(fixture.workDir.listFiles()!!.any { it.name == "${item.record.ekey}.part" })
+        }
+
+        Fixture().use { fixture ->
+            val batchItems = archiveObjects()
+            val batchRecords = batchItems.map { it.record }
+            val validBatchBody = batchItems.fold(ByteArray(0)) { bytes, member -> bytes + member.bytes }
+            val batchExpected = validBatchBody.size.toLong()
+            val batchStart = batchRecords.first().sourceOffset
+            val batchEnd = batchStart + batchExpected - 1
+            val batchConnection = FakeConnection(
+                HttpURLConnection.HTTP_PARTIAL,
+                validBatchBody + ByteArray(128 * 1024) { 9 },
+                "bytes $batchStart-$batchEnd/${batchEnd + 1}",
+                batchExpected,
+            )
+            val batchBudget = ForeverClientPayloadBudget.create(
+                fixture.root, "fe".repeat(32), batchExpected + 1,
+            )
+            assertThrows(IllegalArgumentException::class.java) {
+                ForeverClientUpdateTransfer(batchBudget) { batchConnection }
+                    .fetchBatch(batchRecords, fixture.workDir, { false }) { _, _ -> }
+            }
+            assertEquals(batchExpected + 1, batchBudget.reservedBytes())
+            assertEquals(batchExpected + 1, batchConnection.underlyingBytesRead.toLong())
+            assertTrue(batchRecords.all { File(fixture.workDir, "${it.ekey}.part").exists() })
+        }
+    }
+
+    @Test
     fun corruptBatchMemberCannotAuthenticateItsNeighboursOrForceTheirRedownload() {
         Fixture().use { fixture ->
             val items = archiveObjects()
@@ -591,6 +707,8 @@ class ForeverClientUpdateTransferTest {
             private set
         var disconnected = false
             private set
+        var underlyingBytesRead = 0
+            private set
 
         override fun connect() = Unit
         override fun disconnect() { disconnected = true }
@@ -598,13 +716,13 @@ class ForeverClientUpdateTransferTest {
         override fun getResponseCode(): Int = status
         override fun getContentLengthLong(): Long = declaredLength
         override fun getInputStream(): InputStream {
-            if (!failAfterBody && beforeRead == null) return ByteArrayInputStream(body)
             val delegate = ByteArrayInputStream(body)
             var failed = false
             return object : InputStream() {
                 override fun read(): Int {
                     beforeRead?.invoke()
                     val value = delegate.read()
+                    if (value >= 0) underlyingBytesRead++
                     if (failAfterBody && value < 0 && !failed) {
                         failed = true
                         throw IOException("synthetic post-body failure")
@@ -615,6 +733,7 @@ class ForeverClientUpdateTransferTest {
                 override fun read(bytes: ByteArray, offset: Int, length: Int): Int {
                     beforeRead?.invoke()
                     val count = delegate.read(bytes, offset, length)
+                    if (count > 0) underlyingBytesRead += count
                     if (failAfterBody && count < 0 && !failed) {
                         failed = true
                         throw IOException("synthetic post-body failure")
