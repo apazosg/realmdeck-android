@@ -344,7 +344,12 @@ internal object ForeverAddons {
             if (!Files.isDirectory(path, NOFOLLOW_LINKS)) fail("unsafe-path")
             val files = path.toFile().listFiles() ?: fail("io")
             if (files.size > MAX_ENTRIES) fail("unsafe-state")
-            return files.map { it.toPath().also { p -> safe(p); if (!Files.isDirectory(p, NOFOLLOW_LINKS)) fail("unsafe-path") } }
+            // Symlinks still fail through safe(); plain files such as a stray notes.txt are skipped so
+            // one unrelated entry cannot disable inventory and every mutating action.
+            return files.map { it.toPath() }.filter { child ->
+                safe(child)
+                Files.isDirectory(child, NOFOLLOW_LINKS)
+            }
         }
         private fun validateTree(path: Path) {
             var count = 0

@@ -89,6 +89,19 @@ class ForeverAddonsTest {
         }
     }
 
+    @Test fun strayFilesOutsideAddonFoldersDoNotDisableInventoryOrManagement() {
+        Fixture().use { f ->
+            f.toc("Manual")
+            File(f.root, "Interface/AddOns/notes.txt").writeText("ignore me")
+            assertEquals(listOf("Manual"), f.store.list().map { it.title })
+            f.store.setEnabled("folder:Manual", false)
+            File(f.root, "Interface/.forever-addons/disabled/notes.txt").apply { parentFile.mkdirs(); writeText("ignore me") }
+            assertFalse(f.store.list().single { it.title == "Manual" }.enabled)
+            f.store.setEnabled("folder:Manual", true)
+            assertTrue(f.store.list().single { it.title == "Manual" }.enabled)
+        }
+    }
+
     @Test fun traversalSymlinkAndBlizzardArchivesAreRejectedBeforePublication() {
         Fixture().use { f ->
             for (name in listOf("../Escape", "Blizzard_UI")) {

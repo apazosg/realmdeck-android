@@ -39,45 +39,52 @@ internal class ForeverAddonsService(context: Context) {
         ForeverAddonsApi.search(query, index)
     }
 
-    suspend fun packageFor(project: ForeverAddonsApi.Project): PackageInfo = guarded { target, store, destination ->
-        check(!store.hasPendingTransaction()) { "addons_recovery_required" }
-        val metadata = ForeverAddonsApi.file(project.id)
-        val current = store.list()
-        val missing = metadata.requiredDependencies.filter { dependency ->
-            current.none { it.projectId == dependency.projectId && it.enabled }
+    suspend fun packageFor(project: ForeverAddonsApi.Project): PackageInfo {
+        // Metadata is read before the durable lease so a slow provider never blocks the updater or a launch.
+        val metadata = withContext(Dispatchers.IO) { ForeverAddonsApi.file(project.id) }
+        return guarded { target, store, destination ->
+            check(!store.hasPendingTransaction()) { "addons_recovery_required" }
+            val current = store.list()
+            val missing = metadata.requiredDependencies.filter { dependency ->
+                current.none { it.projectId == dependency.projectId && it.enabled }
+            }
+            PackageInfo(project, metadata, destination, storage.operationStorageId(target), missing,
+                current.any { it.projectId == metadata.projectId })
         }
-        PackageInfo(project, metadata, destination, storage.operationStorageId(target), missing,
-            current.any { it.projectId == metadata.projectId })
     }
 
-    suspend fun install(packageInfo: PackageInfo, onProgress: (String) -> Unit): Unit = guarded { target, store, _ ->
-        storage.revalidate(target)
-        check(storage.operationStorageId(target) == packageInfo.targetStorageId) { "destination-changed" }
-        val latest = ForeverAddonsApi.file(packageInfo.project.id)
-        check(latest.fileId == packageInfo.file.fileId) { "file-changed" }
-        check(store.list().none { it.projectId == latest.projectId }) { "already-installed" }
-        check(latest.requiredDependencies.all { dependency ->
-            store.list().any { it.projectId == dependency.projectId && it.enabled }
-        }) { "dependency-missing" }
-
-        val cache = File(appContext.cacheDir, "forever-addons").apply { mkdirs() }
-        require(cache.isDirectory) { "cache-unavailable" }
-        var zip: File? = null
-        try {
-            val downloaded = ForeverAddonsApi.download(cache, latest) { received, total ->
-                onProgress("Descargando: ${formatBytes(received)} de ${formatBytes(total)}")
-            }
-            zip = downloaded
+    suspend fun install(packageInfo: PackageInfo, onProgress: (String) -> Unit) {
+        // Re-read the descriptor before taking the durable lease; the confirmed file is still compared inside it.
+        val latest = withContext(Dispatchers.IO) { ForeverAddonsApi.file(packageInfo.project.id) }
+        guarded { target, store, _ ->
             storage.revalidate(target)
-            store.install(downloaded, ForeverAddons.PackageMetadata(
-                projectId = latest.projectId,
-                fileId = latest.fileId,
-                title = packageInfo.project.name,
-                version = latest.name,
-                requiredProjectIds = latest.requiredDependencies.map { it.projectId },
-            ), onProgress)
-        } finally {
-            zip?.delete()
+            check(storage.operationStorageId(target) == packageInfo.targetStorageId) { "destination-changed" }
+            check(latest.fileId == packageInfo.file.fileId) { "file-changed" }
+            val current = store.list()
+            check(current.none { it.projectId == latest.projectId }) { "already-installed" }
+            check(latest.requiredDependencies.all { dependency ->
+                current.any { it.projectId == dependency.projectId && it.enabled }
+            }) { "dependency-missing" }
+
+            val cache = File(appContext.cacheDir, "forever-addons").apply { mkdirs() }
+            require(cache.isDirectory) { "cache-unavailable" }
+            var zip: File? = null
+            try {
+                val downloaded = ForeverAddonsApi.download(cache, latest) { received, total ->
+                    onProgress("Descargando: ${formatBytes(received)} de ${formatBytes(total)}")
+                }
+                zip = downloaded
+                storage.revalidate(target)
+                store.install(downloaded, ForeverAddons.PackageMetadata(
+                    projectId = latest.projectId,
+                    fileId = latest.fileId,
+                    title = packageInfo.project.name,
+                    version = latest.name,
+                    requiredProjectIds = latest.requiredDependencies.map { it.projectId },
+                ), onProgress)
+            } finally {
+                zip?.delete()
+            }
         }
     }
 
