@@ -105,6 +105,8 @@ repository.
   `CANDIDATE_VERSION`'s name without a trailing `-test`. The workflow fails when
   the tag and the committed version disagree, so the tag identifies exactly the
   source that produced the APK.
+- Manual: run the workflow from the Actions tab on the default branch. The
+  `publish` toggle builds without creating a release.
 - Dry run: append `-dryrun` to the tag. It builds and audits but publishes
   nothing; the assets stay as CI artifacts.
 - Gate: `audit_functional_ui_apk.py` must return
@@ -121,6 +123,11 @@ SDK at `/home/adrian/android-sdk` with build-tools 36.0.0, a warm Gradle cache
 (the build runs `--offline`), `gh` in `~/.local/bin`, and the canonical
 `THIRD_PARTY_NOTICES` at
 `wowforever-artifacts/release-assets/THIRD_PARTY_NOTICES`.
+
+The runner lives in `~/actions-runner` and runs as the
+`gh-actions-runner.service` systemd user unit (enabled, with linger so it
+survives logout). Re-registering it needs a fresh token from the repository's
+Actions settings; the label must stay `realmdeck-build`.
 
 Security: the runner belongs to a public repository, so the workflow listens only
 to tag pushes and manual dispatches. Do not add `pull_request` triggers to a

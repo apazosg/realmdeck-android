@@ -262,9 +262,13 @@ jobs:
           - The build and audit passed, but this workflow is not a device test.
           - See \`README.txt\` for build evidence and source/payload coverage limits.
           EOF
+          FLAGS=(--prerelease)
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            FLAGS+=(--target "$GITHUB_SHA")
+          fi
           "$GH" release create "$TAG" \
             "$DIST/$TAG.apk" "$DIST/SHA256SUMS" "$DIST/README.txt" "$DIST/THIRD_PARTY_NOTICES" "$DIST/audit.json" \
             --title "RealmDeck Android $NAME · Preview" \
             --notes-file "$DIST/notes.md" \
-            --prerelease
+            "${FLAGS[@]}"
           echo "Release $TAG publicada" >> "$GITHUB_STEP_SUMMARY"
