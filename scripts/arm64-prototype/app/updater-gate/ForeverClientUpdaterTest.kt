@@ -1899,6 +1899,30 @@ class ForeverClientUpdaterTest {
     }
 
     @Test
+    fun publishedBuildInfoCarriesTheCatalogSummaryProductForBothAdmittedProducts() {
+        val configAssets = configAssetsOrSkip()
+        listOf("wow_classic_beta", "wowf").forEach { product ->
+            Fixture(product = product).use { fixture ->
+                val paths = fixture.makePaths()
+                val updater = fixture.updater(paths, configAssets) { record, workDir, _, progress ->
+                    val output = File(workDir, "${record.ekey}.blte")
+                    Files.write(output.toPath(), fixture.rawFor(record))
+                    progress(output.length())
+                    output
+                }
+                val destination = fixture.destination(paths)
+                val plan = updater.plan(destination)
+                updater.execute(destination, plan, consentFor(plan))
+
+                assertEquals(product, fixture.catalog.summary().product)
+                val published = ForeverClientUpdateService.parseBuildInfo(File(paths.client, ".build.info").readBytes())
+                assertEquals(product, published?.product)
+                assertEquals(fixture.catalog.summary().version, published?.version)
+            }
+        }
+    }
+
+    @Test
     fun freshExecuteReportsCompleteTwoPassFinalizationUnderAtomicPhase() {
         val configAssets = configAssetsOrSkip()
         Fixture().use { fixture ->
@@ -4877,6 +4901,7 @@ class ForeverClientUpdaterTest {
     private class Fixture(
         directEncodedSizeOverride: Long? = null,
         val version: String = "1.60.1.70425",
+        private val product: String = "wow_classic_beta",
         private val buildConfigContents: ByteArray? = null,
         private val cdnConfigContents: ByteArray? = null,
         private val cascObjectCount: Int = 2,
@@ -4961,7 +4986,7 @@ class ForeverClientUpdaterTest {
             }
             val admission = JSONObject()
                 .put("schema", "wowforever.client-target").put("schema_version", 1)
-                .put("product", "wow_classic_beta").put("region", "us")
+                .put("product", product).put("region", "us")
                 .put("platform", "Windows").put("architecture", "arm64").put("locale", "enUS")
                 .put("version", version).put("build_id", version.substringAfterLast('.').toLong())
                 .put("launcher_version_code", 80).put("launcher_version_name", "engine-test")
@@ -5113,7 +5138,7 @@ class ForeverClientUpdaterTest {
             return mapOf(
                 "schema" to json("wowforever.arm64-client-catalog.sqlite"),
                 "schema_version" to json(1),
-                "product" to json("wow_classic_beta"),
+                "product" to json(product),
                 "region" to json("us"),
                 "build_id" to json(version.substringAfterLast('.').toLong()),
                 "version" to json(version),

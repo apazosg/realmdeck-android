@@ -271,7 +271,9 @@ def test_route_contract_is_fixed_and_unmanaged() -> None:
     assert 'container.putExtra("foreverManaged", "false")' in poc
     assert "ForeverRunStore" not in poc
     assert "ptrace" not in poc.lower()
-    assert "return WINDOWS_EXECUTABLE" in poc
+    assert 'ALLOWED_EXECUTABLES = setOf(EXECUTABLE_NAME, "Wow-ARM64.exe")' in poc
+    assert "ALLOWED_EXECUTABLES.any" in poc
+    assert 'return "A:\\\\$executablePath"' in poc
     assert 'File(imageFs.rootDir, "usr/lib")' in poc
     assert 'runtimeLibraries.distinct().joinToString(":")' in poc
     assert 'graphics.put("bcnEmulationType", "software")' in poc
@@ -594,4 +596,7 @@ def test_patch_status_is_advisory_attempt_isolated_and_never_green_from_scan():
     assert "error.message" not in label
     assert "eliminad" not in label
     assert "sin parche" not in label
-    assert activity.count('Text("Lanzar WoW")') == 1
+    # US-004 AC-07/TC-030: Play prepares and launches in the same action, so
+    # the separate consent checkbox and "Lanzar WoW" button are gone.
+    assert 'Text("Lanzar WoW")' not in activity
+    assert "requestLaunch(value)" in activity

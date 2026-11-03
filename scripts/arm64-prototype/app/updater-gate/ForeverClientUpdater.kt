@@ -3254,7 +3254,7 @@ class ForeverClientUpdater(
             .put("cdn_path", "tpr/wow")
             .put("cdn_hosts", JSONArray().put("level3.blizzard.com").put("us.cdn.blizzard.com"))
             .put("version", summary.version)
-            .put("product", PRODUCT)
+            .put("product", summary.product)
             .put("platform", "Windows")
             .put("architecture", "arm64")
             .put("locale", "enUS")
@@ -5704,7 +5704,6 @@ class ForeverClientUpdater(
     private fun ByteArray.hex(): String = joinToString("") { "%02x".format(it) }
 
     companion object {
-        private const val PRODUCT = "wow_classic_beta"
         private const val ENGINE_ID = "forever-client-updater"
         private const val RUNTIME_SCHEMA = "v1"
         /** Sixteen workers against the bounded producer/consumer pipeline.

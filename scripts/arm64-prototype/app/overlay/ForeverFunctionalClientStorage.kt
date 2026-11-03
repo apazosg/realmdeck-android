@@ -37,6 +37,35 @@ object ForeverFunctionalClientStorage {
     const val DATA_DIRECTORY = "Data"
     const val ORIGINAL_WTF = "WTF/BetaSuspendedTest.wtf"
 
+    /**
+     * Client executables the launcher admits. The pinned verifier below only
+     * covers the legacy beta path ([ForeverFunctionalPoc.EXECUTABLE_NAME],
+     * 1.60.1.70009); updater-managed installs are proved by their admission
+     * record instead (target path plus size/content-key plus ARM64 PE).
+     */
+    internal val ALLOWED_EXECUTABLE_NAMES = setOf("WowB-ARM64.exe", "Wow-ARM64.exe")
+
+    internal fun isAllowedExecutableName(name: String): Boolean =
+        ALLOWED_EXECUTABLE_NAMES.any { it.equals(name, ignoreCase = true) }
+
+    /** Regular allowlisted executable files directly under [root]; empty or duplicated both fail closed upstream. */
+    private fun allowlistedExecutables(root: File): List<File> =
+        ALLOWED_EXECUTABLE_NAMES.mapNotNull { name ->
+            File(root, name).takeIf { isRegular(it) }
+        }
+
+    /** Single allowlisted executable, or null when there is none or more than one. */
+    private fun singleAllowlistedExecutable(root: File): File? =
+        allowlistedExecutables(root).singleOrNull()
+
+    internal fun singleAllowlistedExecutableForTest(root: File): File? =
+        singleAllowlistedExecutable(root)
+
+    private fun allowlistedExecutableExists(root: File): Boolean =
+        ALLOWED_EXECUTABLE_NAMES.any { name ->
+            Files.exists(File(root, name).toPath(), LinkOption.NOFOLLOW_LINKS)
+        }
+
     private const val PREFS = "forever_functional_client_storage"
     private const val SELECTED_ID = "selected_id"
     private const val SELECTED_LABEL = "selected_label"
@@ -302,6 +331,13 @@ object ForeverFunctionalClientStorage {
         val executableIdentity: FileIdentity? = null,
         val originalWtfIdentity: FileIdentity? = null,
         val mountIdentity: String? = null,
+        /**
+         * Admitted executable file name for this root, carried from the proof
+         * that admitted it: the pinned beta name for the legacy path, the
+         * admission record's target path for updater-managed installs.
+         * Consumers must use this instead of a hardcoded file name.
+         */
+        val executableName: String = ForeverFunctionalPoc.EXECUTABLE_NAME,
     )
 
     /** Destination admission for the updater; deliberately contains no client-build claim. */
@@ -654,16 +690,20 @@ object ForeverFunctionalClientStorage {
             requireSelectable(selected)
             validateStorage(selected)
             val root = checkedCanonicalRoot(selected)
-            try {
+            val executableName = try {
                 validateClient(selected, root, calculateHash = true)
+                // The pinned verifier admits only the legacy beta executable,
+                // so the single allowlisted file on disk is that beta name.
+                singleAllowlistedExecutable(root)?.name ?: throw StorageException("client_executable_invalid")
             } catch (failure: StorageException) {
                 // The pinned verifier admits only 1.60.1.70009. An
                 // updater-managed install (e.g. 1.60.1.70450) is governed
-                // instead by its managed-install admission proof.
+                // instead by its managed-install admission proof, which
+                // returns the admitted executable name.
                 if (failure.code != "client_executable_invalid") throw failure
                 verifyManagedExecutable(selected, root)
             }
-            val target = captureTarget(selected, root)
+            val target = captureTarget(selected, root, executableName)
             rememberValidated(target, selected)
             return target
         }
@@ -1468,11 +1508,16 @@ object ForeverFunctionalClientStorage {
         }
 
         private fun validateClient(option: StorageOption, root: File, calculateHash: Boolean, expected: ResolvedTarget? = null) {
-            val executable = File(root, ForeverFunctionalPoc.EXECUTABLE_NAME)
+            // Legacy path only: the pinned verifier below admits the beta
+            // executable (1.60.1.70009 size/SHA-256/ARM64). Updater-managed
+            // installs fall through to the admission proof on any failure.
+            val candidates = allowlistedExecutables(root)
+            if (candidates.size > 1) throw StorageException("client_executable_invalid")
+            val executable = candidates.singleOrNull()
             val data = File(root, DATA_DIRECTORY)
             val wtf = File(root, ORIGINAL_WTF)
-            require(isRegular(executable) && isDirectory(data) && isRegular(wtf)) {
-                val any = Files.exists(executable.toPath(), LinkOption.NOFOLLOW_LINKS) ||
+            require(executable != null && isRegular(executable) && isDirectory(data) && isRegular(wtf)) {
+                val any = allowlistedExecutableExists(root) ||
                     Files.exists(data.toPath(), LinkOption.NOFOLLOW_LINKS) || Files.exists(wtf.toPath(), LinkOption.NOFOLLOW_LINKS)
                 throw StorageException(if (any) "client_incomplete" else "client_not_installed")
             }
@@ -1483,8 +1528,9 @@ object ForeverFunctionalClientStorage {
             }
         }
 
-        private fun captureTarget(option: StorageOption, root: File): ResolvedTarget {
-            val executable = File(root, ForeverFunctionalPoc.EXECUTABLE_NAME)
+        private fun captureTarget(option: StorageOption, root: File, executableName: String): ResolvedTarget {
+            require(isAllowedExecutableName(executableName)) { throw StorageException("client_executable_invalid") }
+            val executable = File(root, executableName)
             val wtf = File(root, ORIGINAL_WTF)
             val rootIdentity = fileIdentity(root, option.legacy)
             val baseIdentity = fileIdentity(requireNotNull(option.trustedBase), option.legacy)
@@ -1500,6 +1546,7 @@ object ForeverFunctionalClientStorage {
                 executableIdentity,
                 wtfIdentity,
                 mountIdentity(option),
+                executableName,
             )
         }
 
@@ -1517,7 +1564,7 @@ object ForeverFunctionalClientStorage {
          * admission is the proof. Native validation is neither consulted nor
          * claimed.
          */
-        private fun verifyManagedExecutable(option: StorageOption, root: File) {
+        private fun verifyManagedExecutable(option: StorageOption, root: File): String {
             val record = managedInstallRecord(option, root, allowMigration = true)
             val target = record.targetBuild
             val admittedExe = record.looseFiles.singleOrNull { it.path.equals(target.executable.path, ignoreCase = true) }
@@ -1526,7 +1573,7 @@ object ForeverFunctionalClientStorage {
             ) throw StorageException("client_executable_invalid")
             // Manifest proof first, mirroring the updater's verification
             // order; only then is the .build.info fingerprint adopted.
-            if (!verifyManagedExecutableBytes(root, admittedExe.decodedBytes, admittedExe.contentKey)) {
+            if (!verifyManagedExecutableBytes(root, target.executable.path, admittedExe.decodedBytes, admittedExe.contentKey)) {
                 throw StorageException("client_executable_invalid")
             }
             // Client-relative name bound by the admission (updater BUILD_INFO_PATH).
@@ -1539,6 +1586,7 @@ object ForeverFunctionalClientStorage {
                     buildInfo, target.version, target.buildConfig.hash, target.cdnConfig.hash, manifestVerified = true,
                 ) == null
             ) throw StorageException("client_executable_invalid")
+            return target.executable.path
         }
 
         /**
@@ -1550,7 +1598,9 @@ object ForeverFunctionalClientStorage {
          */
         private fun verifyManagedFrozenExecutable(option: StorageOption, root: File, expected: ResolvedTarget) {
             val record = managedInstallRecord(option, root, allowMigration = false)
-            val executable = File(root, ForeverFunctionalPoc.EXECUTABLE_NAME)
+            val target = record.targetBuild
+            require(isAllowedExecutableName(target.executable.path)) { throw StorageException("client_executable_invalid") }
+            val executable = File(root, target.executable.path)
             val wtf = File(root, ORIGINAL_WTF)
             if (!isRegular(executable) || !isRegular(wtf)) throw StorageException("client_incomplete")
             if (fileIdentity(executable, option.legacy) != expected.executableIdentity) {
@@ -1561,7 +1611,7 @@ object ForeverFunctionalClientStorage {
             }
             // The frozen identities match the resolve-time fully-proved
             // files; the admission must still bind the same admitted build.
-            val target = record.targetBuild
+            // (target already bound above; reused below for build-info.)
             val buildInfo = readBoundedManagedFile(File(root, ".build.info"), record.buildInfoBytes)
                 ?: throw StorageException("client_executable_invalid")
             if (ForeverClientUpdateService.verifiedBuildInfoFingerprint(
@@ -1603,12 +1653,14 @@ object ForeverFunctionalClientStorage {
             base: File,
             mount: String,
             legacy: Boolean,
+            executableName: String,
         ): MigrationFrozenIdentities {
+            require(isAllowedExecutableName(executableName)) { throw StorageException("client_executable_invalid") }
             return MigrationFrozenIdentities(
                 root = fileIdentity(root, legacy) ?: throw StorageException("client_executable_invalid"),
                 base = fileIdentity(base, legacy) ?: throw StorageException("client_executable_invalid"),
                 mount = mount,
-                executable = fileIdentity(File(root, ForeverFunctionalPoc.EXECUTABLE_NAME), legacy)
+                executable = fileIdentity(File(root, executableName), legacy)
                     ?: throw StorageException("client_executable_invalid"),
                 buildInfo = fileIdentity(File(root, ".build.info"), legacy)
                     ?: throw StorageException("client_executable_invalid"),
@@ -1621,10 +1673,12 @@ object ForeverFunctionalClientStorage {
             base: File,
             frozen: MigrationFrozenIdentities,
             legacy: Boolean,
+            executableName: String,
         ) {
+            require(isAllowedExecutableName(executableName)) { throw StorageException("client_executable_invalid") }
             if (fileIdentity(root, legacy) != frozen.root) throw StorageException("client_executable_invalid")
             if (fileIdentity(base, legacy) != frozen.base) throw StorageException("client_executable_invalid")
-            if (fileIdentity(File(root, ForeverFunctionalPoc.EXECUTABLE_NAME), legacy) != frozen.executable) {
+            if (fileIdentity(File(root, executableName), legacy) != frozen.executable) {
                 throw StorageException("client_executable_invalid")
             }
             if (fileIdentity(File(root, ".build.info"), legacy) != frozen.buildInfo) {
@@ -1790,13 +1844,15 @@ object ForeverFunctionalClientStorage {
             if (candidates.isEmpty()) throw StorageException("client_admission_unavailable")
             if (candidates.size > 1) throw StorageException("client_executable_invalid")
             val legacy = candidates.single()
-            val frozen = freezeMigrationCore(root, base, mount, option.legacy)
+            val legacyExecutableName = legacy.targetBuild.executable.path
+            require(isAllowedExecutableName(legacyExecutableName)) { throw StorageException("client_executable_invalid") }
+            val frozen = freezeMigrationCore(root, base, mount, option.legacy, legacyExecutableName)
             val frozenWithLoose = frozen.copy(
                 looseFiles = freezeMigrationLooseFiles(root, legacy.looseFiles, option.legacy),
             )
             if (!proveLegacyManagedContent(root, legacy)) throw StorageException("client_executable_invalid")
             migrationAfterProofProbeForTests?.invoke()
-            revalidateMigrationFrozen(root, base, frozenWithLoose, option.legacy)
+            revalidateMigrationFrozen(root, base, frozenWithLoose, option.legacy, legacyExecutableName)
             val reselected = currentMigrationSelection(option, root, startRevision)
             require(mountIdentity(reselected) == frozenWithLoose.mount) {
                 throw StorageException("client_executable_invalid")
@@ -1833,7 +1889,7 @@ object ForeverFunctionalClientStorage {
             }) ?: throw StorageException("client_executable_invalid")
             if (!persisted.contentEquals(recordBytes)) throw StorageException("client_executable_invalid")
             try {
-                revalidateMigrationFrozen(root, base, frozenWithLoose, option.legacy)
+                revalidateMigrationFrozen(root, base, frozenWithLoose, option.legacy, legacyExecutableName)
                 val published = currentMigrationSelection(option, root, startRevision)
                 require(mountIdentity(published) == frozenWithLoose.mount) {
                     throw StorageException("client_executable_invalid")
@@ -1893,7 +1949,7 @@ object ForeverFunctionalClientStorage {
                 if (admittedExe == null || admittedExe.decodedBytes != target.executable.decodedBytes ||
                     !admittedExe.contentKey.equals(target.executable.contentKey, ignoreCase = true)
                 ) return false
-                if (!verifyManagedExecutableBytes(root, admittedExe.decodedBytes, admittedExe.contentKey)) return false
+                if (!verifyManagedExecutableBytes(root, target.executable.path, admittedExe.decodedBytes, admittedExe.contentKey)) return false
                 val buildInfo = readBoundedManagedFile(File(root, ".build.info"), legacy.buildInfoBytes)
                     ?: return false
                 if (!sha256Bytes(buildInfo).equals(legacy.buildInfoSha256, ignoreCase = true)) return false
@@ -1956,9 +2012,11 @@ object ForeverFunctionalClientStorage {
         }
 
         private fun verifyLaunchExecutable(option: StorageOption, root: File) {
-            val executable = File(root, ForeverFunctionalPoc.EXECUTABLE_NAME)
+            val candidates = allowlistedExecutables(root)
+            if (candidates.size > 1) throw StorageException("client_executable_invalid")
+            val executable = candidates.singleOrNull()
             val data = File(root, DATA_DIRECTORY)
-            if (!isRegular(executable) || !isDirectory(data)) throw StorageException("client_incomplete")
+            if (executable == null || !isDirectory(data)) throw StorageException("client_incomplete")
             if (!executableVerifier.verify(executable, true)) verifyManagedExecutable(option, root)
         }
 
@@ -1978,11 +2036,13 @@ object ForeverFunctionalClientStorage {
             require(isDirectory(root)) { throw StorageException("storage_not_directory") }
             val data = File(root, DATA_DIRECTORY)
             val wtfDir = File(root, "WTF")
-            val executable = File(root, ForeverFunctionalPoc.EXECUTABLE_NAME)
+            for (name in ALLOWED_EXECUTABLE_NAMES) {
+                val node = File(root, name)
+                if (Files.exists(node.toPath(), LinkOption.NOFOLLOW_LINKS)) require(isRegular(node)) { throw StorageException("storage_executable_invalid") }
+            }
             val sourceWtf = File(root, ORIGINAL_WTF)
             if (Files.exists(data.toPath(), LinkOption.NOFOLLOW_LINKS)) require(isDirectory(data)) { throw StorageException("storage_data_invalid") }
             if (Files.exists(wtfDir.toPath(), LinkOption.NOFOLLOW_LINKS)) require(isDirectory(wtfDir)) { throw StorageException("storage_wtf_invalid") }
-            if (Files.exists(executable.toPath(), LinkOption.NOFOLLOW_LINKS)) require(isRegular(executable)) { throw StorageException("storage_executable_invalid") }
             if (Files.exists(sourceWtf.toPath(), LinkOption.NOFOLLOW_LINKS)) require(isRegular(sourceWtf)) { throw StorageException("storage_wtf_invalid") }
             if (traverseTree) validateClientTree(root)
         }
@@ -2043,15 +2103,15 @@ object ForeverFunctionalClientStorage {
 
         private fun inspectClientMetadata(root: File): ClientInspection {
             if (!isDirectory(root)) return ClientInspection(ClientInspection.State.NOT_INSTALLED, false, false, false)
-            val executable = File(root, ForeverFunctionalPoc.EXECUTABLE_NAME)
+            val executables = allowlistedExecutables(root)
             val wtf = File(root, ORIGINAL_WTF)
             val data = File(root, DATA_DIRECTORY)
-            val e = isRegular(executable)
+            val e = executables.size == 1
             val w = isRegular(wtf)
             val d = isDirectory(data)
-            val any = Files.exists(executable.toPath(), LinkOption.NOFOLLOW_LINKS) || Files.exists(wtf.toPath(), LinkOption.NOFOLLOW_LINKS) || Files.exists(data.toPath(), LinkOption.NOFOLLOW_LINKS)
+            val any = allowlistedExecutableExists(root) || Files.exists(wtf.toPath(), LinkOption.NOFOLLOW_LINKS) || Files.exists(data.toPath(), LinkOption.NOFOLLOW_LINKS)
             val pastedCascData = isDirectory(File(data, "data"))
-            val executableAbsent = !Files.exists(executable.toPath(), LinkOption.NOFOLLOW_LINKS)
+            val executableAbsent = !allowlistedExecutableExists(root)
             val state = when {
                 e && w && d -> ClientInspection.State.PRESENT_NOT_VERIFIED
                 executableAbsent && pastedCascData -> ClientInspection.State.PASTED_SOURCE
@@ -2085,7 +2145,7 @@ object ForeverFunctionalClientStorage {
                 |
                 |Qué pegar (recomendado para cualquier build):
                 |- Solo la carpeta Data/ del cliente ARM64 (con sus datos e índices locales) y el fichero .build.info del mismo cliente.
-                |- Si tu cliente es exactamente la versión objetivo de esta app, también puedes incluir WowB-ARM64.exe y sus dependencias. Si el build no coincide, los archivos sueltos no se aprovechan y pueden rechazarse.
+                |- Si tu cliente es exactamente la versión objetivo de esta app, también puedes incluir el ejecutable ARM64 (WowB-ARM64.exe o Wow-ARM64.exe, según tu build) y sus dependencias. Si el build no coincide, los archivos sueltos no se aprovechan y pueden rechazarse.
                 |- No se sobrescribe nada de lo que ya haya en la carpeta.
                 |
                 |Qué NO pegar:
@@ -2269,11 +2329,17 @@ object ForeverFunctionalClientStorage {
 
 
 
-    /** The admitted executable path is pinned to WowB-ARM64.exe by the strict target parse. */
-    private fun verifyManagedExecutableBytes(root: File, expectedBytes: Long, expectedContentKey: String): Boolean {
+    /** The admitted executable path is the admission record's target path, never a second hardcoded name. */
+    private fun verifyManagedExecutableBytes(
+        root: File,
+        expectedRelativePath: String,
+        expectedBytes: Long,
+        expectedContentKey: String,
+    ): Boolean {
         return try {
+            if (!isAllowedExecutableName(expectedRelativePath)) return false
             val base = root.toPath().toAbsolutePath().normalize()
-            val path = base.resolve(ForeverFunctionalPoc.EXECUTABLE_NAME).normalize()
+            val path = base.resolve(expectedRelativePath).normalize()
             if (!path.startsWith(base)) return false
             if (hasManagedSymlink(path)) return false
             if (!Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) return false

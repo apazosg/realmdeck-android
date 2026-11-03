@@ -70,8 +70,9 @@ class ForeverClientTargetBuild private constructor(
         private val HEX32 = Regex("(?i)[0-9a-f]{32}")
         private val HEX64 = Regex("(?i)[0-9a-f]{64}")
         private val VERSION = Regex("[0-9]+(?:\\.[0-9]+){3}")
-        private const val PRODUCT = "wow_classic_beta"
-        private const val EXPECTED_EXECUTABLE = "WowB-ARM64.exe"
+        private const val LEGACY_PRODUCT = "wow_classic_beta"
+        private const val NETWORK_PRODUCT = "wowf"
+        private val ALLOWED_EXECUTABLES = setOf("WowB-ARM64.exe", "Wow-ARM64.exe")
         private const val EXPECTED_MACHINE = 43_620
 
         /** Loads only the immutable asset packaged in this APK; there is no network or override path. */
@@ -116,7 +117,7 @@ class ForeverClientTargetBuild private constructor(
             val locale = root.requiredString("locale")
             val version = root.requiredString("version")
             val buildId = root.requiredLong("build_id")
-            require(product == PRODUCT && region == "us" && platform == "Windows" &&
+            require((product == LEGACY_PRODUCT || product == NETWORK_PRODUCT) && region == "us" && platform == "Windows" &&
                 architecture == "arm64" && locale == "enUS"
             ) { "client target is not the admitted Windows ARM64 enUS product" }
             require(VERSION.matches(version) && buildId > 0L && version.substringAfterLast('.').toLongOrNull() == buildId) {
@@ -154,7 +155,8 @@ class ForeverClientTargetBuild private constructor(
                     require(it == EXPECTED_MACHINE.toLong())
                 }.toInt(),
             )
-            require(executable.path == EXPECTED_EXECUTABLE && executable.decodedBytes in 1..MAX_DECODED_FILE_BYTES) {
+            require(ALLOWED_EXECUTABLES.any { it.equals(executable.path, ignoreCase = true) } &&
+                executable.decodedBytes in 1..MAX_DECODED_FILE_BYTES) {
                 "client target executable identity or size is invalid"
             }
 

@@ -8,7 +8,7 @@ import org.junit.Test
 
 class ForeverClientUpdateCheckTest {
     private val pin = ForeverClientUpdateCheck.Fingerprint(
-        product = "wow_classic_beta",
+        product = "wowf",
         version = "1.60.1.70009",
         buildConfigHash = "05215079e3905ef5922ae0b03ffefb73",
         cdnConfigHash = "9b3c456dbb837d133a026d380c7c13e9",
@@ -195,7 +195,7 @@ class ForeverClientUpdateCheckTest {
     @Test
     fun officialSourceEndpointIsTheRibbitVersionsRouteAndTestsStayInjected() {
         assertEquals(
-            "https://us.version.battle.net/v2/products/wow_classic_beta/versions",
+            "https://us.version.battle.net/v2/products/wowf/versions",
             ForeverClientUpdateCheck.OFFICIAL_VERSIONS_URL,
         )
         var called = false
@@ -218,5 +218,5 @@ class ForeverClientUpdateCheckTest {
             "eu|${fingerprint.buildConfigHash}|${fingerprint.cdnConfigHash}||${fingerprint.buildId}|${fingerprint.version}|${"d".repeat(32)}\n"
 
     private fun fingerprint(version: String, buildConfig: String, cdnConfig: String, buildId: Long) =
-        ForeverClientUpdateCheck.Fingerprint("wow_classic_beta", version, buildConfig, cdnConfig, buildId)
+        ForeverClientUpdateCheck.Fingerprint("wowf", version, buildConfig, cdnConfig, buildId)
 }

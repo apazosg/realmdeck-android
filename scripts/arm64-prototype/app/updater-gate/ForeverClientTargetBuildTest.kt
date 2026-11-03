@@ -51,6 +51,36 @@ class ForeverClientTargetBuildTest {
     }
 
     @Test
+    fun acceptsNetworkWowfProductAndRejectsUnrelatedProducts() {
+        val wowf = ForeverClientTargetBuild.parse(targetJson(70707, "aa".repeat(16), "bb".repeat(16), product = "wowf"))
+
+        assertEquals("wowf", wowf.product)
+        assertEquals("wowf", wowf.fingerprint.product)
+        assertEquals("1.60.1.70707", wowf.version)
+        val legacy = String(targetJson(70707, "aa".repeat(16), "bb".repeat(16), product = "wowf"), Charsets.UTF_8)
+        assertThrows(IllegalArgumentException::class.java) {
+            ForeverClientTargetBuild.parse(legacy.replace("\"product\":\"wowf\"", "\"product\":\"wowdev2\"").toByteArray())
+        }
+    }
+
+    @Test
+    fun acceptsReleaseExecutableAndRejectsUnlistedArm64Names() {
+        val release = ForeverClientTargetBuild.parse(
+            targetJson(70707, "aa".repeat(16), "bb".repeat(16), product = "wowf", executable = "Wow-ARM64.exe"),
+        )
+        assertEquals("Wow-ARM64.exe", release.executable.path)
+        assertEquals("wowf", release.product)
+
+        for (name in listOf("Wow.exe", "WowB.exe", "WowB-ARM64.exe.exe")) {
+            assertThrows(IllegalArgumentException::class.java) {
+                ForeverClientTargetBuild.parse(
+                    targetJson(70707, "aa".repeat(16), "bb".repeat(16), product = "wowf", executable = name),
+                )
+            }
+        }
+    }
+
+    @Test
     fun nativeActivationNeedsVerifiedStatusAndEvidenceInTheSameApkManifest() {
         val pending = ForeverClientTargetBuild.parse(targetJson(70500, "01".repeat(16), "02".repeat(16)))
         val verified = ForeverClientTargetBuild.parse(
@@ -80,12 +110,14 @@ class ForeverClientTargetBuildTest {
         buildId: Int,
         buildHash: String,
         cdnHash: String,
+        product: String = "wow_classic_beta",
         nativeStatus: String = "pending",
         evidence: String = "null",
+        executable: String = "WowB-ARM64.exe",
     ): ByteArray = JSONObject()
         .put("schema", "wowforever.client-target")
         .put("schema_version", 1)
-        .put("product", "wow_classic_beta")
+        .put("product", product)
         .put("region", "us")
         .put("platform", "Windows")
         .put("architecture", "arm64")
@@ -109,7 +141,7 @@ class ForeverClientTargetBuildTest {
             .put("gzip_bytes", 63_202_489)
             .put("gzip_sha256", "92".repeat(32)))
         .put("executable", JSONObject()
-            .put("path", "WowB-ARM64.exe")
+            .put("path", executable)
             .put("decoded_bytes", 80_562_896)
             .put("content_key", "5e6f9642d56cf15dff2364a0da6a1abd")
             .put("expected_machine", 43_620))

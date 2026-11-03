@@ -1591,7 +1591,7 @@ class ForeverClientUpdateService private constructor(
     }
 
     private fun isPriorBuild(info: BuildInfoFingerprint): Boolean =
-        info.branch == "us" && info.product == PRODUCT && info.version == PRIOR_VERSION &&
+        info.branch == "us" && isAdmittedClientProduct(info.product) && info.version == PRIOR_VERSION &&
             info.buildConfigHash.equals(PRIOR_BUILD_CONFIG_HASH, true) &&
             info.cdnConfigHash.equals(PRIOR_CDN_CONFIG_HASH, true)
 
@@ -1668,7 +1668,7 @@ class ForeverClientUpdateService private constructor(
             report.hasCascData -> "pasted client .build.info is missing a valid bounded build record"
             else -> "pasted client has no readable local CASC Data/data index; copy Data/ and its local indexes"
         }
-        PastedClientVerdict.WRONG_PRODUCT -> "pasted client must be wow_classic_beta, US, enUS"
+        PastedClientVerdict.WRONG_PRODUCT -> "pasted client must be wowf or wow_classic_beta, US, enUS"
         PastedClientVerdict.NOT_ARM64 -> "pasted client is not tagged for ARM64; this app cannot use x86_64 clients"
         else -> "pasted client is not admissible as a CASC source"
     }
@@ -2013,7 +2013,11 @@ class ForeverClientUpdateService private constructor(
         const val BUILD_CONFIG_ASSET = "forever/client-update/build-config.txt"
         const val CDN_CONFIG_ASSET = "forever/client-update/cdn-config.txt"
 
-        private const val PRODUCT = "wow_classic_beta"
+        private const val LEGACY_PRODUCT = "wow_classic_beta"
+        private const val NETWORK_PRODUCT = "wowf"
+
+        private fun isAdmittedClientProduct(product: String): Boolean =
+            product == LEGACY_PRODUCT || product == NETWORK_PRODUCT
         private const val CATALOG_DIRECTORY = "forever-client-catalog"
         private const val DYNAMIC_CATALOG_DIRECTORY = "forever-dynamic-client-catalog"
         private const val ACTIVE_RECEIPT_NAME = "active-admission.json"
@@ -2716,7 +2720,7 @@ class ForeverClientUpdateService private constructor(
             if (!hasCascData) return PastedClientVerdict.NOT_CASC
             if (!buildInfoPresent) return PastedClientVerdict.UNKNOWN_BUILD_AS_SOURCE
             val parsed = info ?: return PastedClientVerdict.NOT_CASC
-            if (parsed.product != PRODUCT || parsed.branch != "us" || parsed.locale != "enUS") {
+            if (!isAdmittedClientProduct(parsed.product) || parsed.branch != "us" || parsed.locale != "enUS") {
                 return PastedClientVerdict.WRONG_PRODUCT
             }
             if (!parsed.isArm64) return PastedClientVerdict.NOT_ARM64
@@ -2754,7 +2758,7 @@ class ForeverClientUpdateService private constructor(
         ): FileFingerprint? {
             if (!manifestVerified || (exactBytes != null && !bytes.contentEquals(exactBytes))) return null
             val parsed = parseBuildInfo(bytes) ?: return null
-            if (parsed.branch != "us" || parsed.product != PRODUCT || parsed.version != expectedVersion ||
+            if (parsed.branch != "us" || !isAdmittedClientProduct(parsed.product) || parsed.version != expectedVersion ||
                 !parsed.buildConfigHash.equals(expectedBuildConfigHash, true) ||
                 !parsed.cdnConfigHash.equals(expectedCdnConfigHash, true)
             ) return null

@@ -97,17 +97,35 @@ class ForeverTactConfigsTest {
     }
 
     @Test
+    fun rejectsLegacyAndUnrelatedProductsForPublishedFingerprints() {
+        val raw = fakeBuild(70_425)
+        val wowf = fingerprint(raw, 70_425)
+
+        assertThrows(IllegalArgumentException::class.java) {
+            ForeverTactConfigs.build(raw, wowf.copy(product = "wow_classic_beta"))
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            ForeverTactConfigs.cdn("archives = ${"a".repeat(32)}\n".toByteArray(), wowf.copy(product = "wowdev2"))
+        }
+    }
+
+    @Test
     fun parsesReadOnlyPublished70425BuildAndCdnConfigReferences() {
         val buildFile = File(System.getProperty("wowforever.actualBuildConfig") ?: ACTUAL_BUILD_CONFIG)
         val cdnFile = File(System.getProperty("wowforever.actualCdnConfig") ?: ACTUAL_CDN_CONFIG)
         assumeTrue("external read-only 70425 metadata is not available", buildFile.isFile && cdnFile.isFile)
-        val buildRaw = buildFile.readBytes()
+        // The packaged 70425 configs still carry the legacy product tag; the
+        // network path now admits only wowf, so exercise the real structure
+        // with the product tag rewritten in memory before hashing.
+        val buildRaw = String(buildFile.readBytes(), Charsets.UTF_8)
+            .replace("build-uid = wow_classic_beta", "build-uid = wowf")
+            .toByteArray(Charsets.UTF_8)
         val cdnRaw = cdnFile.readBytes()
         val published = ForeverClientUpdateCheck.Fingerprint(
-            product = "wow_classic_beta",
+            product = "wowf",
             version = "1.60.1.70425",
-            buildConfigHash = "ea9c525eef74f1d682c00a8ef39a5d2b",
-            cdnConfigHash = "fcab7fec2ccc6b8158b56b6938ec4551",
+            buildConfigHash = md5(buildRaw),
+            cdnConfigHash = md5(cdnRaw),
             buildId = 70_425,
         )
 
@@ -136,7 +154,7 @@ class ForeverTactConfigsTest {
     private fun parseBuild(raw: ByteArray, buildId: Long) = ForeverTactConfigs.build(raw, fingerprint(raw, buildId))
 
     private fun fingerprint(raw: ByteArray, buildId: Long) = ForeverClientUpdateCheck.Fingerprint(
-        product = "wow_classic_beta",
+        product = "wowf",
         version = "1.60.1.$buildId",
         buildConfigHash = md5(raw),
         cdnConfigHash = "f".repeat(32),
@@ -154,7 +172,7 @@ class ForeverTactConfigsTest {
         size-size = 2000 1000
         encoding = ${"7".repeat(32)} ${"8".repeat(32)}
         encoding-size = 5000 2500
-        build-uid = wow_classic_beta
+        build-uid = wowf
         build-num = $buildId
         vfs-root = ${"9".repeat(32)} ${"a".repeat(32)}
         vfs-root-size = 128 64

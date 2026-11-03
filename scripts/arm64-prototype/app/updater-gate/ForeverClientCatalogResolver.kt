@@ -283,7 +283,7 @@ internal class ForeverClientCatalogResolver @JvmOverloads constructor(
             statement.bindBlob(2, record.contentKey.hexBytes())
             statement.bindLong(3, record.decodedSize)
             statement.executeInsert()
-            if (record.path.equals(EXPECTED_EXECUTABLE, ignoreCase = true)) {
+            if (isAllowedExecutable(record.path)) {
                 if (executable != null) throw IllegalArgumentException("install manifest contains duplicate ARM64 executable entries")
                 executable = record
             }
@@ -299,7 +299,8 @@ internal class ForeverClientCatalogResolver @JvmOverloads constructor(
         installBatch.finish()
         require(installCount in 1..MAX_LOOSE_FILES.toLong()) { "selected install manifest has no bounded loose-file set" }
         require(installBatch.totalRows == installCount) { "install-manifest callback count disagrees with its streaming statistics" }
-        val selectedExecutable = executable ?: throw IllegalArgumentException("Windows/arm64/enUS install selection lacks WowB-ARM64.exe")
+        val selectedExecutable = executable ?: throw IllegalArgumentException(
+            "Windows/arm64/enUS install selection lacks an allowed ARM64 executable (WowB-ARM64.exe or Wow-ARM64.exe)")
 
         val downloadBatch = SqlBatch<ForeverTactMetadata.DownloadRecord>(db) { statement, record ->
             statement.bindBlob(1, record.encodingKey.hexBytes())
@@ -1241,8 +1242,11 @@ internal class ForeverClientCatalogResolver @JvmOverloads constructor(
             require(summary.version == published.version && summary.buildConfigHash == published.buildConfigHash.lowercase(Locale.ROOT) &&
                 summary.cdnConfigHash == published.cdnConfigHash.lowercase(Locale.ROOT)
             ) { "cached catalog identity does not match the published fingerprint" }
-            val executable = catalog.looseFiles().singleOrNull { it.path.equals(EXPECTED_EXECUTABLE, true) }
+            val executable = catalog.looseFiles().singleOrNull { isAllowedExecutable(it.path) }
                 ?: throw IllegalArgumentException("cached catalog lacks the selected ARM64 executable entry")
+            require(executable.path.equals(target.executable.path, ignoreCase = true)) {
+                "cached catalog executable does not match its target receipt"
+            }
             require(executable.objectRecord.contentKey == target.executable.contentKey &&
                 executable.objectRecord.decodedSize == target.executable.decodedBytes
             ) { "cached catalog executable does not match its target receipt" }
@@ -1950,7 +1954,10 @@ internal class ForeverClientCatalogResolver @JvmOverloads constructor(
         private const val PLATFORM = "Windows"
         private const val ARCHITECTURE = "arm64"
         private const val LOCALE = "enUS"
-        private const val EXPECTED_EXECUTABLE = "WowB-ARM64.exe"
+        private val ALLOWED_EXECUTABLES = setOf("wowb-arm64.exe", "wow-arm64.exe")
+
+        private fun isAllowedExecutable(path: String): Boolean =
+            path.lowercase(Locale.ROOT) in ALLOWED_EXECUTABLES
         private const val SELECTION_QUERY = "Windows,arm64,enUS"
         private val METADATA_ROLES = listOf("install", "download", "size", "encoding")
         private val REQUESTED_TAGS = setOf("Windows", "arm64", "enUS")

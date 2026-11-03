@@ -136,3 +136,14 @@ requiere nuevo diseño de confianza: se reutilizan configs con hashes admitidos.
   Login propio. La comprobación de servidor no debe requerir cuentas personales.
 - La portabilidad Android de parsing TACT completo y el presupuesto temporal de
   metadatos requieren medición, no copiar los números de RAM/tiempo del host.
+
+## Checkpoint 2026-11-02 — producto `wowf`
+
+La consulta oficial pasa a `wowf`
+(`https://us.version.battle.net/v2/products/wowf/versions`), conservando
+`wow_classic_beta` para instalaciones ya admitidas. El ejecutable admitido es
+`WowB-ARM64.exe` o `Wow-ARM64.exe`; el nombre queda ligado a la admisión y se usa en
+almacenamiento, contenedor, ruta ARM64 directa y JNI, sin nombre fijo. Un catálogo,
+`.build.info` o registro de lanzamiento con otro ejecutable falla cerrado. El
+usuario informó que el candidato funciona en el dispositivo; esto no cierra la
+aceptación de actualización/recovery ni mide rendimiento.

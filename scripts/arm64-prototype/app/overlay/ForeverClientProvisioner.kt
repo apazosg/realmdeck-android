@@ -33,6 +33,7 @@ object ForeverClientProvisioner {
     private const val PINNED_CDN_CONFIG = "9b3c456dbb837d133a026d380c7c13e9"
     private val ALLOWED_HOSTS = setOf("level3.blizzard.com", "us.cdn.blizzard.com")
     private val REQUIRED_ROLES = setOf("root", "vfs-root", "encoding", "install", "download", "size")
+    private val ALLOWED_EXECUTABLES = setOf("WowB-ARM64.exe", "Wow-ARM64.exe")
 
     data class Plan(val downloadBytes: Long, val workspaceBytes: Long)
 
@@ -173,7 +174,7 @@ object ForeverClientProvisioner {
             validateSources(item, "loose", archiveHashes, fileIndexHashes)
         }
         val executable = catalog.getJSONObject("executable")
-        require(executable.getString("relative_path").equals("WowB-ARM64.exe", true)) { "wrong catalog executable" }
+        require(ALLOWED_EXECUTABLES.any { it.equals(executable.getString("relative_path"), ignoreCase = true) }) { "wrong catalog executable" }
         require(executable.getJSONObject("architecture").getString("expected_machine").equals("0xaa64", true)) { "catalog does not require PE ARM64" }
 
         val configs = catalog.getJSONArray("required_configs")

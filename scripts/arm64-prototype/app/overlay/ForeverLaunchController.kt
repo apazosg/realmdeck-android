@@ -47,6 +47,7 @@ data class ForeverLauncherState(
 class ForeverLaunchController private constructor(context: Context) : ForeverProcessDiagnostics.Listener {
     companion object {
         private val instances = ConcurrentHashMap<String, ForeverLaunchController>()
+        private val ALLOWED_EXECUTABLES = setOf("WowB-ARM64.exe", "Wow-ARM64.exe")
 
         fun get(context: Context): ForeverLaunchController {
             val appContext = context.applicationContext
@@ -335,7 +336,7 @@ class ForeverLaunchController private constructor(context: Context) : ForeverPro
                 if (isCurrent(token, runId)) _state.value = _state.value.copy(message = progress)
             }
             checkCurrent(token, runId)
-            require(verified.isFile && verified.name.equals("WowB-ARM64.exe", ignoreCase = true)) {
+            require(verified.isFile && ALLOWED_EXECUTABLES.any { it.equals(verified.name, ignoreCase = true) }) {
                 "provisioner returned an unexpected executable"
             }
 
@@ -385,7 +386,7 @@ class ForeverLaunchController private constructor(context: Context) : ForeverPro
             val launchVerified = configuredProbe?.verified?.file ?: verified
             val launchArgs = configuredProbe?.verified?.args ?: container.execArgs
             update(token, runId, ForeverStage.LAUNCHING,
-                if (configuredProbe != null) "Lanzando sonda gráfica con Wine…" else "Lanzando WowB-ARM64.exe con Wine…")
+                if (configuredProbe != null) "Lanzando sonda gráfica con Wine…" else "Lanzando ${launchVerified.name} con Wine…")
             ForeverProcessDiagnostics.expectLaunch(runId, launchVerified, contractPath.absolutePath)
             append(runId, JSONObject().put("event", "launch_route_ready")
                 .put("launchKind", configuredProbe?.kind ?: "wow_client")

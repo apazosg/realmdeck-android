@@ -24,8 +24,7 @@ import org.json.JSONObject
 object ForeverArm64Launch {
     const val ROUTE = "verified-aa64-direct"
 
-    private const val TARGET_NAME = "WowB-ARM64.exe"
-    private const val WINDOWS_TARGET = "A:\\WowB-ARM64.exe"
+    private val ALLOWED_EXECUTABLES = setOf("WowB-ARM64.exe", "Wow-ARM64.exe")
     private const val MAX_HEADER_BYTES = 4096
     private const val MAX_EXECUTABLE_BYTES = 94L * 1024L * 1024L
     private const val HASH_BUFFER_BYTES = 64 * 1024
@@ -68,6 +67,7 @@ object ForeverArm64Launch {
 
     internal data class ValidatedLaunch(
         val command: String,
+        val windowsTarget: String,
         val canonicalCwd: String,
         val md5: String,
         val decodedSize: Long,
@@ -111,6 +111,8 @@ object ForeverArm64Launch {
             "direct route folder is not the dedicated managed installation"
         }
         val verifiedExtra = container.getExtra("foreverVerifiedExe", "")
+        val catalogRecord = catalogRecordFromOfficialAsset(context)
+        val windowsTarget = windowsTargetFor(catalogRecord.relativePath)
         val input = ValidationInput(
             managed = true,
             runId = runId,
@@ -125,9 +127,9 @@ object ForeverArm64Launch {
             executablePath = executablePath,
             verifiedExecutableExtra = verifiedExtra,
             requestedArgs = requestedArgs,
-            verifiedFile = File(gameFolder, TARGET_NAME),
+            verifiedFile = File(gameFolder, catalogRecord.relativePath),
             cwd = gameFolder,
-            catalogRecord = catalogRecordFromOfficialAsset(context),
+            catalogRecord = catalogRecord,
         )
         val validated = validate(input)
 
@@ -137,7 +139,7 @@ object ForeverArm64Launch {
             .put("event", "launch_route_selected")
              .put("route", ROUTE)
             .put("launchMode", "wine-client-desktop")
-            .put("windowsExe", WINDOWS_TARGET)
+            .put("windowsExe", windowsTarget)
             .put("canonicalCwd", validated.canonicalCwd)
             .put("peMachine", "0xaa64")
             .put("peMagic", "0x20b")
@@ -160,16 +162,27 @@ object ForeverArm64Launch {
         ))
 
         require(input.executablePath.isApprovedExecutablePath()) {
-            "executable path is not the approved WowB ARM64 target"
+            "executable path is not an admitted ARM64 target"
         }
-        val expectedFile = File(canonicalGame, TARGET_NAME)
+        require(isAllowedExecutableName(input.catalogRecord.relativePath)) {
+            "catalog record is not an admitted ARM64 executable"
+        }
+        val windowsTarget = windowsTargetFor(input.catalogRecord.relativePath)
+        require(
+            input.executablePath.equals(input.catalogRecord.relativePath, ignoreCase = true) ||
+                input.executablePath.equals(windowsTarget, ignoreCase = true) ||
+                input.executablePath.equals("A:/${input.catalogRecord.relativePath}", ignoreCase = true),
+        ) {
+            "executable path does not match the admitted catalog executable"
+        }
+        val expectedFile = File(canonicalGame, input.catalogRecord.relativePath)
         val canonicalExpectedFile = expectedFile.canonicalFile
         require(canonicalExpectedFile.parentFile == canonicalGame &&
-            canonicalExpectedFile.name.equals(TARGET_NAME, ignoreCase = true)) {
+            canonicalExpectedFile.name.equals(input.catalogRecord.relativePath, ignoreCase = true)) {
             "managed executable escaped the canonical game directory"
         }
         require(input.verifiedFile.canonicalFile == canonicalExpectedFile) {
-            "verified executable is not cwd/WowB-ARM64.exe"
+            "verified executable is not the admitted catalog executable"
         }
         require(input.verifiedExecutableExtra == canonicalExpectedFile.path) {
             "container verified executable does not exactly match the canonical target"
@@ -179,9 +192,6 @@ object ForeverArm64Launch {
         }
         require(parseArguments(input.requestedArgs) == EXPECTED_ARGS) {
             "managed direct route arguments are not the canonical Forever flags"
-        }
-        require(input.catalogRecord.relativePath.equals(TARGET_NAME, ignoreCase = true)) {
-            "catalog record is not the official target executable"
         }
         require(input.catalogRecord.decodedMd5.matches(Regex("[0-9a-fA-F]{32}"))) {
             "catalog executable MD5 is malformed"
@@ -204,7 +214,7 @@ object ForeverArm64Launch {
             "executable MD5 does not match the official catalog"
         }
 
-        return ValidatedLaunch(WINDOWS_TARGET, canonicalGame.path, md5, identityAfter.size)
+        return ValidatedLaunch(windowsTarget, windowsTarget, canonicalGame.path, md5, identityAfter.size)
     }
 
     /** Format only after command() has verified the managed PE and RUN context.
@@ -214,9 +224,9 @@ object ForeverArm64Launch {
         if (ForeverLaunchDebug.GRAPHICS_PROBE_ENABLED && verifiedTarget == ForeverGraphicsProbe.WINDOWS_TARGET) {
             return ForeverGraphicsProbe.wineCommand(verifiedTarget, requestedArgs)
         }
-        require(verifiedTarget == WINDOWS_TARGET) { "Wine target is not the verified managed target" }
+        require(isApprovedWindowsTarget(verifiedTarget)) { "Wine target is not the verified managed target" }
         require(parseArguments(requestedArgs) == EXPECTED_ARGS) { "Wine flags are not the canonical Forever flags" }
-        return (listOf("wine", WINDOWS_TARGET) + EXPECTED_ARGS).joinToString(" ")
+        return (listOf("wine", verifiedTarget) + EXPECTED_ARGS).joinToString(" ")
     }
 
     fun useDirectRoute(managed: Boolean, customGame: Boolean, bootToContainer: Boolean, testGraphics: Boolean): Boolean =
@@ -236,9 +246,9 @@ object ForeverArm64Launch {
         val matches = mutableListOf<JSONObject>()
         for (index in 0 until loose.length()) {
             val record = loose.getJSONObject(index)
-            if (record.optString("relative_path").equals(TARGET_NAME, ignoreCase = true)) matches += record
+            if (isAllowedExecutableName(record.optString("relative_path"))) matches += record
         }
-        require(matches.size == 1) { "official catalog must contain exactly one WowB-ARM64.exe loose record" }
+        require(matches.size == 1) { "official catalog must contain exactly one admitted ARM64 executable loose record" }
         val record = matches.single()
         val md5 = record.optString("decoded_md5")
         require(md5.matches(Regex("[0-9a-fA-F]{32}"))) { "catalog executable MD5 is missing or malformed" }
@@ -355,10 +365,20 @@ object ForeverArm64Launch {
     private fun littleShort(bytes: ByteArray, offset: Int): Int =
         ByteBuffer.wrap(bytes, offset, 2).order(ByteOrder.LITTLE_ENDIAN).short.toInt() and 0xffff
 
+    private fun isAllowedExecutableName(name: String): Boolean =
+        ALLOWED_EXECUTABLES.any { it.equals(name, ignoreCase = true) }
+
+    private fun windowsTargetFor(relativePath: String): String = "A:\\$relativePath"
+
+    private fun isApprovedWindowsTarget(value: String): Boolean =
+        ALLOWED_EXECUTABLES.any { windowsTargetFor(it).equals(value, ignoreCase = true) }
+
     private fun String.isApprovedExecutablePath(): Boolean =
-        equals(TARGET_NAME, ignoreCase = true) ||
-            equals(WINDOWS_TARGET, ignoreCase = true) ||
-            equals("A:/${TARGET_NAME}", ignoreCase = true)
+        ALLOWED_EXECUTABLES.any { allowed ->
+            equals(allowed, ignoreCase = true) ||
+                equals(windowsTargetFor(allowed), ignoreCase = true) ||
+                equals("A:/$allowed", ignoreCase = true)
+        }
 
     private fun parseArguments(value: String): List<String> {
         val result = mutableListOf<String>()

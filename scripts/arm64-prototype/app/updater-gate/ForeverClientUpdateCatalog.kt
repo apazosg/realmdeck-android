@@ -40,6 +40,7 @@ class ForeverClientUpdateCatalog @JvmOverloads constructor(
     data class LooseFile(val path: String, val objectRecord: ObjectRecord)
 
     data class Summary(
+        val product: String,
         val version: String,
         val buildConfigHash: String,
         val cdnConfigHash: String,
@@ -396,7 +397,7 @@ class ForeverClientUpdateCatalog @JvmOverloads constructor(
         val locale = metadataString("locale")
         val buildConfigHash = normalizeHex(metadataString("build_config_hash"), "build-config hash")
         val cdnConfigHash = normalizeHex(metadataString("cdn_config_hash"), "CDN-config hash")
-        require(product == "wow_classic_beta" && region == "us") { "client catalog product or region is not admitted" }
+        require((product == LEGACY_PRODUCT || product == NETWORK_PRODUCT) && region == "us") { "client catalog product or region is not admitted" }
         require(platform == "Windows" && architecture == "arm64" && locale == "enUS") {
             "client catalog is not a Windows ARM64 enUS build"
         }
@@ -470,6 +471,7 @@ class ForeverClientUpdateCatalog @JvmOverloads constructor(
         val selectedCount = metadataLong("download_selected_unique_ekey_count")
         if (selectedCount > count) throw IllegalArgumentException("client catalog selected-object count exceeds its object table")
         return Summary(
+            product = metadataString("product"),
             version = metadataString("version"),
             buildConfigHash = metadataString("build_config_hash"),
             cdnConfigHash = metadataString("cdn_config_hash"),
@@ -723,6 +725,8 @@ class ForeverClientUpdateCatalog @JvmOverloads constructor(
         const val MAX_SUPPORTED_ENCODED_OBJECT_BYTES = 1_073_741_314L
         const val MAX_SUPPORTED_DECODED_OBJECT_BYTES = 536_870_912L
 
+        private const val LEGACY_PRODUCT = "wow_classic_beta"
+        private const val NETWORK_PRODUCT = "wowf"
         private const val MAX_CATALOG_BYTES = 256L * 1024 * 1024
         internal const val MAX_OBJECT_KEYS_PER_QUERY = 256
         private const val MAX_OBJECTS = 2_000_000L

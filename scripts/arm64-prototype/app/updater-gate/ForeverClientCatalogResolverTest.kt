@@ -178,6 +178,36 @@ class ForeverClientCatalogResolverTest {
     }
 
     @Test
+    fun acceptsReleaseExecutableAndRejectsUnlistedOrDuplicatedArm64Names() {
+        val root = Files.createTempDirectory("catalog-resolver-executable-identity-").toFile()
+        try {
+            val release = SyntheticGraph(
+                File(root, "release-fixture"), 70_707, 201,
+                installExecutables = listOf("Wow-ARM64.exe"),
+            )
+            val releaseResult = ForeverClientCatalogResolver(File(root, "release-work").apply { mkdirs() }) { _, _ ->
+                GraphSource(release)
+            }.resolve(release.fingerprint, true, { false }) { _, _, _ -> }
+            assertEquals("Wow-ARM64.exe", releaseResult.target.executable.path)
+            assertEquals("1.60.1.70707", releaseResult.target.version)
+
+            for ((caseIndex, names) in listOf(listOf("Wow.exe"), listOf("WowB.exe"), listOf("WowB-ARM64.exe", "Wow-ARM64.exe")).withIndex()) {
+                val rejected = SyntheticGraph(
+                    File(root, "rejected-$caseIndex"), 70_708, 202 + caseIndex,
+                    installExecutables = names,
+                )
+                assertThrows(IllegalArgumentException::class.java) {
+                    ForeverClientCatalogResolver(File(root, "rejected-work-$caseIndex").apply { mkdirs() }) { _, _ ->
+                        GraphSource(rejected)
+                    }.resolve(rejected.fingerprint, true, { false }) { _, _, _ -> }
+                }
+            }
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
     fun rejectsIndexCountAndByteBudgetBeforePublishingOrFollowingPayloadReferences() {
         val root = Files.createTempDirectory("catalog-resolver-bounds-").toFile()
         try {
@@ -568,6 +598,7 @@ class ForeverClientCatalogResolverTest {
         includeFileIndex: Boolean = true,
         includeArm64InstallTag: Boolean = true,
         overrideInstallMetadataCkey: String? = null,
+        installExecutables: List<String> = listOf("WowB-ARM64.exe"),
     ) {
         val sourceCalls = Calls()
         val payloadDecoded = "inert-metadata-payload-$seed".toByteArray(Charsets.US_ASCII)
@@ -584,7 +615,7 @@ class ForeverClientCatalogResolverTest {
         init {
             root.mkdirs()
             val metadataContents = linkedMapOf(
-                "install" to installManifest(payloadCkey, payloadDecoded.size.toLong(), includeArm64InstallTag),
+                "install" to installManifest(payloadCkey, payloadDecoded.size.toLong(), includeArm64InstallTag, installExecutables),
                 "download" to downloadManifest(payloadEkey, payloadRaw.size.toLong()),
                 "size" to sizeManifest(payloadEkey, payloadDecoded.size.toLong()),
                 "encoding" to encodingManifest(payloadCkey, payloadEkey, payloadDecoded.size.toLong(), payloadRaw.size.toLong()),
@@ -606,7 +637,7 @@ class ForeverClientCatalogResolverTest {
                 )
             }
             val buildText = buildString {
-                append("build-uid = wow_classic_beta\n")
+                append("build-uid = ${ForeverClientUpdateCheck.PRODUCT}\n")
                 append("build-num = $buildId\n")
                 for (role in listOf("install", "download", "size", "encoding")) {
                     val ref = references.getValue(role)
@@ -647,18 +678,25 @@ class ForeverClientCatalogResolverTest {
 
     private data class IndexedObject(val ekey: String, val encodedSize: Long)
 
-    private fun installManifest(contentKey: String, decodedSize: Long, includeArm64: Boolean): ByteArray {
+    private fun installManifest(
+        contentKey: String,
+        decodedSize: Long,
+        includeArm64: Boolean,
+        executables: List<String> = listOf("WowB-ARM64.exe"),
+    ): ByteArray {
         val tags = if (includeArm64) listOf("Windows", "arm64", "enUS") else listOf("Windows", "enUS")
         return ByteArrayOutputStream().apply {
         write("IN".toByteArray())
         write(1)
         write(16)
         writeU16(this, tags.size)
-        writeU32(this, 1)
-        writeTags(this, 1, tags)
-        write("WowB-ARM64.exe\u0000".toByteArray(Charsets.UTF_8))
-        write(contentKey.hexBytes())
-        writeU32(this, decodedSize)
+        writeU32(this, executables.size.toLong())
+        writeTags(this, executables.size, tags)
+        for (name in executables) {
+            write("$name\u0000".toByteArray(Charsets.UTF_8))
+            write(contentKey.hexBytes())
+            writeU32(this, decodedSize)
+        }
         }.toByteArray()
     }
 

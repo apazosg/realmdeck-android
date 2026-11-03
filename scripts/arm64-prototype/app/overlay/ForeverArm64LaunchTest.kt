@@ -149,6 +149,55 @@ class ForeverArm64LaunchTest {
     }
 
     @Test
+    fun releaseExecutableValidatesAgainstItsCatalogRecord() {
+        val fixture = fixture(machine = 0xaa64, exeName = "Wow-ARM64.exe")
+
+        val result = ForeverArm64Launch.validate(fixture.input)
+
+        assertEquals("A:\\Wow-ARM64.exe", result.command)
+        assertEquals("A:\\Wow-ARM64.exe", result.windowsTarget)
+        assertEquals(fixture.record.decodedMd5, result.md5)
+        val command = ForeverArm64Launch.wineCommand(result.command, fixture.input.requestedArgs)
+        assertEquals(listOf("wine", "A:\\Wow-ARM64.exe", "-config", "BetaSuspendedTest.wtf", "-d3d11"),
+            com.winlator.core.ProcessHelper.splitCommand(command).toList())
+    }
+
+    @Test
+    fun releaseRecordSizeOrDigestMismatchStillFails() {
+        val fixture = fixture(machine = 0xaa64, exeName = "Wow-ARM64.exe")
+        assertThrows(IllegalArgumentException::class.java) {
+            ForeverArm64Launch.validate(fixture.input.copy(
+                catalogRecord = fixture.record.copy(decodedSize = fixture.record.decodedSize + 1),
+            ))
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            ForeverArm64Launch.validate(fixture.input.copy(
+                executablePath = "A:\\WowB-ARM64.exe",
+            ))
+        }
+        val catalog = JSONObject().put("loose_files", JSONArray()
+            .put(JSONObject()
+                .put("relative_path", "Wow.exe")
+                .put("decoded_md5", "0123456789abcdef0123456789abcdef")
+                .put("decoded_size", 10)))
+        assertThrows(IllegalArgumentException::class.java) {
+            ForeverArm64Launch.catalogRecordForTest(catalog)
+        }
+        val duplicate = JSONObject().put("loose_files", JSONArray()
+            .put(JSONObject()
+                .put("relative_path", "WowB-ARM64.exe")
+                .put("decoded_md5", "0123456789abcdef0123456789abcdef")
+                .put("decoded_size", 10))
+            .put(JSONObject()
+                .put("relative_path", "Wow-ARM64.exe")
+                .put("decoded_md5", "0123456789abcdef0123456789abcdef")
+                .put("decoded_size", 10)))
+        assertThrows(IllegalArgumentException::class.java) {
+            ForeverArm64Launch.catalogRecordForTest(duplicate)
+        }
+    }
+
+    @Test
     fun catalogMustHaveOneOfficialLooseExecutableRecord() {
         val record = JSONObject()
             .put("relative_path", "WowB-ARM64.exe")
@@ -168,13 +217,13 @@ class ForeverArm64LaunchTest {
         val input: ForeverArm64Launch.ValidationInput,
     )
 
-    private fun fixture(machine: Int): Fixture {
+    private fun fixture(machine: Int, exeName: String = "WowB-ARM64.exe"): Fixture {
         val root = Files.createTempDirectory("forever aa64 managed root ").toFile()
-        val exe = File(root, "WowB-ARM64.exe")
+        val exe = File(root, exeName)
         val bytes = fakePe(machine)
         exe.writeBytes(bytes)
         val md5 = MessageDigest.getInstance("MD5").digest(bytes).joinToString("") { "%02x".format(it) }
-        val record = ForeverArm64Launch.CatalogExecutableRecord("WowB-ARM64.exe", md5, bytes.size.toLong())
+        val record = ForeverArm64Launch.CatalogExecutableRecord(exeName, md5, bytes.size.toLong())
         val canonical = root.canonicalFile
         val input = ForeverArm64Launch.ValidationInput(
             managed = true,
@@ -184,8 +233,8 @@ class ForeverArm64LaunchTest {
             registeredGameFolder = canonical,
             gameFolder = canonical,
             aDriveFolders = listOf(canonical),
-            executablePath = "WowB-ARM64.exe",
-            verifiedExecutableExtra = File(canonical, "WowB-ARM64.exe").canonicalPath,
+            executablePath = exeName,
+            verifiedExecutableExtra = File(canonical, exeName).canonicalPath,
             requestedArgs = "-config BetaSuspendedTest.wtf -d3d11",
             verifiedFile = exe,
             cwd = canonical,

@@ -33,6 +33,26 @@ import org.robolectric.annotation.Config
 @Config(sdk = [29], application = Application::class)
 class ForeverFunctionalClientStorageTest {
     @Test
+    fun allowlistedExecutableResolutionAdmitsEitherNameAndRejectsNoneOrBoth() {
+        val root = Files.createTempDirectory("forever-exe-identity-").toFile()
+        try {
+            assertNull(ForeverFunctionalClientStorage.singleAllowlistedExecutableForTest(root))
+            val beta = File(root, "WowB-ARM64.exe").also { it.writeBytes(byteArrayOf(1)) }
+            assertEquals(beta, ForeverFunctionalClientStorage.singleAllowlistedExecutableForTest(root))
+            assertTrue(ForeverFunctionalClientStorage.isAllowedExecutableName("wow-arm64.exe"))
+            assertFalse(ForeverFunctionalClientStorage.isAllowedExecutableName("Wow.exe"))
+            beta.delete()
+            File(root, "Wow-ARM64.exe").also { it.writeBytes(byteArrayOf(2)) }
+            assertEquals("Wow-ARM64.exe",
+                ForeverFunctionalClientStorage.singleAllowlistedExecutableForTest(root)?.name)
+            File(root, "WowB-ARM64.exe").also { it.writeBytes(byteArrayOf(1)) }
+            assertNull(ForeverFunctionalClientStorage.singleAllowlistedExecutableForTest(root))
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
     fun capacityLabelsUseCorrectBinaryUnits() {
         assertEquals("8.0 GiB", ForeverFunctionalClientStorage.formatAvailableBytes(8L * 1024 * 1024 * 1024))
         assertEquals("512.0 MiB", ForeverFunctionalClientStorage.formatAvailableBytes(512L * 1024 * 1024))

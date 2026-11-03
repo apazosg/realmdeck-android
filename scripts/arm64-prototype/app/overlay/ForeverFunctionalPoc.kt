@@ -30,8 +30,15 @@ import org.json.JSONObject
 object ForeverFunctionalPoc {
     const val APP_ID = "CUSTOM_GAME_1368588668"
     const val GAME_FOLDER_NAME = "WoW Forever"
+    /**
+     * Legacy beta executable name, kept for the packaged/bootstrap path and as
+     * the [Prepared] default. Updater-managed installs use the admitted name
+     * from [ForeverFunctionalClientStorage.ResolvedTarget.executableName].
+     */
     const val EXECUTABLE_NAME = "WowB-ARM64.exe"
     const val WINDOWS_EXECUTABLE = "A:\\WowB-ARM64.exe"
+    /** Client executables the launcher admits, mirroring the catalog allowlist. */
+    val ALLOWED_EXECUTABLES = setOf(EXECUTABLE_NAME, "Wow-ARM64.exe")
     const val EXEC_ARGS_TEMPLATE = "-config BetaFunctionalPoc-<profileId>.wtf -d3d11"
     const val ROUTE = "functional-wow-aa64"
 
@@ -133,15 +140,16 @@ object ForeverFunctionalPoc {
     fun isRoute(enabled: Boolean, customGame: Boolean, bootToContainer: Boolean, testGraphics: Boolean): Boolean =
         enabled && customGame && !bootToContainer && !testGraphics
 
-    /** Returns the one fixed Windows target; no caller can select another PE. */
+    /** Returns the admitted fixed Windows target; no caller can select another PE. */
     fun command(gameFolderPath: String?, executablePath: String): String {
         require(!gameFolderPath.isNullOrBlank()) { "functional PoC requires an A: game folder" }
-        require(executablePath.equals(EXECUTABLE_NAME, ignoreCase = true)) {
-            "functional PoC container executable is not WowB-ARM64.exe"
+        require(ALLOWED_EXECUTABLES.any { it.equals(executablePath, ignoreCase = true) }) {
+            "functional PoC container executable is not an admitted ARM64 target"
         }
-        // ProcessHelper retains quote characters in argv. This fixed Windows
-        // path contains no spaces, so pass it without shell-style grouping.
-        return WINDOWS_EXECUTABLE
+        // ProcessHelper retains quote characters in argv. The admitted
+        // Windows targets contain no spaces, so pass them without
+        // shell-style grouping.
+        return "A:\\$executablePath"
     }
 
     /**
@@ -188,7 +196,7 @@ object ForeverFunctionalPoc {
             val resolved = resolveClientForLaunch(context, storage)
             val resolveMs = elapsedMs(prepareStart)
             val gameFolder = resolved.root.canonicalFile
-            val executable = File(gameFolder, EXECUTABLE_NAME)
+            val executable = File(gameFolder, resolved.executableName)
             val log = newLogFile(context)
             // A cancelled generation may have returned while stock ImageFS
             // migration/extraction is still owned by the bootstrap. Join it
@@ -282,7 +290,7 @@ object ForeverFunctionalPoc {
         val imageFsMs = elapsedMs(imageFsStart)
 
         val finalizeStart = System.nanoTime()
-        container.setExecutablePath(EXECUTABLE_NAME)
+        container.setExecutablePath(executable.name)
         val execArgs = "-config ${derivedConfig.name} -d3d11"
         container.setExecArgs(execArgs)
         container.setWineVersion(ContentsManager.getEntryName(profiles.wine))
@@ -342,7 +350,7 @@ object ForeverFunctionalPoc {
             .put("route", ROUTE)
             .put("appId", APP_ID)
             .put("gameFolderName", gameFolder.name)
-            .put("windowsExecutableName", EXECUTABLE_NAME)
+            .put("windowsExecutableName", executable.name)
             .put("arguments", execArgs)
             .put("profileId", configuration.profileId)
             .put("portalHost", configuration.portalHost)
@@ -584,7 +592,7 @@ object ForeverFunctionalPoc {
             prepared.wowStartup = ForeverFunctionalWowStartup(
                 expectedWidth = plan?.width ?: 0,
                 expectedHeight = plan?.height ?: 0,
-                targetClass = EXECUTABLE_NAME,
+                targetClass = prepared.executable.name,
                 isCurrent = { activeGuest.get() === prepared && !prepared.guestLaunchClosed.get() },
                 onReady = { elapsedMs ->
                     // Exactly one tiny scheduling task per observed startup.

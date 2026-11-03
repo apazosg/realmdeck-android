@@ -532,7 +532,7 @@ internal class ForeverFunctionalAutologinXServerInput(
         if (ownedWindow.first !== server) return null
         val window = ownedWindow.second
         val focused = runCatching { server.windowManager.focusedWindow }.getOrNull()
-        val targetWindow = window.className?.contains(ForeverFunctionalPoc.EXECUTABLE_NAME, ignoreCase = true) == true
+        val targetWindow = window.className?.contains(prepared.executable.name, ignoreCase = true) == true
         val rendererPosition = IntArray(2)
         return runCatching {
             rendererView.getLocationOnScreen(rendererPosition)

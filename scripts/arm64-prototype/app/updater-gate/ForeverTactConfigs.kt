@@ -176,7 +176,7 @@ internal object ForeverTactConfigs {
     }
 
     private fun validateFingerprint(published: ForeverClientUpdateCheck.Fingerprint) {
-        require(published.product == ForeverClientUpdateCheck.PRODUCT) { "published fingerprint product is not wow_classic_beta" }
+        require(published.product == ForeverClientUpdateCheck.PRODUCT) { "published fingerprint product is not wowf" }
         require(published.version.matches(Regex("[0-9]+(?:\\.[0-9]+){3}"))) { "published fingerprint version is malformed" }
         require(published.buildId != null && published.buildId > 0L &&
             published.version.substringAfterLast('.').toLongOrNull() == published.buildId

@@ -12,10 +12,10 @@ import javax.net.ssl.HttpsURLConnection
 
 /** Read-only check of Blizzard's public Ribbit versions metadata. This does not download client data. */
 object ForeverClientUpdateCheck {
-    const val PRODUCT = "wow_classic_beta"
+    const val PRODUCT = "wowf"
     const val REGION = "us"
     const val OFFICIAL_VERSIONS_URL =
-        "https://us.version.battle.net/v2/products/wow_classic_beta/versions"
+        "https://us.version.battle.net/v2/products/wowf/versions"
     const val MAX_METADATA_BYTES = 1_048_576
 
     private const val MAX_LINE_CHARS = 16_384
@@ -291,7 +291,7 @@ object ForeverClientUpdateCheck {
             val url = URL(OFFICIAL_VERSIONS_URL)
             require(url.protocol == "https" && url.host == "us.version.battle.net" &&
                 url.port in setOf(-1, 443) && url.userInfo == null && url.query == null && url.ref == null &&
-                url.path == "/v2/products/wow_classic_beta/versions") {
+                url.path == "/v2/products/wowf/versions") {
                 "refusing a non-official metadata endpoint"
             }
             checkCancelled(cancelled)

@@ -473,7 +473,7 @@ class ForeverClientMetadataTransportTest {
 
     companion object {
         private fun fingerprint(hash: String) = ForeverClientUpdateCheck.Fingerprint(
-            "wow_classic_beta", "1.60.1.70425", hash, "f".repeat(32), 70_425,
+            "wowf", "1.60.1.70425", hash, "f".repeat(32), 70_425,
         )
 
         private fun configUrl(hash: String) = "https://us.cdn.blizzard.com/tpr/wow/config/${hash.take(2)}/${hash.substring(2, 4)}/$hash"

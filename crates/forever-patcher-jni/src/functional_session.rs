@@ -41,7 +41,25 @@ const STRUCTURAL_BLOCK_SIZE: usize = 480;
 const STRUCTURAL_OVERLAP: usize = STRUCTURAL_BLOCK_SIZE - 1;
 const PR_SET_CHILD_SUBREAPER: libc::c_int = 36;
 const PR_GET_CHILD_SUBREAPER: libc::c_int = 37;
-const TARGET_SUFFIX: &str = "customgames/wow forever/wowb-arm64.exe";
+/// WoW builds ship one of two client names for the same functional executable.
+/// The admitted name is the one the managed catalog verified on disk; the
+/// patcher only accepts these two, never a basename or another path.
+const TARGET_SUFFIXES: [&str; 2] = [
+    "customgames/wow forever/wowb-arm64.exe",
+    "customgames/wow forever/wow-arm64.exe",
+];
+
+fn has_target_suffix(normalized: &str) -> bool {
+    TARGET_SUFFIXES
+        .into_iter()
+        .any(|suffix| normalized.ends_with(suffix))
+}
+
+fn comm_is_client(comm: &[u8]) -> bool {
+    let name = String::from_utf8_lossy(comm);
+    let name = name.trim();
+    name.eq_ignore_ascii_case("WowB-ARM64.exe") || name.eq_ignore_ascii_case("Wow-ARM64.exe")
+}
 
 static NEXT_TOKEN: AtomicU64 = AtomicU64::new(1);
 static ACTIVE: OnceLock<Mutex<Option<Arc<Lease>>>> = OnceLock::new();
@@ -490,8 +508,10 @@ fn canonical_executable(path: &str) -> Result<PathBuf, String> {
     let executable = std::fs::canonicalize(input)
         .map_err(|error| format!("executablePath is not readable: {error}"))?;
     let normalized = executable.to_string_lossy().replace('\\', "/").to_ascii_lowercase();
-    if !normalized.ends_with(TARGET_SUFFIX) {
-        return Err("functional target must end in CustomGames/WoW Forever/WowB-ARM64.exe".to_string());
+    if !has_target_suffix(&normalized) {
+        return Err(
+            "functional target must end in CustomGames/WoW Forever/Wow-ARM64.exe".to_string()
+        );
     }
     verify_pe_aa64(&executable)?;
     Ok(executable)
@@ -1343,15 +1363,14 @@ fn post_read_observation_decision(
 fn target_token(token: &[u8]) -> bool {
     let Ok(token) = std::str::from_utf8(token) else { return false };
     let normalized = token.replace('\\', "/").to_ascii_lowercase();
-    normalized.ends_with(&format!("/{TARGET_SUFFIX}"))
-        || normalized == "a:/wowb-arm64.exe"
+    has_target_suffix(&normalized) || normalized == "a:/wowb-arm64.exe" || normalized == "a:/wow-arm64.exe"
 }
 
 fn validate_cmdline(pid: u32, budget: &Budget) -> io::Result<bool> {
     // Explorer's argv also contains the PE it launches. Require the actual
     // client's comm as an additional selector, never as ownership proof.
     let comm = ProcFs::read_file(pid, "comm", 64, budget)?;
-    if !String::from_utf8_lossy(&comm).trim().eq_ignore_ascii_case("WowB-ARM64.exe") {
+    if !comm_is_client(&comm) {
         return Ok(false);
     }
     let bytes = ProcFs::read_file(pid, "cmdline", MAX_PROC_FILE, budget)?;
@@ -1360,7 +1379,7 @@ fn validate_cmdline(pid: u32, budget: &Budget) -> io::Result<bool> {
 
 fn capture_cmdline(pid: u32, budget: &Budget) -> io::Result<Option<Vec<u8>>> {
     let comm = ProcFs::read_file(pid, "comm", 64, budget)?;
-    if !String::from_utf8_lossy(&comm).trim().eq_ignore_ascii_case("WowB-ARM64.exe") {
+    if !comm_is_client(&comm) {
         return Ok(None);
     }
     let bytes = ProcFs::read_file(pid, "cmdline", MAX_PROC_FILE, budget)?;
@@ -2628,8 +2647,12 @@ mod tests {
     fn exact_windows_token_is_not_a_basename_heuristic() {
         assert!(target_token(b"A:\\WowB-ARM64.exe"));
         assert!(target_token(b"Z:\\CustomGames\\WoW Forever\\WowB-ARM64.exe"));
+        assert!(target_token(b"A:\\Wow-ARM64.exe"));
+        assert!(target_token(b"Z:\\CustomGames\\WoW Forever\\Wow-ARM64.exe"));
         assert!(!target_token(b"WowB-ARM64.exe"));
+        assert!(!target_token(b"Wow-ARM64.exe"));
         assert!(!target_token(b"Z:\\other\\WowB-ARM64.exe"));
+        assert!(!target_token(b"Z:\\other\\Wow-ARM64.exe"));
     }
 
     #[test]

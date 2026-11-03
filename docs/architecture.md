@@ -45,6 +45,15 @@ on Android) gets a go decision.
 - Product config (JSON) → `http://<host>/tpr/configs/data/<a>/<b>/<hash>`
 - Data files (buckets) → `http://<host>/tpr/wow/data/<a>/<b>/<cKey>`
 
+> **Android updater product (2026-11-02).** The on-device updater (US-008/US-009)
+> queries the official `wowf` product at
+> `https://us.version.battle.net/v2/products/wowf/versions` and still admits the
+> legacy `wow_classic_beta` lineage for clients already installed on a device.
+> Admitted ARM64 executables are `WowB-ARM64.exe` and `Wow-ARM64.exe`; the admitted
+> name is bound by the installation proof and carried into launch. The host CLI
+> described below (`forever-client`, US-001) remains on `wow_classic_beta` and
+> `WowB.exe`; this note does not change it.
+
 ### Hash-pair rule (critical)
 
 Each `<x> = h1 h2` field in the build config contains **two** hashes. For the
@@ -129,6 +138,12 @@ than packaging them.
 | **D-003** | Python + `uv` for the provisioner | `uv` is already installed; no `pip3` on the host |
 | **D-004** | Self-contained installation in one directory (`WowB.exe` + `Data/` + metadata at the root) | The launcher starts `WowB.exe` from the game directory |
 | **D-005** | Validate Phase 1 on Linux without Android | Decouples provisioning uncertainty from runtime uncertainty |
+
+> **Product-scope clarification (2026-11-02):** D-001/D-002 describe the host
+> `forever-client` toolchain, which keeps `wow_classic_beta`. The Android updater
+> resolves `wowf` and retains `wow_classic_beta` only for already-installed clients;
+> see the note in section 2. This is a separate product scope, not a reversal of
+> D-002.
 
 ## 7. Provisioning: `forever-client`
 

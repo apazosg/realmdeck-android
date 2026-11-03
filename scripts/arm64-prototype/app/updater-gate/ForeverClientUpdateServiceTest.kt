@@ -65,6 +65,18 @@ class ForeverClientUpdateServiceTest {
         val otherLocale = ForeverClientUpdateService.parseBuildInfo(
             buildInfo("1.60.1.70333", "wow_classic_beta", "us", "Windows arm64 US? frFR", "12".repeat(16), "34".repeat(16)),
         )
+        val wowfTarget = ForeverClientUpdateService.parseBuildInfo(
+            buildInfo("1.60.1.70707", "wowf", "us", "Windows arm64 US? enUS", "ab".repeat(16), "cd".repeat(16)),
+        )
+        val wowfPrior = ForeverClientUpdateService.parseBuildInfo(
+            buildInfo("1.60.1.70009", "wowf", "us", "Windows arm64 US? enUS", PRIOR_BUILD, PRIOR_CDN),
+        )
+        val unrelatedProduct = ForeverClientUpdateService.parseBuildInfo(
+            buildInfo("1.60.1.70707", "wowdev2", "us", "Windows arm64 US? enUS", "ab".repeat(16), "cd".repeat(16)),
+        )
+        assertNotNull(wowfTarget)
+        assertNotNull(wowfPrior)
+        assertNotNull(unrelatedProduct)
         assertNotNull(target)
         assertNotNull(prior)
         assertNotNull(unknown)
@@ -89,10 +101,37 @@ class ForeverClientUpdateServiceTest {
         assertEquals(PastedClientVerdict.WRONG_PRODUCT, classify(true, true, otherLocale))
         assertEquals(PastedClientVerdict.NOT_ARM64, classify(true, true, x64, targetVerified = true))
         assertEquals(PastedClientVerdict.TARGET_BUILD, classify(true, true, target, targetVerified = true))
+        assertEquals(PastedClientVerdict.TARGET_BUILD, classify(true, true, wowfTarget, targetVerified = true))
         assertEquals(PastedClientVerdict.PRIOR_BUILD, classify(true, true, prior, priorVerified = true))
+        assertEquals(PastedClientVerdict.PRIOR_BUILD, classify(true, true, wowfPrior, priorVerified = true))
+        assertEquals(PastedClientVerdict.WRONG_PRODUCT, classify(true, true, unrelatedProduct, targetVerified = true))
         assertEquals(PastedClientVerdict.UNKNOWN_BUILD_AS_SOURCE, classify(true, true, unknown))
         assertEquals(PastedClientVerdict.UNKNOWN_BUILD_AS_SOURCE, classify(true, false, null))
         assertEquals(PastedClientVerdict.NOT_CASC, classify(true, true, null))
+    }
+
+    @Test
+    fun buildInfoVerificationAdmitsBothClientProductsButRejectsUnrelatedOnes() {
+        val wowfPrior = buildInfo("1.60.1.70009", "wowf", "us", "Windows arm64 US? enUS", PRIOR_BUILD, PRIOR_CDN)
+        assertNotNull(
+            ForeverClientUpdateService.verifiedBuildInfoFingerprint(
+                wowfPrior,
+                "1.60.1.70009",
+                PRIOR_BUILD,
+                PRIOR_CDN,
+                manifestVerified = true,
+            ),
+        )
+        val unrelated = buildInfo("1.60.1.70009", "wowdev2", "us", "Windows arm64 US? enUS", PRIOR_BUILD, PRIOR_CDN)
+        assertNull(
+            ForeverClientUpdateService.verifiedBuildInfoFingerprint(
+                unrelated,
+                "1.60.1.70009",
+                PRIOR_BUILD,
+                PRIOR_CDN,
+                manifestVerified = true,
+            ),
+        )
     }
 
     @Test
