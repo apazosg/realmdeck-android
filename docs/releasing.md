@@ -56,6 +56,44 @@ as well as the unchanged asset names, sizes, digests, tags, and release channel.
 - Keep the technical status page clear about what was built, tested, and not tested;
   a build audit is not a physical-device test.
 
+## Automated test-bench builds
+
+[`.github/workflows/release.yml`](../.github/workflows/release.yml) builds and
+publishes the in-repository test-bench app (`android/`, package
+`com.wowforever.launcher`) when a `vX.Y.Z` tag is pushed. It can also be run from
+the Actions tab with an explicit version.
+
+- Version name: `X.Y.Z` from the tag, without the `v`.
+- Version code: `major * 10000 + minor * 100 + patch`, so `v0.0.1` is code `1`;
+  each component must be `0`–`99`. The code must keep increasing across releases.
+- Assets: `<tag>.apk` and `SHA256SUMS`, signed with the CI key.
+- Release title: `RealmDeck test bench <version>`. Builds are published as
+  prereleases by default, including tag pushes, so the product release keeps the
+  repository's "Latest" marker. A manual run with the prerelease flag off
+  publishes a stable release; with publishing off it only produces a CI artifact.
+
+Tag the commit that contains the workflow: a tag on an older commit has no
+workflow to run. This workflow builds the test bench only. The functional launcher
+APK is still built with the local recipe from artifacts outside the repository and
+is not produced here.
+
+### CI signing secrets
+
+Every published APK must share one signing key, or later versions cannot be
+installed over earlier ones. The keystore stays outside the repository and is
+registered once as repository secrets:
+
+```bash
+gh secret set RELEASE_KEYSTORE_BASE64 < <(base64 -w0 private/release-signing/realmdeck-release.p12)
+gh secret set RELEASE_KEYSTORE_PASSWORD < private/release-signing/.storepass
+gh secret set RELEASE_KEY_ALIAS --body realmdeck
+gh secret set RELEASE_KEY_PASSWORD < private/release-signing/.storepass
+```
+
+The PKCS12 key uses the same password for the store and the key. Back up the
+keystore: GitHub secrets cannot be read back, and losing the key permanently ends
+in-place upgrades for installed builds.
+
 ## Update-check limitation
 
 The C142 APK still queries the former `apazosg/wowforever` release API and rejects

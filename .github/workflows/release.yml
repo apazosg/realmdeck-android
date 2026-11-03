@@ -1,0 +1,240 @@
+name: Release APK
+
+# Publica un APK firmado al crear un tag `vX.Y.Z` o al lanzarlo a mano.
+# Compila la app autocontenida de `android/` (banco de pruebas diagnóstico), no el
+# launcher funcional: ese build depende de artefactos externos al repositorio.
+# Procedimiento y secrets: docs/releasing.md.
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Versión sin prefijo v (formato X.Y.Z, p. ej. 0.0.1)"
+        required: true
+        type: string
+      prerelease:
+        description: "Marcar la release como prerelease"
+        required: true
+        default: true
+        type: boolean
+      publish:
+        description: "Publicar GitHub Release (desactivado = solo artefacto de CI)"
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  NDK_VERSION: "27.0.12077973"
+  ANDROID_API: "26"
+
+jobs:
+  release:
+    name: Build and publish APK
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolver versión
+        id: version
+        shell: bash
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+          INPUT_PRERELEASE: ${{ inputs.prerelease }}
+          INPUT_PUBLISH: ${{ inputs.publish }}
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="v${INPUT_VERSION}"
+            VERSION="${INPUT_VERSION}"
+            PRERELEASE="${INPUT_PRERELEASE}"
+            PUBLISH="${INPUT_PUBLISH}"
+          else
+            TAG="${GITHUB_REF_NAME}"
+            VERSION="${TAG#v}"
+            # El banco de pruebas no debe desplazar la release "Latest" del producto.
+            PRERELEASE="true"
+            PUBLISH="true"
+          fi
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Versión '$VERSION' inválida; se espera X.Y.Z"
+            exit 1
+          fi
+          IFS=. read -r MAJOR MINOR PATCH <<< "$VERSION"
+          for PART in "$MAJOR" "$MINOR" "$PATCH"; do
+            if [ "$((10#$PART))" -gt 99 ]; then
+              echo "::error::Cada componente de la versión debe ser <= 99"
+              exit 1
+            fi
+          done
+          CODE=$((10#$MAJOR * 10000 + 10#$MINOR * 100 + 10#$PATCH))
+          {
+            echo "version=$VERSION"
+            echo "tag=$TAG"
+            echo "code=$CODE"
+            echo "prerelease=$PRERELEASE"
+            echo "publish=$PUBLISH"
+          } >> "$GITHUB_OUTPUT"
+          echo "Versión $VERSION (versionCode $CODE), tag $TAG" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Configurar JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Instalar NDK y plataforma Android
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDKMANAGER="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$SDKMANAGER" ]; then
+            echo "::error::sdkmanager no encontrado en $ANDROID_SDK_ROOT"
+            exit 1
+          fi
+          yes | "$SDKMANAGER" --licenses > /dev/null 2>&1 || true
+          "$SDKMANAGER" --install "platforms;android-35" "build-tools;35.0.0" "ndk;$NDK_VERSION" > /dev/null
+
+      - name: Añadir targets Android de Rust
+        run: rustup target add aarch64-linux-android x86_64-linux-android
+
+      - name: Compilar librerías nativas
+        shell: bash
+        run: |
+          set -euo pipefail
+          scripts/build-android-native.sh
+          android/build-exec-probe.sh
+
+      - name: Pruebas de lógica de diagnóstico
+        working-directory: android
+        shell: bash
+        run: ./gradlew --no-daemon :app:runDiagnosticLogicSelfTest
+
+      - name: Preparar keystore de firma
+        shell: bash
+        env:
+          KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+        run: |
+          set -euo pipefail
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "::error::Falta el secret RELEASE_KEYSTORE_BASE64; ver docs/releasing.md."
+            exit 1
+          fi
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/release.p12"
+          chmod 600 "$RUNNER_TEMP/release.p12"
+
+      - name: Compilar APK de release
+        working-directory: android
+        shell: bash
+        env:
+          ORG_GRADLE_PROJECT_appVersionName: ${{ steps.version.outputs.version }}
+          ORG_GRADLE_PROJECT_appVersionCode: ${{ steps.version.outputs.code }}
+          ORG_GRADLE_PROJECT_releaseStoreFile: ${{ runner.temp }}/release.p12
+          ORG_GRADLE_PROJECT_releaseStorePassword: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
+          ORG_GRADLE_PROJECT_releaseKeyAlias: ${{ secrets.RELEASE_KEY_ALIAS }}
+          ORG_GRADLE_PROJECT_releaseKeyPassword: ${{ secrets.RELEASE_KEY_PASSWORD }}
+        run: ./gradlew --no-daemon :app:assembleRelease
+
+      - name: Verificar y empaquetar APK
+        id: package
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK_IN="android/app/build/outputs/apk/release/app-release.apk"
+          test -f "$APK_IN" || { echo "::error::No se generó $APK_IN"; exit 1; }
+          "$ANDROID_SDK_ROOT/build-tools/35.0.0/apksigner" verify --print-certs "$APK_IN"
+          OUT_DIR="$RUNNER_TEMP/dist"
+          mkdir -p "$OUT_DIR"
+          APK_NAME="${{ steps.version.outputs.tag }}.apk"
+          cp "$APK_IN" "$OUT_DIR/$APK_NAME"
+          (cd "$OUT_DIR" && sha256sum "$APK_NAME" > SHA256SUMS)
+          cat "$OUT_DIR/SHA256SUMS" >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "dir=$OUT_DIR"
+            echo "apk=$APK_NAME"
+            echo "sha256=$(cut -d' ' -f1 "$OUT_DIR/SHA256SUMS")"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Subir artefacto de CI
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.version.outputs.tag }}
+          path: |
+            ${{ runner.temp }}/dist/*.apk
+            ${{ runner.temp }}/dist/SHA256SUMS
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Preparar notas de release
+        if: steps.version.outputs.publish == 'true'
+        shell: bash
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          CODE: ${{ steps.version.outputs.code }}
+          APK_NAME: ${{ steps.package.outputs.apk }}
+          SHA256: ${{ steps.package.outputs.sha256 }}
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/notes.md" <<EOF
+          RealmDeck test bench ${VERSION} — version code ${CODE}
+
+          Diagnostic test-bench APK built from \`android/\` (package \`com.wowforever.launcher\`).
+          This is **not** the functional RealmDeck launcher build.
+
+          ## Download
+
+          - \`${APK_NAME}\`
+          - \`SHA256SUMS\`
+
+          SHA-256: \`${SHA256}\`
+
+          ## Installation
+
+          Install the APK manually. Builds from this workflow share one signing key, so a
+          newer version can be installed over an older one.
+
+          ## Before you try
+
+          - Experimental diagnostic build, not a general release.
+          - This workflow provides build evidence only; it is not a device test.
+          EOF
+
+      - name: Publicar GitHub Release
+        if: steps.version.outputs.publish == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.version.outputs.tag }}
+          PRERELEASE: ${{ steps.version.outputs.prerelease }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          ASSETS=("$RUNNER_TEMP/dist/$TAG.apk" "$RUNNER_TEMP/dist/SHA256SUMS")
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            gh release upload "$TAG" "${ASSETS[@]}" --clobber
+            echo "Assets actualizados en la release existente $TAG" >> "$GITHUB_STEP_SUMMARY"
+          else
+            FLAGS=()
+            if [ "$PRERELEASE" = "true" ]; then
+              FLAGS+=(--prerelease)
+            fi
+            # En un tag push el tag ya existe; solo el lanzamiento manual lo crea.
+            if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+              FLAGS+=(--target "$GITHUB_SHA")
+            fi
+            gh release create "$TAG" "${ASSETS[@]}" \
+              --title "RealmDeck test bench $VERSION" \
+              --notes-file "$RUNNER_TEMP/notes.md" \
+              "${FLAGS[@]}"
+            echo "Release $TAG publicada" >> "$GITHUB_STEP_SUMMARY"
+          fi

@@ -10,6 +10,17 @@ val contractSource = providers.gradleProperty("contractSource")
     .orElse(rootProject.file("../forever/contract.json").absolutePath)
 val generatedContractDir = layout.buildDirectory.dir("generated/contract/assets")
 
+// Versión inyectable por CI (`.github/workflows/release.yml`). Sin propiedades se
+// conserva la versión de desarrollo local.
+val appVersionName: String = providers.gradleProperty("appVersionName")
+    .orElse("0.1.1-diagnostic").get()
+val appVersionCode: Int = providers.gradleProperty("appVersionCode")
+    .map { it.toInt() }.orElse(2).get()
+
+// Firma de release opcional: solo si se aporta un keystore (secrets de CI). Sin
+// ella `assembleRelease` sigue produciendo un APK sin firmar.
+val releaseStoreFile: String? = providers.gradleProperty("releaseStoreFile").orNull
+
 val generateContractAsset = tasks.register<Sync>("generateContractAsset") {
     description = "Genera el asset contract.json desde el contrato canónico."
     from(contractSource.map { file(it) })
@@ -37,8 +48,8 @@ android {
         // EACCES. Es la misma razón por la que Winlator/FrontMage usan 28.
         // Ver docs/fase-5-launcher.md.
         targetSdk = 28
-        versionCode = 2
-        versionName = "0.1.1-diagnostic"
+        versionCode = appVersionCode
+        versionName = appVersionName
 
         ndk {
             // x86_64 = emulador (Fase 5, puntos 1-3); arm64-v8a = móvil real.
@@ -57,11 +68,32 @@ android {
         }
     }
 
+    signingConfigs {
+        if (releaseStoreFile != null) {
+            create("release") {
+                storeFile = file(releaseStoreFile)
+                storePassword = providers.gradleProperty("releaseStorePassword").get()
+                keyAlias = providers.gradleProperty("releaseKeyAlias").get()
+                keyPassword = providers.gradleProperty("releaseKeyPassword").get()
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
+            // Sin keystore el APK de release queda sin firmar; CI siempre lo aporta.
+            if (releaseStoreFile != null) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
     }
+    lint {
+        // targetSdk 28 es deliberado (ver defaultConfig y docs/fase-5-launcher.md):
+        // el requisito de Google Play no aplica a una distribución manual por APK.
+        disable += "ExpiredTargetSdkVersion"
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
