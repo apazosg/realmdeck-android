@@ -81,8 +81,8 @@ PREFIX_FILES = (
     "prefix-image-manifest.json",
 )
 SOURCE_BASELINE = Path(__file__).with_name("code59-source-baseline.json")
-SOURCE_BASELINE_BYTES = 831_917
-SOURCE_BASELINE_SHA256 = "0a3d039a1d018230a9a99ab7c4de45d7e5753b75626868c8f06cad3678fdd0d8"
+SOURCE_BASELINE_BYTES = 831_919
+SOURCE_BASELINE_SHA256 = "616b984afc34448de07cf9c9c6a2a7ed990e870fe6143148438bf5ee808782da"
 RETAINED_BASELINE_APK_SHA256 = "b8cace99ded43adb1841a2047f3802976b4b2d113aa3c5a67091bdd7270d2435"
 HISTORICAL_RECIPE_SHA256 = "historical-source-not-recovered"
 
@@ -122,12 +122,12 @@ APPROVED_WINE_OVERLAY_DELTAS = {"ForeverRunStore.kt", "ForeverLaunchController.k
 # The historical baseline remains immutable; every other binding still matches it.
 APPROVED_REVIEWED_OVERLAY_DELTAS = {
     "ForeverBoundedLogRetention.kt": "7b92dffd6ed05ae9c6b7ab72f90476cff8c7fcdfe073ed4e49c0f74bca3c03f7",
-    "ForeverClientProvisioner.kt": "98c25790d3d126ec9bbf2ead1eb2ba976abece91dfa11511c77d09ed4082122d",
+    "ForeverClientProvisioner.kt": "e149efaa256944e7b3bcf43ad05e2a753dd30fd31e79aaa019c2784cf6935c4a",
     "ForeverHostSafetyTest.kt": "4698d034e0f0cacc20528641c4a702db2df51aefa8e08891e93017ccf98c6d45",
-    "ForeverLaunchController.kt": "8e89d2b0a79af9c6d6470cbf7897fdcb3941437febac96cd819a48258fdd1dac",
+    "ForeverLaunchController.kt": "5fc316198efb6c04d3b2ab95de5f6cfb8f884827d60fb9d06d291e3a17edf16c",
     "ForeverProcessDiagnostics.kt": "8011dfbc1b88751fd655745a76ed888a2d2c8aa80a087d243def776196a9299e",
     "ForeverRunStore.kt": "b6b699cbe5cdca69d08409424bae2b66433a34890ea4af1f386b300a99e9d744",
-    "ForeverFunctionalClientStorage.kt": "23aabcabc3eda09705ed19c433ce565f64baffddf9188f4caa3ba28b391f8189",
+    "ForeverFunctionalClientStorage.kt": "0a5d38e0d5f25ee7c331527be586d079fe6a9c6fa23cff6f54d6742d22c433d9",
 }
 REVIEWED_FUNCTIONAL_SOURCE = (
     "ForeverFunctionalClientStorage.kt",

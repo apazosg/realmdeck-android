@@ -66,12 +66,12 @@ def test_modern_assets_inherit_main_without_equal_priority_duplicates() -> None:
 def test_reviewed_overlay_source_deltas_are_exact_and_fail_closed(monkeypatch: pytest.MonkeyPatch) -> None:
     expected = {
         "ForeverBoundedLogRetention.kt": "7b92dffd6ed05ae9c6b7ab72f90476cff8c7fcdfe073ed4e49c0f74bca3c03f7",
-        "ForeverClientProvisioner.kt": "98c25790d3d126ec9bbf2ead1eb2ba976abece91dfa11511c77d09ed4082122d",
+        "ForeverClientProvisioner.kt": "e149efaa256944e7b3bcf43ad05e2a753dd30fd31e79aaa019c2784cf6935c4a",
         "ForeverHostSafetyTest.kt": "4698d034e0f0cacc20528641c4a702db2df51aefa8e08891e93017ccf98c6d45",
-        "ForeverLaunchController.kt": "8e89d2b0a79af9c6d6470cbf7897fdcb3941437febac96cd819a48258fdd1dac",
+        "ForeverLaunchController.kt": "5fc316198efb6c04d3b2ab95de5f6cfb8f884827d60fb9d06d291e3a17edf16c",
         "ForeverProcessDiagnostics.kt": "8011dfbc1b88751fd655745a76ed888a2d2c8aa80a087d243def776196a9299e",
         "ForeverRunStore.kt": "b6b699cbe5cdca69d08409424bae2b66433a34890ea4af1f386b300a99e9d744",
-        "ForeverFunctionalClientStorage.kt": "23aabcabc3eda09705ed19c433ce565f64baffddf9188f4caa3ba28b391f8189",
+        "ForeverFunctionalClientStorage.kt": "0a5d38e0d5f25ee7c331527be586d079fe6a9c6fa23cff6f54d6742d22c433d9",
     }
     baseline = wine.load_code59_source_baseline()
     assert wine.APPROVED_REVIEWED_OVERLAY_DELTAS == expected

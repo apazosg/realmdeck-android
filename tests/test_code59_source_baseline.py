@@ -65,7 +65,7 @@ def load() -> dict:
 
 def test_baseline_authenticates_pinned_inputs_and_scope() -> None:
     value = load()
-    assert file_sha(BASELINE) == "0a3d039a1d018230a9a99ab7c4de45d7e5753b75626868c8f06cad3678fdd0d8"
+    assert file_sha(BASELINE) == "616b984afc34448de07cf9c9c6a2a7ed990e870fe6143148438bf5ee808782da"
     assert value["schema"] == 1
     assert value["kind"] == "effective-code59-source-migration"
     assert value["sourceMode"] == "effective-source-at-collection"

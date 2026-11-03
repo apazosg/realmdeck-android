@@ -62,23 +62,27 @@ C138_PROVENANCE_SHA256 = "5254e4a33471f7c9600140a7c5f0ab6e6f90be493c85d1824b386b
 # Provisioner overlay delta. The historical C138 pins above remain immutable.
 REVIEWED_CANDIDATE_RECIPE_SHA256 = "385e1c4c443aa4a192a14769caacc4af959d2a2ee498e82485fb9eb6cbc4e151"
 REVIEWED_CANDIDATE_PROVENANCE_SHA256 = "aa8f0dc18cda8f92e2a6dac73349a36845d67493a2c2cf712f622b9594d10a20"
-REVIEWED_CANDIDATE_PROVISIONER_SHA256 = "98c25790d3d126ec9bbf2ead1eb2ba976abece91dfa11511c77d09ed4082122d"
+REVIEWED_CANDIDATE_PROVISIONER_SHA256 = "e149efaa256944e7b3bcf43ad05e2a753dd30fd31e79aaa019c2784cf6935c4a"
 # Exact current recipe/provenance pair after admitting the reviewed storage
 # revalidation diagnostics source. The preceding reviewed pair remains frozen.
 REVIEWED_STORAGE_RECIPE_SHA256 = "df97574d8c5dce73ea53b535cf52e1bd28d556bcb2bcef0eef92f5704a5060df"
 REVIEWED_STORAGE_PROVENANCE_SHA256 = "867d8d4a51b86865d6232d14c7b746f8117bdb7022addbd86eb840eb9e2b1efa"
 REVIEWED_STORAGE_SOURCE_SHA256 = "9497a0aa068f93c3be0d2a64e5ef2b4eab3fbf22510d1510e6ae9df63c622443"
 # Approved heavy/light cadence; all preceding recipe/provenance pairs stay frozen.
-REVIEWED_LIGHT_STORAGE_RECIPE_SHA256 = "79cd0e885609de7e2e5b86e925119e2cd8001e8916b39f2e7334aa01570ce2c2"
+# The recipe hash tracks the reviewed overlay recipe (updated 2026-11-02 for the
+# wowf/executable admission change). The provenance hash below is still the last
+# reviewed frozen payload, so it no longer pairs with the recipe and a strict
+# reconstruction fails closed until a new frozen input is generated and reviewed.
+REVIEWED_LIGHT_STORAGE_RECIPE_SHA256 = "7c511cd4f95a49fd5ee0390687f4efd7992482e44466e9d7a2deea53ce977993"
 REVIEWED_LIGHT_STORAGE_PROVENANCE_SHA256 = "13a494f47301abfc241b4a4d7cdcfc524dee292d5f743ebf5c3612d6a3963fc5"
-REVIEWED_LIGHT_STORAGE_SOURCE_SHA256 = "23aabcabc3eda09705ed19c433ce565f64baffddf9188f4caa3ba28b391f8189"
+REVIEWED_LIGHT_STORAGE_SOURCE_SHA256 = "0a5d38e0d5f25ee7c331527be586d079fe6a9c6fa23cff6f54d6742d22c433d9"
 INTERRUPTED_DISPOSITION_MEMBER = "assets/forever/wine-interrupted-run-disposition-contract.json"
 CODE_PROVENANCE_MEMBER = "assets/forever/provenance.json"
 NEW_CONTROLLER_SOURCE = APP_ROOT / "overlay/ForeverLaunchController.kt"
 BRIDGE_SOURCE = ROOT / "scripts/arm64-prototype/native/ForeverPatchBridge.kt"
 
 PINNED_ARCHIVE_SHA256 = "9151ca5a20168a8901797d7fcc2946706f57532088632527876efa2931bdc361"
-PINNED_BASELINE_SHA256 = "0a3d039a1d018230a9a99ab7c4de45d7e5753b75626868c8f06cad3678fdd0d8"
+PINNED_BASELINE_SHA256 = "616b984afc34448de07cf9c9c6a2a7ed990e870fe6143148438bf5ee808782da"
 PINNED_RETAINED_APK_SHA256 = "b8cace99ded43adb1841a2047f3802976b4b2d113aa3c5a67091bdd7270d2435"
 PINNED_BUNDLE_SHA256 = "d46710b61b899309e3e85dd6724d602e9dc5440ec0831d6c5ebe5f889674caa1"
 PINNED_CATALOG_SHA256 = "3cee581d681a5439c138955edd3c39ff2c799689b3889a47cd41c6762e6ff1ce"
@@ -93,18 +97,18 @@ PINNED_CODE64_NATIVE_SHA256 = "ec8573de09cddc6f28606a6b361e675a74432d0c3349a4dae
 # retagged as this candidate. Only this exact sidecar/SO pair is admitted.
 CANDIDATE_NATIVE_SO = Path(
     "/home/adrian/wowforever-artifacts/arm64-prototype/"
-    "functional-capture-build.tFcrMz/libforever_patcher_jni.so"
+    "functional-capture-build.wIYy6T/libforever_patcher_jni.so"
 )
 CANDIDATE_NATIVE_SIDECAR = Path(
     "/home/adrian/wowforever-artifacts/arm64-prototype/"
-    "functional-capture-build.tFcrMz/provenance.json"
+    "functional-capture-build.wIYy6T/provenance.json"
 )
-PINNED_CANDIDATE_NATIVE_SHA256 = "79af82848e15de5395ddfb52f916c95ff3212fdb0e579cc69b96e2d32e4c1bd3"
-PINNED_CANDIDATE_NATIVE_BYTES = 1005224
-PINNED_CANDIDATE_NATIVE_SIDECAR_SHA256 = "15f64c0185e65a8a592156f5041aaadfa3ca4b7d2a2a6d17e3f358fd0a9e3b41"
+PINNED_CANDIDATE_NATIVE_SHA256 = "8cc7f494b87ae2a53865a39c48c5969dd049ac3fd328d7c87b00e1a70b95baab"
+PINNED_CANDIDATE_NATIVE_BYTES = 1005720
+PINNED_CANDIDATE_NATIVE_SIDECAR_SHA256 = "c621c137022e735bbe6d96429b6c7c1f25a4ee50aa5df1d9a2ad5dd1fafe56d1"
 CANDIDATE_NATIVE_ORIGIN = "candidate-native-c141-eligible-scan"
 PINNED_HISTORICAL_CONTROLLER_SHA256 = "45f80f52a1c840cde21cfff45643532af22787dc9025ec030ba4dfb352aded68"
-PINNED_NEW_CONTROLLER_SHA256 = "8e89d2b0a79af9c6d6470cbf7897fdcb3941437febac96cd819a48258fdd1dac"
+PINNED_NEW_CONTROLLER_SHA256 = "5fc316198efb6c04d3b2ab95de5f6cfb8f884827d60fb9d06d291e3a17edf16c"
 PINNED_BRIDGE_SHA256 = "a5071436a7fb102141d31ad12a056b91410a22c27e04edf37f71827c7d3ccaf2"
 PINNED_UPDATER_CASC_PREIMAGES = {
     "ForeverCasc.kt": "b482531fb4970ba279448fac22ea69c470093fc8b09917c5b1ec0dd7a9ad57e4",
@@ -114,8 +118,8 @@ PINNED_UPDATER_CASC_PREIMAGES = {
 # digest-bound recovery; checkpoint frames unchanged. Independent whole-feature
 # review remains a release gate.
 PINNED_UPDATER_CASC_POSTIMAGES = {
-    "ForeverCasc.kt": "86b1f2147c4fe6eaf7ec38838eb4eac5b95cddb4cccab73208c0673398534f55",
-    "ForeverCascTest.kt": "8fcbca92499e8f4e84dbe44ccac53393dfe8723d744b34e483ed7114b378acc6",
+    "ForeverCasc.kt": "bec0e48c12495dd124c1fc0ce552889389538119d06cc6a1089399feef35e712",
+    "ForeverCascTest.kt": "92a46c61ba79d7ac24216d146e4ee99a3278a9a13c4ca49a2ec3a7f9571e8ebf",
 }
 # Reviewed reconstruction edit (2026-10-18): TACT-encrypted ('E') BLTE frames are
 # verified without decryption for CASC reconstruction consumers; strict decode is
@@ -126,7 +130,7 @@ PINNED_UPDATER_BLTE_PREIMAGES = {
 }
 PINNED_UPDATER_BLTE_POSTIMAGES = {
     # Same verifier acceptance; encoded input buffers capped by their exact window.
-    "ForeverBlte.kt": "6afe01aa6e0f1ef0dd9c0e152009d8b8cb6e1c8ee9f556a826ad6a313456f794",
+    "ForeverBlte.kt": "b77e5993c29cfd331ccd8419fe2cfe0e76a56401f9d62f32bb5f56ffa1c5426d",
 }
 HISTORICAL_CONTROLLER_PATH = Path("app/src/main/java/app/gamenative/ForeverLaunchController.kt")
 NEW_CONTROLLER_TARGET = HISTORICAL_CONTROLLER_PATH

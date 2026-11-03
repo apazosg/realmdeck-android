@@ -526,9 +526,9 @@ def test_candidate_version_and_privacy_hash_pins_match_frozen_recipe_output() ->
     assert module.PINNED_CODE64_AUDIT_SHA256 == "325fcad6cb9cc5898628c04568f82636cd59aa129f0fc726ffdddcea17b4e0e8"
     assert module.PINNED_CODE64_NATIVE_SIDECAR_SHA256 == "7318ed2b4f7b14d1fe1d1cd520a7a597c1d938c4cb66b02a403218b7a7f8e6af"
     assert module.PINNED_CODE64_NATIVE_SHA256 == "ec8573de09cddc6f28606a6b361e675a74432d0c3349a4daef0eb4cfe72189b1"
-    assert module.PINNED_CANDIDATE_NATIVE_SHA256 == "79af82848e15de5395ddfb52f916c95ff3212fdb0e579cc69b96e2d32e4c1bd3"
-    assert module.PINNED_CANDIDATE_NATIVE_BYTES == 1005224
-    assert module.PINNED_CANDIDATE_NATIVE_SIDECAR_SHA256 == "15f64c0185e65a8a592156f5041aaadfa3ca4b7d2a2a6d17e3f358fd0a9e3b41"
+    assert module.PINNED_CANDIDATE_NATIVE_SHA256 == "8cc7f494b87ae2a53865a39c48c5969dd049ac3fd328d7c87b00e1a70b95baab"
+    assert module.PINNED_CANDIDATE_NATIVE_BYTES == 1005720
+    assert module.PINNED_CANDIDATE_NATIVE_SIDECAR_SHA256 == "c621c137022e735bbe6d96429b6c7c1f25a4ee50aa5df1d9a2ad5dd1fafe56d1"
     assert module.CANDIDATE_NATIVE_ORIGIN == "candidate-native-c141-eligible-scan"
 
 

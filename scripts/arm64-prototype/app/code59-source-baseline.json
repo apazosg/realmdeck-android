@@ -524,8 +524,8 @@
       },
       {
         "authority": "literal-overlay-source",
-        "currentRepoSourceMatchesHistoricalInput": true,
-        "currentRepoSourceSHA256": "29c2ffae2f6b884db7b443c57a6b46bf7602fab7336bb81bc8c9b31cae892dcc",
+        "currentRepoSourceMatchesHistoricalInput": false,
+        "currentRepoSourceSHA256": "a819fd1ad1827fc040b51213c392bd96969bd2d3e4d99ec767667ca91a413d10",
         "generatedBytes": 18108,
         "generatedSHA256": "29c2ffae2f6b884db7b443c57a6b46bf7602fab7336bb81bc8c9b31cae892dcc",
         "name": "ForeverArm64Launch.kt",
@@ -536,8 +536,8 @@
       },
       {
         "authority": "literal-overlay-source",
-        "currentRepoSourceMatchesHistoricalInput": true,
-        "currentRepoSourceSHA256": "8571bc3279d95a64aa98b95c026ebcb5d23634c08e1ad9db38f22a32f68526d0",
+        "currentRepoSourceMatchesHistoricalInput": false,
+        "currentRepoSourceSHA256": "7b632cd167699b808939d3e50baa532248e13d2c6203bd2ff175ed46b05bfd26",
         "generatedBytes": 9099,
         "generatedSHA256": "8571bc3279d95a64aa98b95c026ebcb5d23634c08e1ad9db38f22a32f68526d0",
         "name": "ForeverArm64LaunchTest.kt",
@@ -585,7 +585,7 @@
       {
         "authority": "literal-overlay-source",
         "currentRepoSourceMatchesHistoricalInput": true,
-        "currentRepoSourceSHA256": "79eba87c1713f27ffc0db6d06faeafa33deac4cf983b540f7edd36f22fccf9d2",
+        "currentRepoSourceSHA256": "7b92dffd6ed05ae9c6b7ab72f90476cff8c7fcdfe073ed4e49c0f74bca3c03f7",
         "generatedBytes": 15519,
         "generatedSHA256": "79eba87c1713f27ffc0db6d06faeafa33deac4cf983b540f7edd36f22fccf9d2",
         "name": "ForeverBoundedLogRetention.kt",
@@ -681,7 +681,7 @@
       {
         "authority": "literal-overlay-source",
         "currentRepoSourceMatchesHistoricalInput": true,
-        "currentRepoSourceSHA256": "35e78fd6b1ff0eea27da67cee267fa8619f9f440aa955a07ded0794623bcff05",
+        "currentRepoSourceSHA256": "e149efaa256944e7b3bcf43ad05e2a753dd30fd31e79aaa019c2784cf6935c4a",
         "generatedBytes": 48748,
         "generatedSHA256": "35e78fd6b1ff0eea27da67cee267fa8619f9f440aa955a07ded0794623bcff05",
         "name": "ForeverClientProvisioner.kt",
@@ -777,7 +777,7 @@
       {
         "authority": "literal-overlay-source",
         "currentRepoSourceMatchesHistoricalInput": true,
-        "currentRepoSourceSHA256": "f67c6abdb90763079bace10519a2871efbfaa7a32bc320c68ff82b5e7801fa8e",
+        "currentRepoSourceSHA256": "4698d034e0f0cacc20528641c4a702db2df51aefa8e08891e93017ccf98c6d45",
         "generatedBytes": 12213,
         "generatedSHA256": "f67c6abdb90763079bace10519a2871efbfaa7a32bc320c68ff82b5e7801fa8e",
         "name": "ForeverHostSafetyTest.kt",
@@ -993,7 +993,7 @@
       {
         "authority": "literal-overlay-source",
         "currentRepoSourceMatchesHistoricalInput": true,
-        "currentRepoSourceSHA256": "8bbe058f505a3ec0e70e6d41abc501518318025a5ff6a94797b217569dd51cbf",
+        "currentRepoSourceSHA256": "8011dfbc1b88751fd655745a76ed888a2d2c8aa80a087d243def776196a9299e",
         "generatedBytes": 45322,
         "generatedSHA256": "8bbe058f505a3ec0e70e6d41abc501518318025a5ff6a94797b217569dd51cbf",
         "name": "ForeverProcessDiagnostics.kt",
@@ -1053,7 +1053,7 @@
       {
         "authority": "literal-overlay-source",
         "currentRepoSourceMatchesHistoricalInput": false,
-        "currentRepoSourceSHA256": "4c2ce7c6915875964eeb3316e156014d5b1d6fe99f976438e603e512a090a9c4",
+        "currentRepoSourceSHA256": "b6b699cbe5cdca69d08409424bae2b66433a34890ea4af1f386b300a99e9d744",
         "generatedBytes": 20182,
         "generatedSHA256": "720a35c8918def4d03f386934d65ab6b9ac68a22f95ca286b64b138d8e9c0ea8",
         "name": "ForeverRunStore.kt",
