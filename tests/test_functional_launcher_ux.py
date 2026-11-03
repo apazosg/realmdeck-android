@@ -31,7 +31,10 @@ def test_welcome_requires_explicit_launch_and_separates_diagnostics() -> None:
     assert '"WoW Forever"' in activity
     assert "Servidor: ${settings.profile.displayName}" in activity
     assert "onClick = onKeyboardRequested" in activity
-    assert 'Text("Lanzar WoW")' in activity
+    # Single-action launch (US-004 AC-07): the notice is informative and there
+    # is no separate consent checkbox or second confirmation button.
+    assert "Se abrirá WoW. El inicio de sesión será manual." in activity
+    assert 'Text("Lanzar WoW")' not in activity
     assert "showSettings" in activity
     assert 'if (showAdvancedSettings)' in activity
     assert 'Text(" Ajustes")' in activity
@@ -60,14 +63,13 @@ def test_home_state_derivation_drives_one_truthful_status_and_cta() -> None:
     assert '"Aplicando…"' in activity
     assert 'versión ${ForeverFunctionalLauncherUx.CLIENT_BUILD}' not in activity
     # Repair pass: the download dominates even the initial snapshot; unknown
-    # storage fails closed; the launch panel is prepared-proof gated (Ready or
-    # presence-only Incomplete with known/available storage and no download),
-    # never a metadata integrity claim.
+    # storage fails closed; a successful preparation launches in the same Play
+    # action (US-004 AC-07), never from metadata integrity.
     assert "storageKnown = storageKnown" in activity
     assert "storageKnown = true" in activity
     assert "storageKnown = false" in activity
     assert "if (downloadBusy) {\n            prepared = null" in activity
-    assert "prepared != null && !launchRequested && !downloadBusy && !graphicsResetBusy && storageKnown && readiness.storageAvailable" in activity
+    assert "requestLaunch(value)" in activity
     assert "HomeState.Ready" in activity
     assert "HomeState.Incomplete" in activity
     assert "!downloadBusy && (busy || error != null" in activity
@@ -87,7 +89,7 @@ def test_home_state_derivation_drives_one_truthful_status_and_cta() -> None:
     assert "error = failure.message" not in activity
     # Cancellation propagates as cancellation, never as a user error.
     assert "catch (cancelled: CancellationException)" in activity
-    # The manager "Jugar" path shares the single prepare-then-consent route.
+    # The manager "Jugar" path shares the single prepare-and-launch route.
     assert "prepareEnvironment(fromManager = true)" in activity
     assert "consent = true" not in activity
 
@@ -103,51 +105,33 @@ def test_missing_home_passes_existing_storage_route_to_inline_client_manager() -
     assert "destinationPath = initialMissingStorageRoute" in manager
 
 
-def test_prepared_proof_reveals_launch_panel_without_claiming_integrity() -> None:
+def test_prepared_proof_launches_without_a_consent_step() -> None:
     # Regression (managed 70450): prepare() succeeds while metadata inspection
     # deliberately stays PRESENT_NOT_VERIFIED (homeState Incomplete, never
-    # Ready). The launch panel/consent/"Lanzar WoW" must appear on the frozen
-    # prepared proof with known/available storage and no download; Checking,
-    # Downloading, StorageUnavailable and Missing must stay blocked. Static
-    # host tripwire: it pins the gate shape, not Compose runtime behavior.
+    # Ready). US-004 AC-07/TC-030: the frozen prepared proof launches in the
+    # same Play action; there is no consent panel or second confirmation.
+    # Static host tripwire: it pins the shape, not Compose runtime behavior.
     activity = _read("ForeverFunctionalPocActivity.kt")
     ux = _read("ForeverFunctionalLauncherUx.kt")
 
-    gate = activity.split('Text("Lanzar WoW")', 1)[0].rsplit("if (prepared != null", 1)[1]
-    gate = gate.split(") {", 1)[0]
-    gate = "if (prepared != null" + gate
-    # Positive: prepared proof plus fail-closed exclusions.
-    assert "prepared != null" in gate
-    assert "!launchRequested" in gate
-    assert "!downloadBusy" in gate
-    assert "storageKnown" in gate
-    assert "readiness.storageAvailable" in gate
-    assert "HomeState.Ready" in gate
-    assert "HomeState.Incomplete" in gate
-    # Negative: no prepared, unavailable storage, or download still blocked.
-    assert "Checking" not in gate
-    assert "Downloading" not in gate
-    assert "StorageUnavailable" not in gate
-    assert "Missing" not in gate
+    assert "fun requestLaunch(snapshot: ForeverFunctionalPoc.Prepared)" in activity
+    prepare = activity.split("fun prepareEnvironment(fromManager: Boolean) {", 1)[1].split(
+        "fun cancelDisplayLaunch()", 1
+    )[0]
+    assert "requestLaunch(value)" in prepare
+    assert "Checkbox(checked = consent" not in activity
+    assert 'ForeverSectionHeader("Listo para iniciar")' not in activity
+    assert 'Text("Lanzar WoW")' not in activity
+    assert "consent = true" not in activity
+    assert "consent = false" not in activity
     # Readiness semantics untouched: presence-only metadata still maps
     # PRESENT_NOT_VERIFIED to Incomplete, never Ready.
     assert "!readiness.ready -> HomeState.Incomplete" in ux
-    # No integrity claim in the launch panel; consent and frozen revalidation
-    # stay authoritative; nothing auto-launches.
-    panel = activity.split('ForeverSectionHeader("Listo para iniciar")', 1)[1].split(
-        'Text("Lanzar WoW")', 1
-    )[0]
-    assert "verificad" not in panel.lower()
-    assert "integridad" not in panel.lower()
-    assert "Checkbox(checked = consent" in panel
-    assert "enabled = consent" in activity
-    assert "consent = true" not in activity
-    assert "consent = false" in activity
     assert "ForeverFunctionalPoc.beforeLaunch" in activity
     assert "launchRequested = true" in activity
 
 
-def test_play_requests_local_preparation_without_remote_manager_or_autolaunch() -> None:
+def test_play_requests_local_preparation_and_launches_in_one_action() -> None:
     activity = _read("ForeverFunctionalPocActivity.kt")
     home = activity.split("is ForeverFunctionalLauncherUx.HomeState.Incomplete -> {")[-1].split(
         "if (launchRequested)", 1
@@ -159,8 +143,7 @@ def test_play_requests_local_preparation_without_remote_manager_or_autolaunch() 
         "fun cancelDisplayLaunch()", 1
     )[0]
     assert "if (busy || running || launchRequested || pendingDisplayIo || storageBusy || downloadBusy || graphicsResetBusy) return" in prepare
-    assert "consent = false" in prepare
-    assert "launchRequested = true" not in prepare
+    assert "requestLaunch(value)" in prepare
     assert "running = true" not in prepare
 
 
@@ -244,7 +227,7 @@ def test_launcher_polish_is_compose_only_and_keeps_primary_flow_ordered() -> Non
     assert "} else if (prepared == null) {" not in activity
     assert 'Text("Preparar WoW")' not in activity
     assert 'Text("Jugar")' in activity
-    assert 'Text("Lanzar WoW")' in activity
+    assert 'Text("Lanzar WoW")' not in activity
     assert 'Text("Descargar cliente")' in activity
     assert 'Text(if (readiness.canRequestPlay) "Jugar" else "Completa la instalación")' in activity
     assert 'Text("Elegir almacenamiento")' in activity
@@ -313,7 +296,7 @@ def test_aspect_ratio_is_not_overridden_by_the_launcher_preset() -> None:
     # the write (US-004 AC-11/FR-016); active/unknown/updater state and a
     # failed recovery prevent the write.
     assert "|| graphicsResetBusy" in activity
-    assert "enabled = consent && !graphicsResetBusy" in activity
+    assert "!graphicsResetBusy" in activity
     assert "private fun requireResetIdle(context: Context)" in poc
     assert "blockingReason() == null" in poc
     assert '"reset_blocked_runtime_not_idle"' in poc

@@ -33,8 +33,8 @@ def test_display_fit_is_pure_and_has_approved_modes_and_guardrails() -> None:
 def test_idle_preparation_is_auto_closed_by_settings_instead_of_blocking() -> None:
     # US-004 AC-07/FR-017: a completed, unlaunched preparation is frozen data,
     # not work. Entering resolution or confirming a graphics reset discards
-    # the idle snapshot and its consent automatically; real work stays
-    # excluded by the session/IO guards. No internal-preparation block remains.
+    # the idle snapshot automatically; real work stays excluded by the
+    # session/IO guards. No internal-preparation block remains.
     activity = _read("ForeverFunctionalPocActivity.kt")
 
     assert "fun discardIdlePreparedSnapshot()" in activity
@@ -106,16 +106,19 @@ def test_settings_selector_is_visible_and_persisted_without_touching_auth() -> N
     assert "fun resetGraphicsToDefaults()" in activity
     assert "showGraphicsResetConfirm" in activity
     assert "resetDerivedGraphics(context, configuration)" in activity
-    # Reset invalidates consent at start and hides the launch panel while it
+    # Reset discards the idle snapshot and hides the launch panel while it
     # runs, so Play/prepare/launch cannot start mid-reset and vice versa.
     reset = activity.split("fun resetGraphicsToDefaults()", 1)[1].split(
         "Single launch path shared by the home CTA", 1
     )[0]
     assert "graphicsResetBusy = true" in reset
-    assert "consent = false" in reset
+    assert "discardIdlePreparedSnapshot()" in reset
+    # Play is the only launch confirmation (US-004 AC-07): no consent gate.
+    assert "var consent by remember" not in activity
+    assert "consent = false" not in activity
     assert "val controlsLocked = busy || prepared != null || running || launchRequested || pendingDisplayIo || storageBusy || graphicsResetBusy" in activity
     assert "val sessionOrIoLocked = busy || running || launchRequested || pendingDisplayIo || storageBusy || graphicsResetBusy" in activity
-    assert "!graphicsResetBusy && storageKnown" in activity
+    assert "!sessionOrIoLocked && !downloadBusy && !graphicsResetBusy" in activity
     assert "onPendingDisplayCancellationChanged" in activity
     assert "CancellationException" in activity
     assert "getLocationInWindow" in activity

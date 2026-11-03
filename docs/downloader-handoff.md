@@ -17,6 +17,14 @@ ya está implementada en C128, **no incluida en la APK C127 instalada**. C128 ti
 Estado y evidencia vigentes en
 `docs/arm64-forever-connection-progress.md`.
 
+> **Nota posterior (2026-11-02).** El actualizador Android admite ya el producto
+> oficial `wowf` y el ejecutable `Wow-ARM64.exe`, conservando `wow_classic_beta` y
+> `WowB-ARM64.exe` para instalaciones existentes; el nombre admitido viaja por
+> almacenamiento, contenedor y lanzamiento. Play prepara y lanza en una sola
+> acción: ya no hay casilla de consentimiento por lanzamiento ni segunda
+> confirmación. Los cortes operativos y cifras de este documento siguen siendo
+> históricos; no se reescriben.
+
 ## Corte operativo vigente —2026-10-21
 
 - **El usuario está jugando.** No detener la app/Wine, instalar APK, reiniciar

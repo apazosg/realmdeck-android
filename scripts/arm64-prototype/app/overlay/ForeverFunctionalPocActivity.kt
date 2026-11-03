@@ -709,7 +709,6 @@ private fun ForeverFunctionalPocScreen(
     }
     var running by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
-    var consent by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
     var showAddons by remember { mutableStateOf(false) }
     var addonsBusy by remember { mutableStateOf(false) }
@@ -800,7 +799,6 @@ private fun ForeverFunctionalPocScreen(
                     clientChecked = true
                     if (!inspected.ready) {
                         prepared = null
-                        consent = false
                     }
                     if (status == "Comprobando almacenamiento…") status = inspected.label
                 }
@@ -812,7 +810,6 @@ private fun ForeverFunctionalPocScreen(
                 if (refresh == homeRefreshGeneration.get() && storageAtStart == storageGeneration.get()) {
                     storageKnown = false
                     prepared = null
-                    consent = false
                     clientChecked = true
                 }
             }
@@ -835,7 +832,6 @@ private fun ForeverFunctionalPocScreen(
     LaunchedEffect(downloadBusy) {
         if (downloadBusy) {
             prepared = null
-            consent = false
             runCatching { recordRemoteDiagnosticsAction(context, "resume", "pending") }
         }
     }
@@ -847,21 +843,18 @@ private fun ForeverFunctionalPocScreen(
         when (val terminal = downloadOutcome) {
             is ForeverClientUpdateExecution.Outcome.Done -> {
                 prepared = null
-                consent = false
                 status = "Cliente actualizado. Prepara WoW para iniciar."
                 runCatching { recordRemoteDiagnosticsAction(context, "resume", "ok") }
                 refreshReadiness()
             }
             is ForeverClientUpdateExecution.Outcome.Paused -> {
                 prepared = null
-                consent = false
                 status = "Descarga pausada. Puedes continuar cuando quieras."
                 runCatching { recordRemoteDiagnosticsAction(context, "pause", "ok") }
                 refreshReadiness()
             }
             is ForeverClientUpdateExecution.Outcome.Failed -> {
                 prepared = null
-                consent = false
                 status = "No se pudo completar la descarga"
                 error = ForeverFunctionalUiText.userMessage(terminal.failure)
                 runCatching { recordRemoteDiagnosticsAction(context, "error", "failed") }
@@ -907,7 +900,6 @@ private fun ForeverFunctionalPocScreen(
                 readiness = withContext(Dispatchers.IO) { ForeverFunctionalLauncherUx.inspectClient(context) }
                 storageKnown = true
                 prepared = null
-                consent = false
                 showStorageSettings = false
                 showSettings = true
                 status = "Ubicación guardada"
@@ -921,7 +913,6 @@ private fun ForeverFunctionalPocScreen(
                     }
                     storageKnown = true
                     prepared = null
-                    consent = false
                     showStorageSettings = false
                     showSettings = true
                     status = "Ubicación guardada"
@@ -1021,7 +1012,7 @@ private fun ForeverFunctionalPocScreen(
      * Auto-close of an idle, unlaunched preparation (US-004 AC-07/FR-017): a
      * completed prepare() with no guest handles is frozen data, not work.
      * Settings actions that take over (resolution entry, graphics-reset
-     * confirm) discard it with its consent instead of asking the user to
+     * confirm) discard it instead of asking the user to
      * manage internal state. Real work stays excluded by the callers'
      * enabled guards; a snapshot holding guest handles is never dropped here.
      */
@@ -1029,7 +1020,6 @@ private fun ForeverFunctionalPocScreen(
         val snapshot = prepared
         if (snapshot != null && snapshot.durableGuestTicket == null && snapshot.guestReservation == null) {
             prepared = null
-            consent = false
         }
     }
 
@@ -1040,7 +1030,6 @@ private fun ForeverFunctionalPocScreen(
         settings = coerced
         ForeverFunctionalServerProfiles.save(context, coerced)
         prepared = null
-        consent = false
         status = "Ajustes guardados"
         runCatching { recordRemoteDiagnosticsAction(context, "profile-change", "ok") }
     }
@@ -1056,9 +1045,8 @@ private fun ForeverFunctionalPocScreen(
         if (busy || running || launchRequested || pendingDisplayIo || storageBusy || downloadBusy || graphicsResetBusy) return
         graphicsResetBusy = true
         // Confirming the reset auto-closes an idle, unlaunched preparation
-        // (US-004 FR-017); the next Play prepares again with fresh consent.
+        // (US-004 FR-017); the next Play prepares again and launches.
         discardIdlePreparedSnapshot()
-        consent = false
         error = null
         status = "Restableciendo gráficos…"
         scope.launch(Dispatchers.IO) {
@@ -1073,7 +1061,6 @@ private fun ForeverFunctionalPocScreen(
                 ForeverFunctionalPoc.resetDerivedGraphics(context, configuration)
                 withContext(Dispatchers.Main) {
                     prepared = null
-                    consent = false
                     status = "Gráficos restablecidos: calidad 1, sin sombras y 30 FPS"
                 }
             } catch (failure: Throwable) {
@@ -1114,9 +1101,44 @@ private fun ForeverFunctionalPocScreen(
 
     /**
      * Single launch path shared by the home CTA and the manager "Jugar"
-     * action: prepare, then return to the explicit consent screen. Consent is
-     * never pre-checked; there is no shortcut around it.
+     * action. Play prepares and then launches in the same action (US-004
+     * AC-07): there is no consent checkbox or second confirmation press.
      */
+    fun requestLaunch(snapshot: ForeverFunctionalPoc.Prepared) {
+        try {
+            ForeverFunctionalPoc.record(snapshot.logFile, "launch_requested")
+            runCatching { recordRemoteDiagnosticsAction(context, "launch", "pending") }
+            if (snapshot.memoryPatchEnabled && ForeverFunctionalPoc.patchLaunchHook == null) {
+                status = "Parche no disponible; no se afirmará que fue aplicado"
+            }
+            // Display measurement and the one beforeLaunch call are handled by
+            // the two-frame gate above.
+            val token = launchCoordinator.begin()
+            if (token == null) {
+                // No dead end without a second confirmation: drop the idle
+                // snapshot so the Play action is offered again.
+                prepared = null
+                status = "El intento anterior aún está finalizando"
+            } else {
+                launchToken = token
+                launchRequested = true
+                status = "Midiendo presentación…"
+            }
+        } catch (failure: Throwable) {
+            ForeverFunctionalPoc.record(
+                snapshot.logFile,
+                "launch_blocked",
+                org.json.JSONObject()
+                    .put("message", failure.message ?: failure::class.java.simpleName)
+                    .put("codeCaptureEnabled", snapshot.codeCaptureEnabled)
+                    .put("readOnly", true)
+                    .put("bytesWritten", 0),
+            )
+            status = "WoW no lanzado"
+            error = ForeverFunctionalUiText.userMessage(failure)
+        }
+    }
+
     fun prepareEnvironment(fromManager: Boolean) {
         if (busy || running || launchRequested || pendingDisplayIo || storageBusy || downloadBusy || graphicsResetBusy) return
         if (launchCoordinator.hasPendingIo()) {
@@ -1158,12 +1180,14 @@ private fun ForeverFunctionalPocScreen(
                 withContext(Dispatchers.Main) {
                     readiness = inspected
                     prepared = value
-                    consent = false
                     if (fromManager) {
                         showClientManagement = false
                         showSettings = false
                     }
                     status = "Entorno listo"
+                    // US-004 AC-07: a successful preparation launches in the
+                    // same Play action; no consent screen or second press.
+                    requestLaunch(value)
                 }
             } catch (cancelled: CancellationException) {
                 withContext(NonCancellable + Dispatchers.Main) {
@@ -1184,7 +1208,6 @@ private fun ForeverFunctionalPocScreen(
                 }
                 withContext(Dispatchers.Main) {
                     prepared = null
-                    consent = false
                     if (inspected != null) readiness = inspected
                     status = "No se pudo preparar el entorno"
                     error = ForeverFunctionalUiText.userMessage(failure)
@@ -1786,7 +1809,6 @@ private fun ForeverFunctionalPocScreen(
                             },
                             onClientChanged = {
                                 prepared = null
-                                consent = false
                                 status = "Cliente actualizado"
                                 refreshStorage()
                                 refreshReadiness()
@@ -2070,6 +2092,14 @@ private fun ForeverFunctionalPocScreen(
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(if (readiness.canRequestPlay) "Jugar" else "Completa la instalación")
                         }
+                        if (readiness.canRequestPlay) {
+                            Text(
+                                "Se abrirá WoW. El inicio de sesión será manual.",
+                                modifier = Modifier.padding(top = 8.dp),
+                                color = ForeverInk.copy(alpha = 0.78f),
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
                     }
                 }
                 is ForeverFunctionalLauncherUx.HomeState.Ready -> {
@@ -2087,6 +2117,14 @@ private fun ForeverFunctionalPocScreen(
                             shape = RoundedCornerShape(8.dp),
                             border = androidx.compose.foundation.BorderStroke(1.dp, ForeverGold.copy(alpha = 0.7f)),
                         ) { Text("Jugar") }
+                        // Informative, non-blocking (US-004 AC-07): Play is the
+                        // only confirmation; there is no consent checkbox.
+                        Text(
+                            "Se abrirá WoW. El inicio de sesión será manual.",
+                            modifier = Modifier.padding(top = 8.dp),
+                            color = ForeverInk.copy(alpha = 0.78f),
+                            style = MaterialTheme.typography.bodySmall,
+                        )
                     }
                 }
             }
@@ -2110,92 +2148,6 @@ private fun ForeverFunctionalPocScreen(
                                 .heightIn(min = 48.dp)
                                 .padding(top = 6.dp),
                         ) { Text("Cancelar") }
-                    }
-                }
-            }
-            // Prepared-proof gate: a successful prepare() is the strong launch
-            // proof (its frozen storage target is revalidated again in
-            // beforeLaunch), while metadata inspection stays presence-only and
-            // deliberately reports managed builds as PRESENT_NOT_VERIFIED
-            // (Incomplete), never READY. Storage-known/available plus
-            // no-download exclusions keep stale or unavailable launches
-            // blocked; consent and beforeLaunch stay authoritative, and no
-            // integrity claim is made here.
-            if (prepared != null && !launchRequested && !downloadBusy && !graphicsResetBusy && storageKnown && readiness.storageAvailable &&
-                (homeState is ForeverFunctionalLauncherUx.HomeState.Ready ||
-                    homeState is ForeverFunctionalLauncherUx.HomeState.Incomplete)
-            ) {
-                ForeverStonePanel(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 16.dp),
-                ) {
-                    Column(modifier = Modifier.padding(18.dp)) {
-                        ForeverSectionHeader("Listo para iniciar")
-                        Text(
-                            "Entorno preparado para ${settings.profile.displayName}.",
-                            modifier = Modifier.padding(top = 14.dp),
-                            style = MaterialTheme.typography.bodySmall,
-                        )
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(min = 48.dp)
-                                .padding(top = 8.dp),
-                        ) {
-                            Checkbox(checked = consent, onCheckedChange = { consent = it })
-                            Text(
-                                "Se abrirá WoW. El inicio de sesión será manual.",
-                                modifier = Modifier.padding(start = 4.dp),
-                                style = MaterialTheme.typography.bodyMedium,
-                            )
-                        }
-                        Button(
-                            enabled = consent && !graphicsResetBusy,
-                            onClick = {
-                                prepared?.let {
-                                    try {
-                                        ForeverFunctionalPoc.record(it.logFile, "launch_requested")
-                                        runCatching { recordRemoteDiagnosticsAction(context, "launch", "pending") }
-                                        if (it.memoryPatchEnabled && ForeverFunctionalPoc.patchLaunchHook == null) {
-                                            status = "Parche no disponible; no se afirmará que fue aplicado"
-                                        }
-                                         // Display measurement and the one
-                                         // beforeLaunch call are handled by
-                                         // the two-frame gate above.
-                                         val token = launchCoordinator.begin()
-                                         if (token == null) {
-                                             status = "El intento anterior aún está finalizando"
-                                         } else {
-                                             launchToken = token
-                                             launchRequested = true
-                                             status = "Midiendo presentación…"
-                                         }
-                                    } catch (failure: Throwable) {
-                                        ForeverFunctionalPoc.record(
-                                            it.logFile,
-                                            "launch_blocked",
-                                            org.json.JSONObject()
-                                                .put("message", failure.message ?: failure::class.java.simpleName)
-                                                .put("codeCaptureEnabled", it.codeCaptureEnabled)
-                                                .put("readOnly", true)
-                                                .put("bytesWritten", 0),
-                                        )
-                                        status = "WoW no lanzado"
-                                        error = ForeverFunctionalUiText.userMessage(failure)
-                                    }
-                                }
-                            },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(min = 48.dp)
-                                .padding(top = 12.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = ForeverBurgundyPressed,
-                                contentColor = ForeverInk,
-                            ),
-                        ) { Text("Lanzar WoW") }
                     }
                 }
             }
@@ -2449,8 +2401,8 @@ private fun ForeverFunctionalPocScreen(
     if (showClientManagement && managerReturnToSettings) {
         ForeverClientManagementDialog(
             onPlay = {
-                // Single launch path: prepare here, then return to the home
-                // consent screen. Consent is never pre-checked.
+                // Single launch path: prepare here and launch in the same
+                // action (US-004 AC-07); there is no consent screen.
                 showClientManagement = false
                 showSettings = false
                 prepareEnvironment(fromManager = true)
@@ -2462,7 +2414,6 @@ private fun ForeverFunctionalPocScreen(
             },
             onClientChanged = {
                 prepared = null
-                consent = false
                 status = "Cliente actualizado"
                 refreshStorage()
                 scope.launch {
@@ -2604,7 +2555,6 @@ private fun ForeverFunctionalPocScreen(
                                         showDisplayModeOptions = false
                                         showSettings = true
                                         prepared = null
-                                        consent = false
                                         status = "Ajustes guardados"
                                         runCatching { recordRemoteDiagnosticsAction(context, "resolution-change", "ok") }
                                     },
@@ -2699,7 +2649,7 @@ private fun ForeverFunctionalPocScreen(
                 showAutologinSettings = false
                 showSettings = true
             },
-            onChanged = { consent = false },
+            onChanged = {},
             runtimeReady = false,
         )
     }
