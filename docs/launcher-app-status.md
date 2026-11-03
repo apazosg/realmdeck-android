@@ -104,6 +104,15 @@ en este apartado.
   contenido local sin probarlo. No se generó archivo de fuentes ni auditoría APK
   completa porque la procedencia ligera sigue congelada. Los pendientes derivados
   están en `.agents/planning/client-reuse-repair-improvements.md`.
+- **Publicación automática (C219).** Prerelease en GitHub
+  `c219-0.2.195-preview-test` con APK de 485.568.343 bytes, sha256
+  `791ca53d462939e661950ca50db46e710a847031236d9942318cef24c2618def`,
+  `README.txt`, `SHA256SUMS`, `THIRD_PARTY_NOTICES` y `audit.json`. La produjo
+  `.github/workflows/release-functional.yml` en el runner self-hosted:
+  reconstrucción autenticada, `assembleModernDebug`,
+  `PASS_SOURCE_BUILD_AND_PAYLOAD_AUDIT` (2.233 fuentes, 178 payloads) y re-hash del
+  APK después del audit. Es evidencia de build: C219 no se ha probado en un
+  dispositivo y no se adjuntó un archivo de fuentes completo.
 
 ## Desarrollo local —2026-10-28: C161, gestor de addons
 
