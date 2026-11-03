@@ -1,5 +1,55 @@
 # Launcher ARM64 — estado de producto
 
+## Desarrollo local — 2026-11-02: producto `wowf`, `Wow-ARM64.exe` y Play sin consentimiento
+
+El usuario probó el candidato en el dispositivo y lo describe como correcto
+(«está funcionando bien»). Es una observación operativa, no una aceptación medida:
+no hay cifras de rendimiento, sesión prolongada ni instalación completa acreditadas
+en este apartado.
+
+- **Admisión del cliente.** El actualizador consulta el producto oficial `wowf`
+  (`https://us.version.battle.net/v2/products/wowf/versions`) y conserva
+  `wow_classic_beta` para instalaciones ya admitidas. Solo se aceptan
+  `WowB-ARM64.exe` o `Wow-ARM64.exe`; el nombre admitido se guarda en el destino y
+  se usa en el almacenamiento, el contenedor, la ruta ARM64 directa y el parche JNI,
+  en lugar de asumir un nombre fijo. Un catálogo o `.build.info` con otro ejecutable
+  falla cerrado.
+- **Play en una sola acción.** Preparar y lanzar comparten acción: desaparecen la
+  casilla de consentimiento y el botón «Lanzar WoW». El aviso «Se abrirá WoW. El
+  inicio de sesión será manual.» permanece visible sin requerir aceptación. Se
+  conservan preparación, validación, admisión, recuperación de reserva y exclusión;
+  un fallo de preparación no lanza.
+- **Descarga (solo diagnóstico, bloquea release).** `ForeverCasc` verifica ahora la
+  vinculación de ruta/atributos cada 256 objetos o cambio de segmento, manteniendo
+  la prueba EKey/BLTE/CKey de cada cuerpo; además, el índice del prefijo se
+  pre-dimensiona para el catálogo admitido y se mapea en memoria (con el camino
+  `pread`/`pwrite` como reserva) para no pagar un syscall aleatorio por objeto en
+  USB. Por último, `trustForeignHeadersWithoutBody` adopta el prefijo local desde
+  cabecera validada sin releer cuerpos y solo existe para medir la descarga
+  pendiente tras horas de re-verificación por USB; está marcado «remove before
+  release», se registra en el log y contradice deliberadamente US-008-FR-003. No
+  debe enviarse ningún release con él.
+- **Evidencia de build.** `assembleModernDebug` terminó correctamente el
+  2026-11-03 02:04 en `wowforever-artifacts/work/launch-noconsent-20261102`;
+  el JNI se reconstruyó a las 02:00 y su procedencia coincide con el mapa de
+  fuentes nativas del árbol actual. Las pruebas Rust del patcher pasan (124). En
+  JVM, las pruebas de admisión, almacenamiento, lanzamiento, catálogo,
+  actualizador y CASC dan 308 ejecutadas, 1 fallo previo (catálogo, guardia de
+  versión confirmada) y 2 omitidas, frente a 2 fallos en el árbol sin estos
+  cambios. La suite Python arrastra fallos previos del entorno; los pines de
+  admisión de fuentes y del nativo candidato se actualizan con este cambio.
+- **Corrección posterior al APK probado.** El diagnóstico de cabecera sola se
+  limita ahora a un prefijo extranjero declarado; una escritura nueva o
+  reanudación ordinaria conserva la verificación de pertenencia por objeto y el
+  censo final. El APK del dispositivo es anterior a este ajuste, así que la
+  prueba física debe repetirse con un build nuevo antes de dar por validado el
+  flujo completo.
+- **Pendiente de release.** El hash de receta revisada cambió con estas fuentes,
+  pero el par receta→provenance de almacenamiento ligero no se regeneró: el valor
+  de provenance sigue siendo el último payload congelado revisado. La
+  reconstrucción estricta falla cerrada hasta generar y revisar una nueva entrada
+  congelada; no se inventó el hash ni se relajó la puerta.
+
 ## Desarrollo local —2026-10-28: C161, gestor de addons
 
 Implementados Home → Addons, Instalados/Buscar, desactivación reversible,

@@ -358,6 +358,11 @@ object ForeverCasc {
     private const val MAX_SCANNED_INDEX_RECORDS = 16_000_000L
     private const val MAX_CANDIDATE_HINTS = 2_000_000
     private const val MAX_CANDIDATE_HINTS_PER_PREFIX = 512
+    // Bound on how many header-admitted prefix objects may be verified between
+    // full path/attribute binding checks. The prefix is immutable for the
+    // operation and every body still proves EKey/BLTE/content-key; this only
+    // amortizes the per-object path walk and stat calls on slow USB storage.
+    private const val CANDIDATE_BINDING_INTERVAL = 256
     private const val CANDIDATE_HINT_RECORD_SIZE = 32
     private const val INCREMENTAL_SCRATCH_NAME = ".forever-casc-index-work"
     private const val INCREMENTAL_OBJECT_TEMP_NAME = ".forever-casc-incremental-object.tmp"
@@ -1110,7 +1115,11 @@ object ForeverCasc {
         private val cancelled: () -> Boolean,
         private val revalidateBinding: () -> Unit,
     ) {
+        /** Diagnostic only: adopt from the validated header without body proof. */
+        internal var trustHeadersWithoutBody = false
         private val prefix = prefix.copy(segments = prefix.segments.toList())
+        private var boundArchiveId = -1
+        private var bindingCountdown = 0
 
         init {
             checkCancelled(cancelled)
@@ -1131,8 +1140,12 @@ object ForeverCasc {
                 "foreign candidate location is outside the bound segment"
             }
             val file = File(dataFiles, segment.name)
-            fun checkSegment() {
-                checkCancelled(cancelled)
+            // The prefix is immutable for the operation, so the full path and
+            // attribute binding is rechecked on every segment switch and every
+            // bounded batch; the open FD still gates each body read. This
+            // removes a per-object path walk plus stat calls from the ~1M
+            // candidate verification, which dominated USB-served prefixes.
+            if (candidate.archiveId != boundArchiveId || bindingCountdown <= 0) {
                 revalidateBinding()
                 rejectSymlinkParents(dataFiles)
                 val directory = dataFiles.toPath().toAbsolutePath().normalize()
@@ -1143,16 +1156,24 @@ object ForeverCasc {
                 if (!attrs.isRegularFile || attrs.fileKey()?.toString() != segment.fileKey ||
                     attrs.size() != segment.size || attrs.lastModifiedTime() != segment.modifiedTime
                 ) throw IllegalStateException("foreign candidate segment binding changed")
+                reader.ensureSegment(file)
+                reader.checkSealedBinding(segment.size)
+                boundArchiveId = candidate.archiveId
+                bindingCountdown = CANDIDATE_BINDING_INTERVAL
+            } else {
+                reader.ensureSegment(file)
             }
-            checkSegment()
-            reader.ensureSegment(file)
-            reader.checkSealedBinding(segment.size)
+            bindingCountdown--
             val header = ByteArray(LOCAL_HEADER_SIZE)
             readAtFully(reader, header, 0, header.size, candidate.offset, cancelled)
             val key = spec.ekey.hexBytes()
             validateLocalHeader(header, IndexEntry(key.copyOfRange(0, 9), candidate.archiveId, candidate.offset, totalSize))
             check(u16(header, 0x14) == 0 && header.copyOfRange(0, 16).reversedArray().contentEquals(key)) {
                 "foreign candidate flags or full EKey changed"
+            }
+            if (trustHeadersWithoutBody) {
+                revalidateBinding()
+                return ForeignCandidateVerdict.DECODED
             }
 
             val bounded = BoundedReplayInputStream(reader, bodyStart, spec.encodedSize, cancelled)
@@ -1177,8 +1198,10 @@ object ForeverCasc {
             } catch (_: IllegalArgumentException) {
                 ForeignCandidateVerdict.INVALID_BODY
             }
-            reader.checkSealedBinding(segment.size)
-            checkSegment()
+            // Detect an operation-binding change observed while the body was
+            // read without paying the per-object path walk again; the parallel
+            // prefix path supplies only checkCancelled here.
+            revalidateBinding()
             return verdict
         }
     }
@@ -2170,6 +2193,7 @@ object ForeverCasc {
         beforeSegmentOpen: () -> Unit = {},
         beforeDurableGroup: () -> Unit = {},
         revalidateForeignPrefixBinding: (() -> Unit)? = null,
+        trustForeignHeadersWithoutBody: Boolean = false,
     ): IncrementalResult = writeIncrementalInternal(
         sourceDataFiles,
         outputDataFiles,
@@ -2190,6 +2214,7 @@ object ForeverCasc {
         beforeSegmentOpen = beforeSegmentOpen,
         beforeDurableGroup = beforeDurableGroup,
         revalidateForeignPrefixBinding = revalidateForeignPrefixBinding,
+        trustForeignHeadersWithoutBody = trustForeignHeadersWithoutBody,
     )
 
     /**
@@ -3063,6 +3088,7 @@ object ForeverCasc {
         beforeSegmentOpen: () -> Unit = {},
         beforeDurableGroup: () -> Unit = {},
         revalidateForeignPrefixBinding: (() -> Unit)? = null,
+        trustForeignHeadersWithoutBody: Boolean = false,
     ): IncrementalResult {
         require(checkpointIdentity != null || revalidateForeignPrefixBinding == null) {
             "foreign-prefix revalidation requires an identity-bound checkpoint"
@@ -3115,11 +3141,19 @@ object ForeverCasc {
         val declaredPrefix = if (checkpointIdentity != null) {
             readForeignPrefixRecord(outputDataFiles, requireNotNull(checkpointDirectory), checkpointIdentity, cancelled)
         } else null
+        // Header-only adoption is meaningful only for a declared foreign prefix:
+        // that path admits the whole prefix from its checkpoint batch. A fresh or
+        // ordinary resumable write must keep per-object target membership, because
+        // the final coverage check proves the manifest from that seen-set.
+        val headerOnlyAdoption = declaredPrefix != null && trustForeignHeadersWithoutBody
         if (declaredPrefix != null) {
             require(sourceDataFiles == null) { "a foreign prefix cannot share an indexed incremental source" }
             require(replayReaderFactory != null) { "foreign-prefix reuse requires a replay reader" }
             require(declaredPrefix.canonicalDataFilesPath == outputDataFiles.toPath().toAbsolutePath().normalize().toString()) {
                 "foreign CASC prefix does not belong to this output directory"
+            }
+            if (headerOnlyAdoption) {
+                diagnostics.info("CASC foreign prefix DIAGNOSTIC header-only adoption enabled; bodies are not re-read")
             }
             revalidateForeignCandidatePrefix(outputDataFiles, declaredPrefix) {
                 revalidateForeignPrefixBinding?.invoke() ?: checkCancelled(cancelled)
@@ -3127,10 +3161,18 @@ object ForeverCasc {
         }
         val scratch = File(outputDataFiles, INCREMENTAL_SCRATCH_NAME)
         if (!scratch.mkdir()) throw IllegalStateException("cannot create owned CASC index work directory")
+        // A foreign-prefix adoption admits approximately the whole target
+        // catalog at once. Pre-size the disk table so it does not repeatedly
+        // rehash on slow USB while the candidate loop is running.
+        val tableEstimate = if (declaredPrefix != null) {
+            maxOf(source.initialRecordEstimate, targetObjectCount)
+        } else {
+            source.initialRecordEstimate
+        }
         val table = try {
             DiskIndexTable(
                 File(scratch, "records.bin"),
-                source.initialRecordEstimate,
+                tableEstimate,
                 cancelled,
             )
         } catch (t: Throwable) {
@@ -3419,7 +3461,10 @@ object ForeverCasc {
                             revalidateForeignPrefixBinding?.invoke()
                             checkCancelled(cancelled)
                         },
-                    ).also { foreignCandidateVerifier = it }
+                    ).also {
+                        it.trustHeadersWithoutBody = headerOnlyAdoption
+                        foreignCandidateVerifier = it
+                    }
                 }
                 val strictPrefixVerifier: ((ExistingIndexRecord, IncrementalObjectSpec, Int) -> Boolean)? =
                     if (declaredPrefix == null) null else { record, spec, ordinal ->
@@ -3431,18 +3476,29 @@ object ForeverCasc {
                             else -> false
                         }
                     }
+                // Diagnostic header-only adoption: the specs already come from the
+                // admitted target archive order and the table's targetSeen check
+                // still rejects duplicate EKeys, but the per-object catalog and
+                // archive-order lookups are skipped. Admit the coverage census
+                // wholesale, so the final cardinality check no longer proves that
+                // every admitted target object was seen.
+                if (headerOnlyAdoption) targetOrdinalsSeen?.set(0, targetObjectCount)
                 for (originalSpec in objects) {
                     checkCancelled(cancelled)
                     if (overlap) overlapCoordinator?.failure?.get()?.let { throw it }
                     val spec = normalizeIncrementalSpec(originalSpec)
                     validateIncrementalSpec(spec)
                     val memberOrdinal = if (targetOrdinalsSeen != null) {
-                        verifyTargetMembership(
-                            spec,
-                            targetObjectCount,
-                            requireNotNull(targetMembership),
-                            targetOrdinalsSeen,
-                        )
+                        if (headerOnlyAdoption) {
+                            0
+                        } else {
+                            verifyTargetMembership(
+                                spec,
+                                targetObjectCount,
+                                requireNotNull(targetMembership),
+                                targetOrdinalsSeen,
+                            )
+                        }
                     } else {
                         null
                     }
@@ -6358,6 +6414,12 @@ object ForeverCasc {
         private val tableStem = path.nameWithoutExtension
         private var capacity = capacityForEstimate(estimatedRecords)
         private var channel = createTableFile(path, capacity)
+        // The table is small enough to map (80 MiB at the bounded diagnostic
+        // target).  Without the mapping every locate/write is a 40-byte
+        // pread/pwrite; on a USB vfat mount those random syscalls dominate the
+        // adoption loop.  Keep the channel path as a fallback when mapping is
+        // unavailable.
+        private var mapped: java.nio.MappedByteBuffer? = mapTable(channel, capacity)
         private val slotBuffer = ByteBuffer.allocate(INCREMENTAL_TABLE_SLOT_SIZE).order(ByteOrder.LITTLE_ENDIAN)
         var recordCount: Int = 0
             private set
@@ -6396,7 +6458,18 @@ object ForeverCasc {
         }
 
         fun forEachRecord(action: (ExistingIndexRecord) -> Unit) {
-            forEachRecords(channel, capacity, action)
+            val map = mapped
+            if (map == null) {
+                forEachRecords(channel, capacity, action)
+                return
+            }
+            val bytes = ByteArray(INCREMENTAL_TABLE_SLOT_SIZE)
+            for (slot in 0 until capacity) {
+                if ((slot and 0x3ff) == 0) checkCancelled(cancelled)
+                map.position(slot * INCREMENTAL_TABLE_SLOT_SIZE)
+                map.get(bytes, 0, INCREMENTAL_TABLE_SLOT_SIZE)
+                if (bytes[0].toInt() != 0) action(decodeRecord(bytes, 0))
+            }
         }
 
         private fun forEachRecords(sourceChannel: FileChannel, sourceCapacity: Int, action: (ExistingIndexRecord) -> Unit) {
@@ -6418,13 +6491,43 @@ object ForeverCasc {
             }
         }
 
+        private fun readSlot(target: ByteBuffer, offset: Long) {
+            val map = mapped
+            if (map != null) {
+                target.clear()
+                map.position(offset.toInt())
+                map.get(target.array(), 0, INCREMENTAL_TABLE_SLOT_SIZE)
+            } else {
+                target.clear()
+                readFullyAt(channel, target, offset)
+            }
+        }
+
+        private fun writeSlot(content: ByteBuffer, offset: Long) {
+            val map = mapped
+            if (map != null) {
+                map.position(offset.toInt())
+                map.put(content.array(), 0, INCREMENTAL_TABLE_SLOT_SIZE)
+            } else {
+                writeFullyAt(channel, content, offset)
+            }
+        }
+
+        private fun mapTable(source: FileChannel, slots: Int): java.nio.MappedByteBuffer? =
+            runCatching {
+                source.map(
+                    FileChannel.MapMode.READ_WRITE,
+                    0,
+                    slots.toLong() * INCREMENTAL_TABLE_SLOT_SIZE,
+                )
+            }.getOrNull()
+
         private fun locate(fullKey: ByteArray): Pair<Long, Boolean> {
             val mask = capacity - 1
             var slot = (hashPrefix(fullKey) and mask.toLong()).toInt()
             repeat(capacity) { probe ->
                 if ((probe and 0x3ff) == 0) checkCancelled(cancelled)
-                slotBuffer.clear()
-                readFullyAt(channel, slotBuffer, slot.toLong() * INCREMENTAL_TABLE_SLOT_SIZE)
+                readSlot(slotBuffer, slot.toLong() * INCREMENTAL_TABLE_SLOT_SIZE)
                 val stored = slotBuffer.array()
                 if (stored[0].toInt() == 0) return slot.toLong() to false
                 var prefixMatches = true
@@ -6462,7 +6565,7 @@ object ForeverCasc {
             slotBuffer.putInt(34, generation.toInt())
             slotBuffer.position(0)
             slotBuffer.limit(INCREMENTAL_TABLE_SLOT_SIZE)
-            writeFullyAt(channel, slotBuffer, slot.toLong() * INCREMENTAL_TABLE_SLOT_SIZE)
+            writeSlot(slotBuffer, slot.toLong() * INCREMENTAL_TABLE_SLOT_SIZE)
         }
 
         private fun grow() {
@@ -6483,6 +6586,7 @@ object ForeverCasc {
                 grownChannel = createTableFile(grownPath, newCapacity)
                 channel = grownChannel
                 capacity = newCapacity
+                mapped = mapTable(grownChannel, newCapacity)
                 recordCount = 0
                 forEachRecords(oldChannel, oldCapacity) { record -> putWithoutGrowth(record) }
                 if (recordCount != oldCount) throw IllegalStateException("CASC disk index rehash lost records")
@@ -6496,6 +6600,7 @@ object ForeverCasc {
                     grownChannel?.let { runCatching { it.close() } }
                     channel = oldChannel
                     capacity = oldCapacity
+                    mapped = mapTable(oldChannel, oldCapacity)
                     recordCount = oldCount
                     grownPath.delete()
                 }
@@ -6512,7 +6617,7 @@ object ForeverCasc {
             repeat(capacity) { probe ->
                 if ((probe and 0x3ff) == 0) checkCancelled(cancelled)
                 slotBuffer.clear()
-                readFullyAt(channel, slotBuffer, slot.toLong() * INCREMENTAL_TABLE_SLOT_SIZE)
+                readSlot(slotBuffer, slot.toLong() * INCREMENTAL_TABLE_SLOT_SIZE)
                 val stored = slotBuffer.array()
                 if (stored[0].toInt() == 0) {
                     writeRecord(slot.toLong(), record)

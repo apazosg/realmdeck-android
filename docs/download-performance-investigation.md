@@ -1,5 +1,45 @@
 # Download performance investigation
 
+## 2026-11-02 — header-only foreign-prefix adoption (diagnostic) and amortized binding
+
+Three changes were made after the C145 observation. The amortized binding and the
+pre-sized, mapped index are candidate optimizations; the header-only adoption is a
+measurement-only diagnostic and must not ship.
+
+1. **Amortized candidate binding (`ForeverCasc.kt`, `CANDIDATE_BINDING_INTERVAL =
+   256`).** Revalidating the foreign prefix on every candidate object cost a
+   per-object path walk plus `stat` calls over the USB-served prefix. The path and
+   attribute binding, symlink-parent rejection and sealed-segment binding are now
+   rechecked on every segment switch and every 256 objects; each body still proves
+   its full EKey and BLTE content key, and the open file descriptor still gates
+   every body read. This reduces the frequency of the binding check, not of body
+   authentication; a substitution that happens between two bindings can be
+   observed up to 256 objects late, before the next body proof.
+2. **`trustForeignHeadersWithoutBody` diagnostic.** In this mode a foreign prefix
+   written by this updater is adopted from its validated local header and operation
+   binding without re-reading and re-proving each BLTE/CKey body, the per-object
+   catalog/archive-order membership lookups are skipped, and the target-coverage
+   census is admitted wholesale instead of proved object by object. The switch only
+   takes effect when a foreign prefix is declared: a fresh or ordinary resumable
+   write keeps per-object membership and the final coverage check. The path logs
+   `DIAGNOSTIC header-only adoption enabled` and is enabled in
+   `ForeverClientUpdater` with a "remove before release" comment. It exists to
+   time the pending missing-object download after body verification delayed it by
+   hours on USB. It contradicts US-008-FR-003 by design, has no approved release
+   behavior, and is recorded as a deviation in that FR.
+3. **Foreign-prefix disk index (`DiskIndexTable`).** When a declared foreign prefix
+   is adopted, the scratch index is pre-sized for the admitted target catalog
+   instead of growing incrementally, and is memory-mapped so the per-slot lookups
+   stop paying a 40-byte `pread`/`pwrite` each on the USB mount. The
+   `pread`/`pwrite` path remains as fallback when mapping fails, and the table stays
+   in the operation's scratch directory.
+
+The user reported that a build carrying this work ran correctly on the test
+device. That is an operational observation, not a measured throughput result: no
+useful-network-byte rate, completed installation or before/after comparison is
+recorded here. The 3.2-MB/s target and the merge/publication decision remain open,
+and any release candidate must restore full body verification.
+
 ## C145 durable groups of up to sixteen
 
 Source commit `040254f` applies the approved maximum-group change from four to

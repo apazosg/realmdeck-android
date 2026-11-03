@@ -6,6 +6,36 @@ date: 2026-10-25
 
 # Download performance work
 
+## 2026-11-02 — diagnostic header-only adoption and amortized binding
+
+The user approved removing the hours-long local body re-verification that delayed
+the pending missing-object download on USB, and reported after building that the
+result "funciona bien". Implementation state:
+
+- **Retained candidate optimization:** foreign-prefix candidate verification now
+  revalidates the path/attribute/sealed-segment binding on every segment switch and
+  every 256 objects instead of every object. Bodies keep their full EKey/BLTE/CKey
+  proof (US-008-FR-003), the open FD still gates each read, and the parallel path
+  keeps its cancellation checks. Detection of a mid-batch substitution can lag up
+  to 256 objects.
+- **Diagnostic, release-blocking:** `trustForeignHeadersWithoutBody` adopts a
+  foreign prefix from its validated header and operation binding without body
+  proof, skips the per-object target-membership lookups and admits the coverage
+  census wholesale; it is hardcoded in `ForeverClientUpdater`. It is logged,
+  marked "DIAGNOSTIC RECOVERY ONLY" and must be removed before any release. It
+  conflicts with US-008-FR-003 by design; the deviation is recorded in that FR.
+- **Also in this build:** the foreign-prefix disk index is pre-sized for the
+  admitted target catalog and memory-mapped, with the previous pread/pwrite path as
+  fallback, so per-slot lookups stop paying a random 40-byte syscall on USB.
+- The earlier `trustExistingObjectHeaders` diagnostic and its per-archive channels
+  were removed rather than carried forward.
+
+Evidence is limited to build success and the user's device report. No measured
+network throughput, completed installation or controlled A/B comparison exists for
+this build; merge and publication remain deferred. Next step: measure useful
+network bytes against C145 under comparable conditions, then decide whether the
+amortized binding is kept and the header-only diagnostic is deleted.
+
 ## Approved sixteen-object implementation — physical validation pending
 
 C145 implements the change below (source commit `040254f`). Recovery and updater

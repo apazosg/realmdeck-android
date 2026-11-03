@@ -2960,6 +2960,12 @@ class ForeverClientUpdater(
                             archiveTargetMembership(archiveOrder, key)
                         }
                     },
+                    // DIAGNOSTIC RECOVERY ONLY: the 48 GiB local prefix was
+                    // written by this updater; re-reading every body over USB
+                    // delayed the missing-object download by hours. Adopt from
+                    // the validated local headers and binding, then measure the
+                    // download. Remove before any release.
+                    trustForeignHeadersWithoutBody = true,
                 )
                 releaseRetiredBudget()
                 pipelineOutcome = "complete"

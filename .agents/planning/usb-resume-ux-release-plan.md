@@ -892,3 +892,19 @@ Riesgos/gaps que permanecen y no deben presentarse como resueltos: el espacio se
 calcula con el plan mínimo (una candidata inválida puede agotar espacio a mitad y
 fallar cerrado); el prefetch solo para claves sin candidata sigue diferido; los pins
 SHA-256 del reconstructor no se actualizaron; no se instaló, reinició ni publicó nada.
+
+## Checkpoint 2026-11-02
+
+- La verificación de candidatas del prefijo extranjero revalida ruta/atributos y el
+  vínculo del segmento por cambio de segmento y cada 256 objetos, no por objeto; el
+  cuerpo conserva EKey/BLTE/CKey y el descriptor abierto sigue rigiendo cada
+  lectura. La detección de una sustitución dentro del lote puede retrasarse hasta
+  256 objetos.
+- `trustForeignHeadersWithoutBody` se añadió solo como diagnóstico para medir la
+  descarga pendiente tras horas de re-verificación de cuerpos en USB. Está fijado en
+  `ForeverClientUpdater`, marcado «remove before release», se registra y contradice
+  US-008-FR-003. No es comportamiento aprobado ni puede publicarse.
+- El usuario informa que ese candidato funciona en el dispositivo; no hay tasa de
+  bytes de red ni instalación completa medidas.
+- Los pins del reconstructor y del nativo candidato se re-anclan a las fuentes
+  actuales y al build `functional-capture-build.wIYy6T` en este mismo cambio.
