@@ -118,7 +118,7 @@ PINNED_UPDATER_CASC_PREIMAGES = {
 # digest-bound recovery; checkpoint frames unchanged. Independent whole-feature
 # review remains a release gate.
 PINNED_UPDATER_CASC_POSTIMAGES = {
-    "ForeverCasc.kt": "bec0e48c12495dd124c1fc0ce552889389538119d06cc6a1089399feef35e712",
+    "ForeverCasc.kt": "ff12c4d96cda0568a44f6fc745055da84a0a730bb0451b78df2e7aa82ca77f2a",
     "ForeverCascTest.kt": "92a46c61ba79d7ac24216d146e4ee99a3278a9a13c4ca49a2ec3a7f9571e8ebf",
 }
 # Reviewed reconstruction edit (2026-10-18): TACT-encrypted ('E') BLTE frames are
