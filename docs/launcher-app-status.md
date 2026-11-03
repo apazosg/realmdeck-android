@@ -49,6 +49,15 @@ en este apartado.
   de provenance sigue siendo el último payload congelado revisado. La
   reconstrucción estricta falla cerrada hasta generar y revisar una nueva entrada
   congelada; no se inventó el hash ni se relajó la puerta.
+- **Publicación de prueba (C218).** Prerelease en GitHub
+  `c218-0.2.194-usb-goal-1530-iter50-patch-both-exe-names-test` con APK de
+  491.117.638 bytes, sha256 `853cb96013dc31ddb2b87eb47cda7376069d90191bb6bd83711a9c230abb9f4c`,
+  `README.txt`, `SHA256SUMS` y `THIRD_PARTY_NOTICES`. Incluye el diagnóstico de
+  adopción por cabecera **activo** a propósito para poder probarlo en otros
+  dispositivos: no es un release estable, no debe promocionarse y puede aceptar
+  contenido local sin probarlo. No se generó archivo de fuentes ni auditoría APK
+  completa porque la procedencia ligera sigue congelada. Los pendientes derivados
+  están en `.agents/planning/client-reuse-repair-improvements.md`.
 
 ## Desarrollo local —2026-10-28: C161, gestor de addons
 
