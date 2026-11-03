@@ -70,11 +70,13 @@ REVIEWED_STORAGE_PROVENANCE_SHA256 = "867d8d4a51b86865d6232d14c7b746f8117bdb7022
 REVIEWED_STORAGE_SOURCE_SHA256 = "9497a0aa068f93c3be0d2a64e5ef2b4eab3fbf22510d1510e6ae9df63c622443"
 # Approved heavy/light cadence; all preceding recipe/provenance pairs stay frozen.
 # The recipe hash tracks the reviewed overlay recipe (updated 2026-11-02 for the
-# wowf/executable admission change). The provenance hash below is still the last
-# reviewed frozen payload, so it no longer pairs with the recipe and a strict
-# reconstruction fails closed until a new frozen input is generated and reviewed.
+# wowf/executable admission change). The provenance payload was regenerated on
+# 2026-11-03 and reviewed: its delta against the previous frozen payload is limited
+# to recipeSha256, manifestSHA256 and the already-reviewed hashes of
+# ForeverClientProvisioner.kt, ForeverFunctionalClientStorage.kt,
+# ForeverLaunchController.kt, ForeverArm64Launch.kt and ForeverArm64LaunchTest.kt.
 REVIEWED_LIGHT_STORAGE_RECIPE_SHA256 = "7c511cd4f95a49fd5ee0390687f4efd7992482e44466e9d7a2deea53ce977993"
-REVIEWED_LIGHT_STORAGE_PROVENANCE_SHA256 = "13a494f47301abfc241b4a4d7cdcfc524dee292d5f743ebf5c3612d6a3963fc5"
+REVIEWED_LIGHT_STORAGE_PROVENANCE_SHA256 = "2b6312d5613e7dab1360380f1ae40c13b545d4c1778bd603b104405a7146fa4f"
 REVIEWED_LIGHT_STORAGE_SOURCE_SHA256 = "0a5d38e0d5f25ee7c331527be586d079fe6a9c6fa23cff6f54d6742d22c433d9"
 INTERRUPTED_DISPOSITION_MEMBER = "assets/forever/wine-interrupted-run-disposition-contract.json"
 CODE_PROVENANCE_MEMBER = "assets/forever/provenance.json"

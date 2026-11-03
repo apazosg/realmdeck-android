@@ -92,6 +92,7 @@ def check_descriptor_delta(added: set[str], removed: set[str]) -> None:
         'Lapp/gamenative/ForeverClientUpdateTransfer',
         'Lapp/gamenative/ForeverClientOperationLease',
         'Lapp/gamenative/ForeverClientUpdaterQualification',
+        'Lapp/gamenative/ForeverClientPayloadBudget',
         'Lapp/gamenative/ForeverClientUpdater',
         'Lapp/gamenative/ForeverClientUpdateTransaction',
         'Lapp/gamenative/ForeverClientRuntimeGate',
