@@ -84,11 +84,17 @@ en este apartado.
   censo final. El APK del dispositivo es anterior a este ajuste, así que la
   prueba física debe repetirse con un build nuevo antes de dar por validado el
   flujo completo.
-- **Pendiente de release.** El hash de receta revisada cambió con estas fuentes,
-  pero el par receta→provenance de almacenamiento ligero no se regeneró: el valor
-  de provenance sigue siendo el último payload congelado revisado. La
-  reconstrucción estricta falla cerrada hasta generar y revisar una nueva entrada
-  congelada; no se inventó el hash ni se relajó la puerta.
+- **Provenance de almacenamiento ligero (re-congelado 2026-11-03).** El payload
+  `assets/forever/provenance.json` se regeneró con la receta revisada y su delta
+  contra la carga congelada anterior se limitó a `recipeSha256`, `manifestSHA256` y
+  los hashes ya revisados de `ForeverClientProvisioner.kt`,
+  `ForeverFunctionalClientStorage.kt`, `ForeverLaunchController.kt`,
+  `ForeverArm64Launch.kt` y `ForeverArm64LaunchTest.kt`. El pin
+  `REVIEWED_LIGHT_STORAGE_PROVENANCE_SHA256` se actualizó a
+  `2b6312d5613e7dab1360380f1ae40c13b545d4c1778bd603b104405a7146fa4f`; con él la
+  reconstrucción estricta y `audit_functional_ui_apk.py` vuelven a pasar, y el
+  allowlist de descriptores DEX admite la clase revisada
+  `ForeverClientPayloadBudget`.
 - **Publicación de prueba (C218).** Prerelease en GitHub
   `c218-0.2.194-usb-goal-1530-iter50-patch-both-exe-names-test` con APK de
   491.117.638 bytes, sha256 `853cb96013dc31ddb2b87eb47cda7376069d90191bb6bd83711a9c230abb9f4c`,

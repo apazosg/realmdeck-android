@@ -94,6 +94,38 @@ The PKCS12 key uses the same password for the store and the key. Back up the
 keystore: GitHub secrets cannot be read back, and losing the key permanently ends
 in-place upgrades for installed builds.
 
+## Automated functional builds (self-hosted)
+
+[`.github/workflows/release-functional.yml`](../.github/workflows/release-functional.yml)
+builds the functional launcher (`com.wowforever.arm64probe`) on the self-hosted
+runner labeled `realmdeck-build`, because the recipe reads artifacts outside the
+repository.
+
+- Trigger: push a `c<code>-<version>-test` tag, where `<version>` is
+  `CANDIDATE_VERSION`'s name without a trailing `-test`. The workflow fails when
+  the tag and the committed version disagree, so the tag identifies exactly the
+  source that produced the APK.
+- Dry run: append `-dryrun` to the tag. It builds and audits but publishes
+  nothing; the assets stay as CI artifacts.
+- Gate: `audit_functional_ui_apk.py` must return
+  `PASS_SOURCE_BUILD_AND_PAYLOAD_AUDIT`, and the workflow re-hashes the APK after
+  the audit to prove it did not change.
+- Assets: `<tag>.apk`, `SHA256SUMS`, `README.txt`, `THIRD_PARTY_NOTICES`,
+  `audit.json`.
+- The JVM behavior-test groups are not automated by this workflow yet; they remain
+  a manual pre-release gate.
+
+Runner prerequisites: JDK 17 at
+`wowforever-artifacts/integrated-runtime/toolchains/jdk-17.0.20.1+1`, the Android
+SDK at `/home/adrian/android-sdk` with build-tools 36.0.0, a warm Gradle cache
+(the build runs `--offline`), `gh` in `~/.local/bin`, and the canonical
+`THIRD_PARTY_NOTICES` at
+`wowforever-artifacts/release-assets/THIRD_PARTY_NOTICES`.
+
+Security: the runner belongs to a public repository, so the workflow listens only
+to tag pushes and manual dispatches. Do not add `pull_request` triggers to a
+self-hosted runner.
+
 ## Update-check limitation
 
 The C142 APK still queries the former `apazosg/wowforever` release API and rejects

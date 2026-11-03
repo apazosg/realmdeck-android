@@ -1,0 +1,270 @@
+name: Functional release APK
+
+# Compila el launcher funcional (com.wowforever.arm64probe) en el runner
+# self-hosted de esta máquina, porque la receta depende de artefactos externos
+# (/home/adrian/wowforever-artifacts) que no están en el repositorio.
+#
+# Se dispara con un tag `c<code>-<version>-test` (o `...-test-dryrun` para ensayar
+# sin publicar). La versión sale de CANDIDATE_VERSION en el commit etiquetado, así
+# que el APK siempre puede reproducirse desde el tag. Ver docs/releasing.md.
+
+on:
+  push:
+    tags:
+      - "c*-test*"
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: "Publicar GitHub Release (desactivado = ensayo, solo artefacto)"
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: write
+
+concurrency:
+  group: functional-release
+  cancel-in-progress: false
+
+env:
+  ANDROID_SDK: /home/adrian/android-sdk
+  ARTIFACTS: /home/adrian/wowforever-artifacts
+  JAVA17: /home/adrian/wowforever-artifacts/integrated-runtime/toolchains/jdk-17.0.20.1+1
+  GRADLE_ARGS: "--offline --no-daemon --max-workers=2"
+
+jobs:
+  release:
+    name: Build, audit and publish functional APK
+    # Solo el runner de esta máquina: la receta lee artefactos locales y el JDK 17.
+    runs-on: [self-hosted, realmdeck-build]
+    timeout-minutes: 120
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Resolver versión y tag
+        id: version
+        shell: bash
+        env:
+          INPUT_PUBLISH: ${{ inputs.publish }}
+        run: |
+          set -euo pipefail
+          read -r CODE NAME < <(python3 - <<'PY'
+          import re, pathlib
+          text = pathlib.Path("scripts/arm64-prototype/app/reconstruct_functional_source.py").read_text()
+          match = re.search(r'^CANDIDATE_VERSION = \((\d+), "([^"]+)"\)', text, re.MULTILINE)
+          if not match:
+              raise SystemExit("CANDIDATE_VERSION no encontrado")
+          print(match.group(1), match.group(2))
+          PY
+          )
+          # Tag por convención: c<code>-<versión sin sufijo -test>-test
+          BASE_NAME="${NAME%-test}"
+          TAG="c${CODE}-${BASE_NAME}-test"
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            PUBLISH="${INPUT_PUBLISH}"
+            REF_TAG=""
+          else
+            REF_TAG="${GITHUB_REF_NAME}"
+            if [ "${REF_TAG}" = "${TAG}-dryrun" ]; then
+              PUBLISH="false"
+            elif [ "${REF_TAG}" = "${TAG}" ]; then
+              PUBLISH="true"
+            else
+              echo "::error::El tag ${REF_TAG} no corresponde a CANDIDATE_VERSION (${TAG})"
+              exit 1
+            fi
+          fi
+
+          {
+            echo "code=${CODE}"
+            echo "name=${NAME}"
+            echo "tag=${TAG}"
+            echo "publish=${PUBLISH}"
+          } >> "$GITHUB_OUTPUT"
+          echo "Versión ${NAME} (code ${CODE}), tag ${TAG}, publicar=${PUBLISH}" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Reconstruir fuentes autenticadas
+        id: reconstruct
+        shell: bash
+        run: |
+          set -euo pipefail
+          # El grupo de concurrencia serializa las ejecuciones: limpiar restos previos.
+          rm -rf "$RUNNER_TEMP"/functional-*
+          WORK="$RUNNER_TEMP/functional-${{ github.run_id }}"
+          rm -rf "$WORK"
+          echo "work=${WORK}" >> "$GITHUB_OUTPUT"
+          python3 scripts/arm64-prototype/app/reconstruct_functional_source.py --work-dir "$WORK"
+          TREE=$(find "$WORK/source" -maxdepth 1 -mindepth 1 -type d -name 'GameNative-*')
+          test -n "$TREE" || { echo "::error::No se creó el árbol GameNative"; exit 1; }
+          echo "tree=${TREE}" >> "$GITHUB_OUTPUT"
+          echo "sdk.dir=${ANDROID_SDK}" > "$TREE/local.properties"
+          chmod +x "$TREE/gradlew"
+
+      - name: Compilar APK funcional
+        shell: bash
+        env:
+          TREE: ${{ steps.reconstruct.outputs.tree }}
+        run: |
+          set -euo pipefail
+          export JAVA_HOME="${JAVA17}"
+          export PATH="${JAVA_HOME}/bin:${PATH}"
+          cd "$TREE"
+          bash ./gradlew :app:assembleModernDebug ${GRADLE_ARGS}
+
+      - name: Auditar el APK
+        id: audit
+        shell: bash
+        env:
+          WORK: ${{ steps.reconstruct.outputs.work }}
+          TREE: ${{ steps.reconstruct.outputs.tree }}
+        run: |
+          set -euo pipefail
+          APK="$TREE/app/build/outputs/apk/modern/debug/app-modern-debug.apk"
+          test -f "$APK" || { echo "::error::No se generó el APK"; exit 1; }
+          AUDIT="$WORK/audit.json"
+          rm -f "$AUDIT"
+          python3 scripts/arm64-prototype/app/audit_functional_ui_apk.py \
+            --receipt "$WORK/reconstruction-receipt.json" \
+            --apk "$APK" \
+            --output "$AUDIT"
+          python3 - "$AUDIT" "$APK" <<'PY'
+          import hashlib, json, pathlib, sys
+          audit = json.loads(pathlib.Path(sys.argv[1]).read_text())
+          assert audit["result"] == "PASS_SOURCE_BUILD_AND_PAYLOAD_AUDIT", audit.get("result")
+          apk = pathlib.Path(sys.argv[2])
+          digest = hashlib.sha256(apk.read_bytes()).hexdigest()
+          assert audit["apk"]["sha256"] == digest, "el APK cambió después del audit"
+          print(f"PASS: {digest} ({apk.stat().st_size} bytes, {audit['payloadCount']} payloads)")
+          PY
+          {
+            echo "apk=${APK}"
+            echo "audit=${AUDIT}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Empaquetar assets de release
+        id: package
+        shell: bash
+        env:
+          WORK: ${{ steps.reconstruct.outputs.work }}
+          TREE: ${{ steps.reconstruct.outputs.tree }}
+          TAG: ${{ steps.version.outputs.tag }}
+          NAME: ${{ steps.version.outputs.name }}
+          CODE: ${{ steps.version.outputs.code }}
+        run: |
+          set -euo pipefail
+          DIST="$WORK/dist"
+          mkdir -p "$DIST"
+          APK="$TREE/app/build/outputs/apk/modern/debug/app-modern-debug.apk"
+          cp "$APK" "$DIST/$TAG.apk"
+          (cd "$DIST" && sha256sum "$TAG.apk" > SHA256SUMS)
+
+          NOTICES="$ARTIFACTS/release-assets/THIRD_PARTY_NOTICES"
+          test -f "$NOTICES" || { echo "::error::Falta $NOTICES"; exit 1; }
+          cp "$NOTICES" "$DIST/THIRD_PARTY_NOTICES"
+          cp "${{ steps.audit.outputs.audit }}" "$DIST/audit.json"
+
+          APK_SHA=$(cut -d' ' -f1 "$DIST/SHA256SUMS")
+          APK_BYTES=$(stat -c%s "$DIST/$TAG.apk")
+          read -r AUDIT_RESULT SOURCE_FILES PAYLOADS CERT_SHA < <(python3 - "${{ steps.audit.outputs.audit }}" <<'PY'
+          import json, sys
+          audit = json.load(open(sys.argv[1]))
+          print(audit["result"], audit["sourceFilesUnchanged"], audit["payloadCount"],
+                audit["certificateSha256"])
+          PY
+          )
+          {
+            echo "RealmDeck Android functional launcher — automated build evidence"
+            echo
+            echo "Version: ${NAME} (version code ${CODE})"
+            echo "Commit:  ${GITHUB_SHA}"
+            echo "Tag:     ${TAG}"
+            echo "Built:   $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo
+            echo "APK:     ${TAG}.apk"
+            echo "Bytes:   ${APK_BYTES}"
+            echo "SHA-256: ${APK_SHA}"
+            echo
+            echo "Audit:   ${AUDIT_RESULT}"
+            echo "Sources: ${SOURCE_FILES} unchanged source files audited"
+            echo "Payload: ${PAYLOADS} packaged payloads"
+            echo "Signing: ${CERT_SHA}"
+            echo
+            echo "This archive is build and audit evidence, not a device test. The functional"
+            echo "launcher is an experimental preview: no sustained gameplay, performance,"
+            echo "audio or broad device support is established. The attached source coverage"
+            echo "is partial and is not a self-contained build environment; the recipe also"
+            echo "consumes artifacts that are not redistributed here."
+          } > "$DIST/README.txt"
+
+          echo "dist=${DIST}" >> "$GITHUB_OUTPUT"
+          echo "sha256=${APK_SHA}" >> "$GITHUB_OUTPUT"
+          echo "bytes=${APK_BYTES}" >> "$GITHUB_OUTPUT"
+          head -6 "$DIST/README.txt" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Subir artefactos de CI
+        uses: actions/upload-artifact@v4
+        with:
+          name: functional-${{ steps.version.outputs.tag }}
+          path: |
+            ${{ steps.package.outputs.dist }}/README.txt
+            ${{ steps.package.outputs.dist }}/SHA256SUMS
+            ${{ steps.package.outputs.dist }}/THIRD_PARTY_NOTICES
+            ${{ steps.package.outputs.dist }}/audit.json
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Publicar GitHub Release
+        if: steps.version.outputs.publish == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH: /home/adrian/.local/bin/gh
+          DIST: ${{ steps.package.outputs.dist }}
+          TAG: ${{ steps.version.outputs.tag }}
+          NAME: ${{ steps.version.outputs.name }}
+          CODE: ${{ steps.version.outputs.code }}
+          SHA256: ${{ steps.package.outputs.sha256 }}
+        run: |
+          set -euo pipefail
+          test -x "$GH" || { echo "::error::Falta gh en $GH"; exit 1; }
+          if "$GH" release view "$TAG" > /dev/null 2>&1; then
+            echo "::error::La release $TAG ya existe; no se sobrescribe un APK publicado"
+            exit 1
+          fi
+          cat > "$DIST/notes.md" <<EOF
+          C${CODE} prerelease — version code ${CODE}
+
+          Automated build of ${NAME} from commit ${GITHUB_SHA}. This is an experimental
+          ARM64 preview; it is not a general release.
+
+          ## Download
+
+          - \`${TAG}.apk\`
+          - \`SHA256SUMS\`
+
+          SHA-256: \`${SHA256}\`
+
+          ## Installation
+
+          Install the APK manually over the existing debug-signed preview. No uninstall
+          or data reset is required, but pause any running download before replacing it.
+          Updates remain manual; this build has no in-app updater.
+
+          ## Before you try
+
+          - Experimental preview: no sustained gameplay, performance, audio or broad
+            device support is established.
+          - The build and audit passed, but this workflow is not a device test.
+          - See \`README.txt\` for build evidence and source/payload coverage limits.
+          EOF
+          "$GH" release create "$TAG" \
+            "$DIST/$TAG.apk" "$DIST/SHA256SUMS" "$DIST/README.txt" "$DIST/THIRD_PARTY_NOTICES" "$DIST/audit.json" \
+            --title "RealmDeck Android $NAME · Preview" \
+            --notes-file "$DIST/notes.md" \
+            --prerelease
+          echo "Release $TAG publicada" >> "$GITHUB_STEP_SUMMARY"
