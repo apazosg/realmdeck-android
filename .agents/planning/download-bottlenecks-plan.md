@@ -6,6 +6,14 @@ date: 2026-10-25
 
 # Download performance work
 
+## 2026-11-03 — consolidación en `main`
+
+El usuario aprobó mergear la rama completa a `main` para cortar la acumulación de
+commits sin integrar. Antes del merge se retiró el diagnóstico release-blocking
+`trustForeignHeadersWithoutBody` (P0.1) y se restauró la prueba por objeto; el
+binding amortizado y el índice mapeado se conservan. El merge no es un release:
+la procedencia ligera y la medición de throughput siguen abiertas.
+
 ## 2026-11-02 — diagnostic header-only adoption and amortized binding
 
 The user approved removing the hours-long local body re-verification that delayed

@@ -37,8 +37,12 @@ measurement-only diagnostic and must not ship.
 The user reported that a build carrying this work ran correctly on the test
 device. That is an operational observation, not a measured throughput result: no
 useful-network-byte rate, completed installation or before/after comparison is
-recorded here. The 3.2-MB/s target and the merge/publication decision remain open,
-and any release candidate must restore full body verification.
+recorded here. The 3.2-MB/s target and the publication decision remain open.
+
+> **2026-11-03 — merged to `main`.** `trustForeignHeadersWithoutBody` and its
+> header-only adoption path were removed before the merge; `main` performs full
+> per-object body and membership proof. The amortized binding and the mapped index
+> remain. The throughput target and release provenance are still open.
 
 ## C145 durable groups of up to sixteen
 

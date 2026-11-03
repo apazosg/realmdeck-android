@@ -1115,8 +1115,6 @@ object ForeverCasc {
         private val cancelled: () -> Boolean,
         private val revalidateBinding: () -> Unit,
     ) {
-        /** Diagnostic only: adopt from the validated header without body proof. */
-        internal var trustHeadersWithoutBody = false
         private val prefix = prefix.copy(segments = prefix.segments.toList())
         private var boundArchiveId = -1
         private var bindingCountdown = 0
@@ -1171,11 +1169,6 @@ object ForeverCasc {
             check(u16(header, 0x14) == 0 && header.copyOfRange(0, 16).reversedArray().contentEquals(key)) {
                 "foreign candidate flags or full EKey changed"
             }
-            if (trustHeadersWithoutBody) {
-                revalidateBinding()
-                return ForeignCandidateVerdict.DECODED
-            }
-
             val bounded = BoundedReplayInputStream(reader, bodyStart, spec.encodedSize, cancelled)
             // Reader failures must abort the operation, not be mistaken for an
             // invalid BLTE body eligible for replacement.
@@ -2193,7 +2186,6 @@ object ForeverCasc {
         beforeSegmentOpen: () -> Unit = {},
         beforeDurableGroup: () -> Unit = {},
         revalidateForeignPrefixBinding: (() -> Unit)? = null,
-        trustForeignHeadersWithoutBody: Boolean = false,
     ): IncrementalResult = writeIncrementalInternal(
         sourceDataFiles,
         outputDataFiles,
@@ -2214,7 +2206,6 @@ object ForeverCasc {
         beforeSegmentOpen = beforeSegmentOpen,
         beforeDurableGroup = beforeDurableGroup,
         revalidateForeignPrefixBinding = revalidateForeignPrefixBinding,
-        trustForeignHeadersWithoutBody = trustForeignHeadersWithoutBody,
     )
 
     /**
@@ -3088,7 +3079,6 @@ object ForeverCasc {
         beforeSegmentOpen: () -> Unit = {},
         beforeDurableGroup: () -> Unit = {},
         revalidateForeignPrefixBinding: (() -> Unit)? = null,
-        trustForeignHeadersWithoutBody: Boolean = false,
     ): IncrementalResult {
         require(checkpointIdentity != null || revalidateForeignPrefixBinding == null) {
             "foreign-prefix revalidation requires an identity-bound checkpoint"
@@ -3141,19 +3131,11 @@ object ForeverCasc {
         val declaredPrefix = if (checkpointIdentity != null) {
             readForeignPrefixRecord(outputDataFiles, requireNotNull(checkpointDirectory), checkpointIdentity, cancelled)
         } else null
-        // Header-only adoption is meaningful only for a declared foreign prefix:
-        // that path admits the whole prefix from its checkpoint batch. A fresh or
-        // ordinary resumable write must keep per-object target membership, because
-        // the final coverage check proves the manifest from that seen-set.
-        val headerOnlyAdoption = declaredPrefix != null && trustForeignHeadersWithoutBody
         if (declaredPrefix != null) {
             require(sourceDataFiles == null) { "a foreign prefix cannot share an indexed incremental source" }
             require(replayReaderFactory != null) { "foreign-prefix reuse requires a replay reader" }
             require(declaredPrefix.canonicalDataFilesPath == outputDataFiles.toPath().toAbsolutePath().normalize().toString()) {
                 "foreign CASC prefix does not belong to this output directory"
-            }
-            if (headerOnlyAdoption) {
-                diagnostics.info("CASC foreign prefix DIAGNOSTIC header-only adoption enabled; bodies are not re-read")
             }
             revalidateForeignCandidatePrefix(outputDataFiles, declaredPrefix) {
                 revalidateForeignPrefixBinding?.invoke() ?: checkCancelled(cancelled)
@@ -3462,7 +3444,6 @@ object ForeverCasc {
                             checkCancelled(cancelled)
                         },
                     ).also {
-                        it.trustHeadersWithoutBody = headerOnlyAdoption
                         foreignCandidateVerifier = it
                     }
                 }
@@ -3476,29 +3457,18 @@ object ForeverCasc {
                             else -> false
                         }
                     }
-                // Diagnostic header-only adoption: the specs already come from the
-                // admitted target archive order and the table's targetSeen check
-                // still rejects duplicate EKeys, but the per-object catalog and
-                // archive-order lookups are skipped. Admit the coverage census
-                // wholesale, so the final cardinality check no longer proves that
-                // every admitted target object was seen.
-                if (headerOnlyAdoption) targetOrdinalsSeen?.set(0, targetObjectCount)
                 for (originalSpec in objects) {
                     checkCancelled(cancelled)
                     if (overlap) overlapCoordinator?.failure?.get()?.let { throw it }
                     val spec = normalizeIncrementalSpec(originalSpec)
                     validateIncrementalSpec(spec)
                     val memberOrdinal = if (targetOrdinalsSeen != null) {
-                        if (headerOnlyAdoption) {
-                            0
-                        } else {
-                            verifyTargetMembership(
-                                spec,
-                                targetObjectCount,
-                                requireNotNull(targetMembership),
-                                targetOrdinalsSeen,
-                            )
-                        }
+                        verifyTargetMembership(
+                            spec,
+                            targetObjectCount,
+                            requireNotNull(targetMembership),
+                            targetOrdinalsSeen,
+                        )
                     } else {
                         null
                     }

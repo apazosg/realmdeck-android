@@ -1,5 +1,18 @@
 # Launcher ARM64 — estado de producto
 
+## Consolidación — 2026-11-03: retirada del diagnóstico de adopción por cabecera
+
+El árbol que se mergea a `main` ya no contiene `trustForeignHeadersWithoutBody`.
+`ForeverCasc` vuelve a probar cada cuerpo (EKey/BLTE/CKey) y la pertenencia de cada
+objeto al catálogo admitido; se elimina la adopción por cabecera y el censo
+_wholesale_. El binding de ruta/atributos cada 256 objetos y el índice
+pre-dimensionado/mapeado se conservan.
+
+El APK de prueba C219 y el prerelease C218 se construyeron antes de esta retirada:
+conservan el diagnóstico y siguen siendo evidencia del flujo de recuperación de
+reserva, no del comportamiento de descarga de `main`. No se ha ejecutado todavía
+una medición de throughput con el árbol estricto.
+
 ## Desarrollo local — 2026-11-03: recuperación de la sesión anterior al actualizar (C219)
 
 El usuario reportó que, tras pulsar Actualizar, la app mostró «Cierra WoW antes de
@@ -21,9 +34,10 @@ updater no podía recuperar; el mensaje genérico la presentaba como un juego vi
 - **Pruebas focales.** `ForeverFunctionalLauncherUxTest` 47/0 fallos (incluye el
   mensaje de reserva anterior) y `ForeverClientRuntimeGateTest` 13/0. Compilación y
   `assembleModernDebug` correctos.
-- **Límites.** Build de prueba local, no release: conserva el diagnóstico de adopción
-  por cabecera bloqueante. La recuperación no cierra a la fuerza un WoW vivo y no
-  cubre un host muerto con cierre no probado; ese caso sigue bloqueando.
+- **Límites.** Build de prueba local, no release: el APK C219 conserva el
+  diagnóstico de adopción por cabecera bloqueante, retirado después del merge a
+  `main`. La recuperación no cierra a la fuerza un WoW vivo y no cubre un host
+  muerto con cierre no probado; ese caso sigue bloqueando.
 
 ## Desarrollo local — 2026-11-02: producto `wowf`, `Wow-ARM64.exe` y Play sin consentimiento
 
@@ -53,7 +67,8 @@ en este apartado.
   cabecera validada sin releer cuerpos y solo existe para medir la descarga
   pendiente tras horas de re-verificación por USB; está marcado «remove before
   release», se registra en el log y contradice deliberadamente US-008-FR-003. No
-  debe enviarse ningún release con él.
+  debe enviarse ningún release con él. **Retirado del árbol el 2026-11-03**; los
+  APK C218/C219 anteriores lo conservan.
 - **Evidencia de build.** `assembleModernDebug` terminó correctamente el
   2026-11-03 02:04 en `wowforever-artifacts/work/launch-noconsent-20261102`;
   el JNI se reconstruyó a las 02:00 y su procedencia coincide con el mapa de

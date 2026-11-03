@@ -28,7 +28,10 @@ mide antes de debilitar la especificación.
 
 ## Trabajo pendiente, por orden
 
-### P0.1 — Quitar el atajo y medir la verificación completa
+### P0.1 — Quitar el atajo y medir la verificación completa — retirado (2026-11-03)
+
+> **Estado 2026-11-03:** el atajo se eliminó del árbol antes del merge a `main`;
+> la medición de la verificación completa sigue pendiente.
 
 - Eliminar `trustForeignHeadersWithoutBody` del parámetro de `ForeverCasc.writeTarget`
   y del llamador, junto con su rama de diagnóstico; restaurar FR-003/FR-011
