@@ -432,6 +432,20 @@ class ForeverFunctionalLauncherUxTest {
         }
     }
 
+    @Test
+    fun staleGuestUpdateMessageNeverAsksToCloseWoW() {
+        // US-008 AC-05: a proven-closed prior reservation is recovered before
+        // update admission; a residual race must not read as a live game.
+        val stale = ForeverFunctionalUiText.userMessage(
+            Exception("recover the unfinished guest operation before updating"),
+        )
+        assertEquals(
+            "Hay una partida anterior pendiente de recuperar. Vuelve a intentarlo.",
+            stale,
+        )
+        assertTrue("Cierra WoW" !in stale)
+    }
+
     // Enter-gated observer (codeCaptureEnabled=false): short injectable
     // durations keep these focused without production configuration changes.
 

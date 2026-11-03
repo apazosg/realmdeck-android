@@ -205,6 +205,10 @@ object ForeverFunctionalUiText {
                 "no unfinished guest operation" in raw || "guest_recovery_ticket_missing" in raw ||
                 "guest_recovery_reservation_missing" in raw ->
                 "La reserva anterior no coincide con el destino elegido o ya no está vigente. Revisa el almacenamiento y reintenta."
+            // Update admission can still lose a race with another recovery; do
+            // not present a stale guest record as a live game (US-008 AC-05).
+            "recover the unfinished guest operation" in raw ->
+                "Hay una partida anterior pendiente de recuperar. Vuelve a intentarlo."
             "runtime" in raw || "guest" in raw || "storage_busy" in raw -> "Cierra WoW antes de continuar."
             "permission" in raw || "access" in raw || "namespace" in raw -> "Android no permite acceder a esta ubicación. Elige otra en Ajustes."
             "http" in raw || "connect" in raw || "network" in raw -> "No se pudo completar la descarga. Comprueba la conexión y reintenta."

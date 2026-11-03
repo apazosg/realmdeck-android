@@ -275,6 +275,10 @@ fun ForeverClientManagementDialog(
     // guest/storage/qualification gates; this only sequences the user action.
     fun startUpdate(target: ForeverClientUpdateCheck.Fingerprint) {
         runOperation("Preparando la descarga…") { service ->
+            // A reservation left by a prior session is recovered only after a
+            // fresh quiescence/ownership proof for the selected destination;
+            // live or unproven runtimes still block with their distinct texts.
+            ForeverFunctionalPoc.recoverStaleGuestBeforePlay(context)
             val source = service.discoverPartialPortabilitySource()
             if (source == ForeverClientUpdater.PortabilitySourceKind.PARTIAL_CANDIDATE) {
                 reviewPartial(service, target)
@@ -327,6 +331,9 @@ fun ForeverClientManagementDialog(
 
     fun continueInstallation() {
         runOperation("Consultando versión…") { service ->
+            // Same proven-closed prior-session recovery as update/repair; a live
+            // or unproven runtime retains exclusion.
+            ForeverFunctionalPoc.recoverStaleGuestBeforePlay(context)
             val source = service.discoverPartialPortabilitySource()
             if (source == ForeverClientUpdater.PortabilitySourceKind.PARTIAL_CANDIDATE) {
                 val target = service.checkVersions().published

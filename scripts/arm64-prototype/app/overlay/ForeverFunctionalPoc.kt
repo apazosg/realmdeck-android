@@ -763,8 +763,9 @@ object ForeverFunctionalPoc {
     class PlayGuestBlockedException(val blockingReason: String) : IllegalStateException(blockingReason)
 
     /**
-     * App-owned recovery of a stale guest reservation before explicit Play
-     * or a graphics reset (US-004 AC-09/AC-11).
+     * App-owned recovery of a stale guest reservation before explicit Play,
+     * a graphics reset, or an update/repair start (US-004 AC-09/AC-11,
+     * US-008 AC-05).
      * Only a durable guest record for the selected storage is recovered, using
      * the existing exclusion/ownership checks and a fresh quiescence proof;
      * updater reservations are never touched. Returns true when a recovery

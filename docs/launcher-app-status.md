@@ -1,5 +1,30 @@
 # Launcher ARM64 — estado de producto
 
+## Desarrollo local — 2026-11-03: recuperación de la sesión anterior al actualizar (C219)
+
+El usuario reportó que, tras pulsar Actualizar, la app mostró «Cierra WoW antes de
+continuar» sin haber un juego abierto. La inspección ADB encontró una reserva durable
+`GUEST_STARTED` de la sesión de las 07:21 (observación histórica `UNKNOWN`) que el
+updater no podía recuperar; el mensaje genérico la presentaba como un juego vivo.
+
+- **Cambio.** `startUpdate`/`continueInstallation` recuperan ahora una reserva
+  anterior con la misma prueba de destino/propiedad/quiescencia que Jugar y
+  Restablecer gráficos (US-008-AC-05/FR-007, US-004-UC-04). Un runtime vivo o no
+  probado sigue bloqueando con sus mensajes distintos; no se fuerzan procesos ni se
+  tocan reservas de updater o journal.
+- **Prueba física.** APK de prueba `0.2.195-update-guest-recovery-test` (219;
+  485.568.087 bytes; sha256 `1964ba83ed67adcb5a0af30bac06ef6b1dad4628332a6aa8fa07c223d9eeaaf0`),
+  instalado con `-r` sobre el C218. La reserva siguió presente tras instalar; al
+  pulsar Actualizar pasó a `IDLE`/`QUIESCENT` y la UI mostró «Preparando la
+  descarga…»; Pausar detuvo la operación sin errores. No se completó ninguna
+  descarga ni se afirma aceptación del cliente 70755.
+- **Pruebas focales.** `ForeverFunctionalLauncherUxTest` 47/0 fallos (incluye el
+  mensaje de reserva anterior) y `ForeverClientRuntimeGateTest` 13/0. Compilación y
+  `assembleModernDebug` correctos.
+- **Límites.** Build de prueba local, no release: conserva el diagnóstico de adopción
+  por cabecera bloqueante. La recuperación no cierra a la fuerza un WoW vivo y no
+  cubre un host muerto con cierre no probado; ese caso sigue bloqueando.
+
 ## Desarrollo local — 2026-11-02: producto `wowf`, `Wow-ARM64.exe` y Play sin consentimiento
 
 El usuario probó el candidato en el dispositivo y lo describe como correcto
