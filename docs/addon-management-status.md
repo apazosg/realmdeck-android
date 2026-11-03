@@ -86,3 +86,27 @@ existente no acredita que las nuevas rutas estén desplegadas.
 preexistentes (`@vercel/blob`, `@vercel/cli-config`, `@vercel/oidc`, `zod`). No se
 alteraron versiones ajenas a esta función ni se considera este resultado apto para
 publicar sin evaluar esas dependencias.
+
+## Revisión y correcciones (2026-11-03)
+
+Revisión independiente de implementación y configuración. Sin hallazgos de fuga de
+clave ni de SSRF; los defectos eran de disponibilidad y de robustez ante datos
+reales. Correcciones aplicadas:
+
+- Inventario: un archivo suelto en `Interface/AddOns` o en `disabled/` ya no
+  inutiliza el listado ni las acciones; solo los enlaces simbólicos siguen
+  fallando cerrado (`ForeverAddons.kt`). Prueba nueva en `ForeverAddonsTest.kt`.
+- Exclusión: la metadata de `.file` se lee antes de tomar el arriendo durable, y la
+  confirmación de archivo/dependencias se mantiene dentro de él con un único
+  inventario (`ForeverAddonsService.kt`). La descarga sigue dentro del arriendo a
+  propósito, para bloquear el lanzamiento durante la escritura.
+- Backend: un registro de archivo malformado se descarta en vez de tumbar el
+  proyecto completo; una página sin entradas del proyecto o sin ninguna entrada
+  válida sigue devolviendo `502`; `dependencies` ausente se interpreta como ninguna
+  (`src/addons.ts`). `vercel.json` declara `maxDuration` por ruta. Dos pruebas
+  nuevas; `npm test`: 56 correctas, 0 fallos.
+
+Sin verificar: compilación Android y pruebas JVM de estos cambios (no hay
+herramienta Gradle en el checkout, solo árboles reconstruidos fuera del repo), y
+toda comprobación contra el proveedor real. Siguen pendientes los cuatro puntos de
+«Antes de habilitar acceso real».
