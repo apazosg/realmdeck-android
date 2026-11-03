@@ -4,6 +4,11 @@
   "installCommand": "npm ci",
   "outputDirectory": "public",
   "regions": ["fra1"],
+  "functions": {
+    "api/addons/search.ts": { "maxDuration": 30 },
+    "api/addons/file.ts": { "maxDuration": 30 },
+    "api/addons/download.ts": { "maxDuration": 60 }
+  },
   "crons": [
     {
       "path": "/api/cleanup",

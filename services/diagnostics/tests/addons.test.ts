@@ -134,6 +134,32 @@ describe("CurseForge addon backend", () => {
     assert.deepEqual(res.payload, { error: "upstream-invalid-response" });
   });
 
+  it("keeps a usable file when one upstream record is malformed", async () => {
+    const fetcher = (async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url.endsWith("version-types")) return json(versions);
+      if (url.endsWith("/mods/123")) return json(mod);
+      return json({ data: [goodFile(), { modId: 123, id: "bad" }] });
+    }) as typeof fetch;
+    const res = capture();
+    await routeAddonFile(req("GET", { projectId: "123" }), res, { apiKey: "key", fetcher });
+    assert.equal(res.statusCode, 200);
+    assert.equal((res.payload as { fileId: number }).fileId, 900);
+  });
+
+  it("treats an omitted dependencies field as no dependencies", async () => {
+    const fetcher = (async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url.endsWith("version-types")) return json(versions);
+      if (url.endsWith("/mods/123")) return json(mod);
+      return json(fileList(goodFile({ dependencies: undefined })));
+    }) as typeof fetch;
+    const res = capture();
+    await routeAddonFile(req("GET", { projectId: "123" }), res, { apiKey: "key", fetcher });
+    assert.equal(res.statusCode, 200);
+    assert.deepEqual((res.payload as { requiredDependencies: unknown }).requiredDependencies, []);
+  });
+
   it("rejects CDN suffix hosts, URL credentials, ports, and fragments without sending the key", async () => {
     for (const candidate of [
       "https://evil.forgecdn.net/addon.zip", "https://edge.forgecdn.net.evil.invalid/addon.zip",

@@ -19,6 +19,11 @@ La capacidad de escritura jamás autoriza lectura; un id incorrecto o una
 capacidad ajena devuelven el mismo `404` sin distinguir. Toda respuesta privada
 lleva `Cache-Control: no-store` y los errores son códigos genéricos.
 
+Las rutas públicas `/api/addons/search`, `/api/addons/file` y
+`/api/addons/download` (integración de addons de CurseForge, `CURSEFORGE_API_KEY`)
+tienen su propio contrato y límites en [`ADDONS.md`](ADDONS.md); no comparten
+autenticación ni datos con las rutas de diagnóstico.
+
 ## Variables de entorno (fijar en Vercel, nunca en el repo)
 
 | Clave | Origen |

@@ -5,6 +5,9 @@ const PAGE_SIZE = 20;
 const MAX_JSON = 2 * 1024 * 1024;
 const MAX_ZIP = 64 * 1024 * 1024;
 const TIMEOUT_MS = 12_000;
+// The download route carries metadata fetches plus up to MAX_ZIP streamed bytes, so it needs its own
+// budget below the platform maxDuration; TIMEOUT_MS alone would cut legitimate downloads short.
+const DOWNLOAD_MS = 45_000;
 const API_KEY_ENV = "CURSEFORGE_API_KEY";
 
 export interface AddonRequest {
@@ -166,6 +169,8 @@ function validFile(value: unknown): value is CfFile {
     (value as CfFile).id > 0 && Number.isSafeInteger((value as CfFile).modId) && (value as CfFile).modId > 0;
 }
 function validDependencies(file: CfFile): boolean {
+  // Upstream omits the field entirely when a file has no dependencies; that is not malformed data.
+  if (file.dependencies === undefined) return true;
   return Array.isArray(file.dependencies) && file.dependencies.every((dependency) =>
     typeof dependency === "object" && dependency !== null && Number.isSafeInteger(dependency.modId) && dependency.modId > 0 &&
     Number.isSafeInteger(dependency.relationType) && dependency.relationType >= 1 && dependency.relationType <= 6);
@@ -192,15 +197,21 @@ async function projectFiles(projectId: number, key: string, options: ServiceOpti
   if ((mod as Mod & { isAvailable?: boolean }).isAvailable === false ||
       (mod as Mod & { allowModDistribution?: boolean }).allowModDistribution !== true) throw new AddonError(409, "distribution-disabled");
   const data = dataOf(await cfJson(`${API}/mods/${projectId}/files?gameVersion=${encodeURIComponent(VERSION)}&gameVersionTypeId=${versionTypeId}&pageSize=50`, key, options));
-  if (data.some((item) => typeof item === "object" && item !== null && (item as { modId?: unknown }).modId === projectId &&
-      (!validFile(item) || !validDependencies(item)))) throw new AddonError(502, "upstream-invalid-response");
-  const files = data.filter(validFile).filter((f) => fileAccepted(f, projectId)).sort((a, b) => b.id - a.id);
+  const entries = data.filter((item): item is CfFile => typeof item === "object" && item !== null);
+  const own = entries.filter((item) => (item as { modId?: unknown }).modId === projectId);
+  // Distrust a page that claims nothing for this project, and a project page where no entry is even
+  // schema-valid. An individual malformed record is dropped instead, so one bad upstream entry
+  // cannot take an otherwise usable project down.
+  if (entries.length > 0 && own.length === 0) throw new AddonError(502, "upstream-invalid-response");
+  const schemaValid = own.filter((item) => validFile(item) && validDependencies(item));
+  if (own.length > 0 && schemaValid.length === 0) throw new AddonError(502, "upstream-invalid-response");
+  const files = schemaValid.filter((f) => fileAccepted(f, projectId)).sort((a, b) => b.id - a.id);
   return { mod, files };
 }
 
 async function publicDependencies(file: CfFile, key: string, options: ServiceOptions): Promise<{ projectId: number; name: string }[]> {
   if (!validDependencies(file)) throw new AddonError(502, "upstream-invalid-response");
-  const ids = [...new Set(file.dependencies!.filter((d) => d.relationType === 3).map((d) => d.modId))];
+  const ids = [...new Set((file.dependencies ?? []).filter((d) => d.relationType === 3).map((d) => d.modId))];
   if (ids.length > 10) throw new AddonError(502, "upstream-invalid-response");
   const dependencies = await Promise.all(ids.map(async (projectId) => {
     const result = await cfJson(`${API}/mods/${projectId}`, key, options);
@@ -293,7 +304,7 @@ export async function routeAddonDownload(req: AddonRequest, res: AddonResponse, 
   if (!acquireRoute(res)) return;
   const requestAbort = new AbortController();
   let streaming = false;
-  const streamTimeout = setTimeout(() => requestAbort.abort(), TIMEOUT_MS);
+  const streamTimeout = setTimeout(() => requestAbort.abort(), DOWNLOAD_MS);
   const onClose = () => requestAbort.abort();
   res.once?.("close", onClose as (...args: never[]) => void);
   try {

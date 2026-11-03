@@ -25,6 +25,11 @@ promise that CurseForge currently publishes such a type.
 Only projects that explicitly report author distribution permission and files
 reported available, stable-release (not beta/alpha), non-alternate,
 exact-version compatible, bounded, and with a SHA-1 descriptor are offered.
+A malformed file record is dropped instead of failing its whole project; a file
+page where no entry belongs to the requested project, or where no entry is
+schema-valid at all, is rejected with `502 upstream-invalid-response`. An omitted
+`dependencies` field means no dependencies; a present but malformed one
+invalidates that file.
 Downloads are limited to 64 MiB and stream
 without whole-file buffering. The SHA-1 is returned in the file descriptor for
 the client to verify; this backend does not claim a successful integrity check
@@ -33,7 +38,11 @@ download.
 
 The backend enforces bounded query values, upstream JSON size, timeout, and a
 four-request in-process concurrency limit that remains held while a route reads
-its response body/streams the download. These limits are not distributed abuse protection:
+its response body/streams the download. JSON routes use a 12 s deadline; the
+download route uses a 45 s deadline because it must also stream up to 64 MiB.
+`vercel.json` sets `maxDuration` to 30 s for `search`/`file` and 60 s for
+`download` so neither deadline is cut short by the platform default; a deployment
+must keep its platform limit above those values. These limits are not distributed abuse protection:
 deployments must add a platform firewall/rate-limit gate for these public,
 unauthenticated routes. No in-memory counter is represented as a global quota.
 The live Vercel streaming behavior, authorized CurseForge account access,
