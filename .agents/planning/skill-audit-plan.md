@@ -1,6 +1,6 @@
 ---
 id: skill-audit-2026-11-04
-state: draft
+state: in-progress
 date: 2026-11-04
 ---
 
@@ -8,7 +8,7 @@ date: 2026-11-04
 
 Revisar la organización del repositorio y el desarrollo con agentes, manteniendo
 especificaciones útiles pero reduciendo las aprobaciones y la documentación repetitiva.
-Este plan propone cambios; no autoriza su ejecución hasta su aprobación.
+Plan aprobado por el usuario; ejecución en curso.
 
 ## Content
 
@@ -61,19 +61,18 @@ Este plan propone cambios; no autoriza su ejecución hasta su aprobación.
 
 ## Implementation / Action Items
 
-- [ ] 1. Completar inventario de instrucciones, skills, referencias, specs y
-      puntos de entrada; verificar rutas, redundancias y capacidad de autocarga de
-      subagentes. Determinar mecanismo real de sincronización de skills compartidas.
+- [x] 1. Auditar instrucciones, skills, specs y puntos de entrada; identificar
+      problemas de autocarga y determinar el mecanismo local de sincronización.
 - [ ] 2. Diseñar y aplicar un flujo SDD proporcional: alcance de las specs,
       descubrimiento, autorización, reconciliación y trazabilidad adecuada al riesgo;
       contemplar secciones aprobadas en documentos `dirty` y el `SYSTEM.md` en
       borrador; alinear instrucciones locales y compartidas sin divergencias.
-- [ ] 3. Corregir puntos de entrada documentales desactualizados contrastándolos con
+- [x] 3. Corregir puntos de entrada documentales desactualizados contrastándolos con
       la evidencia vigente; distinguir estado actual y registros históricos.
-- [ ] 4. Inventariar planes y respaldos `.orig`, proponer criterios claros de
+- [x] 4. Inventariar planes y respaldos `.orig`, proponer criterios claros de
       vigencia y tratar cada caso únicamente con evidencia y sin tocar cambios
       ajenos. No archivar ni eliminar masivamente por estado o fecha.
-- [ ] 5. Evaluar la conveniencia de un CI de validación de PR mínimo con comandos
+- [x] 5. Evaluar la conveniencia de un CI de validación de PR mínimo con comandos
       existentes y sus dependencias; no publicar ni ejecutar workflows de release.
 - [ ] 6. Validar enlaces y consistencia afectados, sincronización de mirrors,
       autocarga de agentes y pruebas concretas para lo modificado. Revisar diff y
@@ -81,9 +80,16 @@ Este plan propone cambios; no autoriza su ejecución hasta su aprobación.
 
 ## Open Issues
 
-- Confirmar ubicación y alcance reales de la fuente canónica de las skills
-  compartidas antes de proponer cambios que afecten a otros repositorios.
+- La skill de mantenimiento exige editar exclusivamente la fuente compartida
+  `/workspace/.agents/skills/`, que no está disponible en este entorno. El script
+  local usa como fuente la raíz de este repo y su `--check` pasa, pero eso no prueba
+  que sea la fuente canónica compartida. No se editaron mirrors. Falta alinear las
+  skills SDD y de mantenimiento con `AGENTS.md`; hasta entonces las aprobaciones y
+  el descubrimiento descritos en la skill SDD siguen contradiciendo la guía local.
 - Determinar qué planes siguen realmente activos y si los archivos `.orig` tienen
-  una función antes de moverlos o eliminarlos.
-- Precisar si un CI de PR es deseable y viable en este entorno; podría depender de
-  recursos externos. Su inclusión no implica autorización para desplegar o publicar.
+  una función antes de moverlos o eliminarlos. No hay referencias operativas a los
+  `.orig` encontradas, pero eso no demuestra que se puedan borrar.
+- Un CI de PR podría ejecutar pytest y la comprobación de mirrors en un workspace
+  aislado; `contract-drift-check` depende de red y upstream. No se añadió CI: no se
+  verificó la configuración de runner ni checks externos y `uv` no está disponible
+  en esta sesión. No se ejecutaron workflows de publicación.
