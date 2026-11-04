@@ -43,9 +43,9 @@ This skill covers:
 
 **Skills** are procedural: they tell the agent *how to do something* (a workflow to follow). They are loaded when the task matches their description.
 
-**Specs** are behavioral: they tell the agent *what the system must do* (requirements, acceptance criteria, test cases). They are injected into context based on their frontmatter `description` field — the same mechanism used for skills.
+**Specs** are behavioral: they tell the agent *what the system must do* (requirements, acceptance criteria, test cases). A host may inject specs based on their frontmatter `description` field, but local discovery remains available when it does not.
 
-This distinction matters for context loading: the agent does not need to be told which spec files exist. It reads the specs that the host has injected based on their relevance to the current task.
+This distinction matters for context loading: hosts may inject relevant specs, but agents must also be able to discover them from the repository when injection is unavailable.
 
 ---
 
@@ -98,9 +98,9 @@ All components and documentation live in a single repository. Specs live at `.ag
 
 ### Spec discovery
 
-Spec files are discovered via their frontmatter `description` field — not enumerated in `agents.md`. Listing individual spec files in `agents.md` is a DRY violation: the description already exists in the file's own frontmatter.
+Use frontmatter `description` to identify relevant spec files; do not maintain a duplicate per-file index in `agents.md`. Host injection is optional, not a prerequisite. If specs are not injected, follow the repository's `AGENTS.md` (or `agents.md`) spec location and search User Stories' frontmatter descriptions. If no location is declared, inspect the conventional `.agents/specs/` directory. Load `SYSTEM.md` for cross-system work and follow project guidance on whether it applies to other tasks.
 
-The mechanism that makes spec files available to the agent is declared in the project's `agents.md`. VS Code workspace injection is the primary mechanism, but symlinks, MCP, URLs, and global paths are all valid alternatives.
+Project guidance declares the spec location and any additional availability mechanisms, such as workspace injection, symlinks, MCP, URLs, or global paths. Use local files when available; injection does not replace checking the declared source when context is incomplete.
 
 **Critical:** User Story files (`US-<NNN>.md`) live at the **root of `specs/`**, not in any subdirectory.
 
@@ -134,7 +134,7 @@ SYSTEM.md contains **only** constraints that apply to the entire system regardle
 | Use Case descriptions or AC | `US-<NNN>.md` |
 | References to specific US IDs in architecture descriptions | Remove — keep component descriptions generic |
 
-When auditing SYSTEM.md, flag and move any content that violates these rules **before** proceeding with any other task.
+When auditing SYSTEM.md, flag content that appears outside these scope rules. If the document is `draft`, treat its proposed choices as unapproved; preserve established safety constraints and avoid unrelated restructuring outside the requested task.
 
 ## Traceability Schema
 
@@ -179,10 +179,13 @@ convention, and is not derived from any upstream document.
 - `dirty` → an upstream change invalidated this document; needs re-review.
 - `deprecated` → no longer applicable.
 
-When a change to UC/AC sections affects the FR/NFR or TC sections within the same
-document (or in other US documents due to cross-feature impact), mark the affected
-documents as `dirty`. Do not modify content automatically — present the impact to the
-user first.
+When a change to UC/AC affects FR/NFR or TC sections in the same or dependent
+documents, reconcile those artifacts and mark dependent documents `dirty` when their
+approved behavior needs review. A `dirty` document is not wholly invalid: use clearly
+unaffected approved sections, but do not treat changed or dependent sections as approved.
+An explicit user request authorizes clearly specified behavior and coherent mechanical
+derivations (including traceable FR/NFR and tests); do not add separate approval gates
+for each artifact. Surface the changes and unresolved points.
 
 ---
 
@@ -201,8 +204,9 @@ filling in project-specific values. The template marks each section with its int
 
 Strip all template comments (`<!-- ... -->`) from the generated file.
 
-**STOP. Write `agents.md` to disk and point the user to the file for review. Do not
-proceed until the user approves it.**
+Write `agents.md` and continue with the requested setup. Ask for clarification only when
+an important project-specific decision is unresolved; otherwise record assumptions and
+open questions and present the result for review without blocking routine work.
 
 ### Step 2 — Create SYSTEM.md
 
@@ -216,8 +220,11 @@ Apply the **SYSTEM.md Scope Rules** section strictly:
 - Do not reference specific US IDs in architecture descriptions — keep component responsibilities generic.
 - If a constraint applies only to a specific feature, it belongs in that feature's US, not here.
 
-**STOP. Write `SYSTEM.md` to disk and point the user to the file for review. Do not
-proceed until the user approves it.**
+Write `SYSTEM.md` and continue with the requested setup. A `draft` SYSTEM.md is not
+blanket approval: preserve established safety constraints, use clearly unaffected
+approved material where present, and treat draft proposals as non-binding. Flag material
+conflicts or consequential unresolved system decisions rather than silently adopting
+them.
 
 ### Step 3 — Create User Stories
 
@@ -241,8 +248,9 @@ Be inquisitive during this step:
 Write the US + UC/AC content (including `## Assumptions` and `## Open Questions`) into
 `US-<NNN>.md` as you go. Do not hold this content in the chat.
 
-**STOP. Point the user to the `US-<NNN>.md` file for review. Do not proceed to FR/NFR
-until the user approves the UC/AC definitions.**
+Continue to derive FR/NFR and tests when the request clearly authorizes the behavior.
+Ask only about consequential unresolved behavior; mark unconfirmed premises `[ASSUMPTION]`
+and list unresolved points under `## Open Questions`.
 
 #### 3b. Derive FR/NFR
 
@@ -261,8 +269,9 @@ Be inquisitive:
 Write the FR/NFR sections directly into the existing `US-<NNN>.md`. Append new
 assumptions and open questions to the same file's existing sections.
 
-**STOP. Point the user to the updated `US-<NNN>.md` for review. Do not proceed to TC
-until the user approves.**
+Continue to derive test cases when the request clearly authorizes the behavior. Present
+the reconciled specification for review; do not require a separate approval round for
+each derived section.
 
 #### 3c. Derive Test Cases
 
@@ -276,7 +285,8 @@ For each FR, write test cases in Gherkin format:
 
 Write the TC section directly into the existing `US-<NNN>.md`.
 
-**STOP. Point the user to the updated `US-<NNN>.md` for final approval.**
+Present the complete specification for review, with assumptions and open questions
+visible. Request a decision only for consequential unresolved choices.
 
 ---
 
@@ -288,12 +298,11 @@ Write the TC section directly into the existing `US-<NNN>.md`.
 2. Analyze impact: identify which FR/NFR/TC sections are affected (in this document and
    any other US documents with cross-feature dependencies).
 3. Generate an impact report listing all affected sections and documents.
-4. **STOP. Present the impact report. Wait for user approval before modifying anything.**
-5. Update FR/NFR sections to reflect the new UC/AC.
-6. **STOP. Present updated FR/NFR. Wait for approval.**
-7. Update TC section.
-8. **STOP. Present updated TC. Wait for approval.**
-9. Mark any other affected US documents as `dirty`.
+4. If the request clearly authorizes the behavior, update affected FR/NFR/TC and mark
+   dependent specs `dirty` where their approved behavior needs review. Otherwise present
+   the impact and ask only about the unresolved consequential decision.
+5. Present impact and reconciled artifacts together, preserving traceability; do not
+   require separate approvals for each artifact.
 
 ### B. Code-driven change (bug or production observation)
 
@@ -302,9 +311,10 @@ Write the TC section directly into the existing `US-<NNN>.md`.
 3. If the approved spec unambiguously defines the expected behavior, it is an
    **implementation defect**: correct the code directly, validate the affected tests and
    leave the spec unchanged. This does not require a task plan merely because it is a bug.
-4. If the spec is wrong, incomplete or ambiguous, it is a **spec defect**: generate the
-   impact report and **STOP** for the user to decide the intended behavior. After approval,
-   update the affected UC/AC/FR/TC, mark dependent specs `dirty` and re-approve them.
+4. If the spec is wrong, incomplete or ambiguous, it is a **spec defect**: when the user
+   clearly specified intended behavior, reconcile UC/AC/FR/TC and mark dependent specs
+   `dirty` as appropriate. Otherwise ask the user to decide the unresolved behavior before
+   making that consequential choice.
 5. If the diagnosis exposes a contract, security, data, deployment, migration or
    coordination decision, follow `task-planning` before changing either side.
 6. Never close a code-driven change with known divergence: code, tests and the approved
@@ -324,9 +334,10 @@ Use when starting from an existing codebase without spec documentation:
    d. Document all assumptions in `## Assumptions` with `[ASSUMPTION]`.
 4. In the first pass, generate as much documentation as possible. For sections where
    code/documentation is insufficient, add a placeholder marked `[PENDING: reason]`.
-5. **STOP. Present all generated documentation to the user for validation.** The user
-   decides which inferred items are correct, which need correction, and which sections
-   marked `[PENDING]` should be filled, removed, or deferred.
+5. Present the inferred documentation, assumptions, and `[PENDING]` sections for review.
+   Do not represent inferred behavior as confirmed. Ask the user only to resolve
+   consequential unknowns needed to proceed; do not block coherent documentation work
+   merely to obtain per-artifact approval.
 
 Do not remove any section unless the user explicitly says to.
 
@@ -334,11 +345,19 @@ Do not remove any section unless the user explicitly says to.
 
 ## Context Loading Rules
 
-Specs are discovered and surfaced via their frontmatter `description` field — the agent does not enumerate spec files manually or maintain a list in `agents.md`.
+Use frontmatter descriptions to select relevant specs. If the host has not injected them,
+discover files locally using the spec location in `AGENTS.md`/`agents.md` (normally
+`.agents/specs/`) and inspect their descriptions; do not assume injection or maintain a
+duplicate file index.
 
-**Always load first:** `agents.md` (defines project topology and spec discovery mechanism), then `SYSTEM.md` (global constraints that apply to every task).
+**Load first:** `AGENTS.md`/`agents.md` for project topology, spec location, and constraints.
+Consult `SYSTEM.md` as directed by project guidance, especially for cross-system work.
+If it is `draft`, established safety constraints remain applicable, but draft choices
+are not blanket-approved requirements.
 
-**Spec context:** Read the spec files the host has injected as relevant to the current task. Relevance is determined by matching the task against spec frontmatter `description` fields. Do not load specs that are not relevant to the current task.
+**Spec context:** Read injected relevant specs, or discover them locally when not injected.
+Relevance is determined by matching the task against frontmatter descriptions. Do not load
+unrelated specs.
 
 **On demand:** `references/` files (build, deploy, troubleshooting) — load only when the task explicitly requires operational knowledge.
 
@@ -354,13 +373,15 @@ The following rules are specific to the spec-as-source workflow.
 
 ### Challenge changes against approved specs
 
-When the user requests a change that contradicts a spec in state `ready`, do not apply
-it silently. Flag the conflict and route it through the appropriate Change Workflow
-(A or B). Silent edits to approved specs are forbidden.
+When the user explicitly requests behavior that contradicts a `ready` spec, that request
+authorizes the clearly specified change: reconcile the spec and implementation as
+appropriate, preserve traceability, and mark dependent specs `dirty` when review is needed.
+Do not make unrelated or ambiguous changes silently; ask when intended behavior is
+unclear or a consequential decision remains unresolved.
 
-### Self-review before every STOP gate
+### Self-review before presenting work
 
-Before presenting any artifact to the user at a STOP gate, audit your own output:
+Before presenting generated or reconciled artifacts, audit your own output:
 - Are there ambiguities, missing edge cases, or implicit business rules?
 - Does the UC have at least one AC? Every AC at least one FR? Every FR at least one TC? Are those sufficient for a verifiable specification?
 - Are all IDs unique and following the traceability schema?
@@ -377,11 +398,10 @@ explicitly authorizes it.
 ### Ask only when the cost of assuming is high
 
 Do not interrupt the flow for trivial details. For reversible decisions, proceed and
-mark `[ASSUMPTION]`. Stop and ask the user when:
-- The decision affects architecture or `SYSTEM.md`.
-- It introduces or removes an FR/NFR.
-- It would mark another spec as `dirty`.
-- The action is hard to reverse.
+mark `[ASSUMPTION]`. Stop and ask when a consequential decision remains unresolved,
+such as ambiguous architecture/system behavior, an unclear business rule, significant
+risk, or a hard-to-reverse action. A clearly specified request authorizes coherent
+FR/NFR/test derivations and marking dependent specs `dirty`; these alone are not gates.
 
 ### Make traceability reasoning explicit
 
@@ -529,17 +549,14 @@ Requirements" and "Gherkin Guide for Test Cases" sections above).
 ## Checklist
 
 ### Initialization
-- [ ] Create `agents.md` from `assets/agents.md.template.md` — **STOP, get approval**
-- [ ] Create `SYSTEM.md` from `assets/system.md.template.md` — **STOP, get approval**
-- [ ] For each feature: define US + UC/AC — **STOP, get approval**
-- [ ] Derive FR/NFR from approved UC/AC — **STOP, get approval**
-- [ ] Derive TC from approved FR — **STOP, get final approval**
+- [ ] Create `agents.md` and `SYSTEM.md` from their templates; distinguish established constraints from draft proposals
+- [ ] For each feature, define US + UC/AC and derive coherent FR/NFR/TC with traceability
+- [ ] Ask only about consequential unresolved decisions; record assumptions and open questions
 
 ### Change
 - [ ] Identify whether change is business-driven (A) or code-driven (B)
-- [ ] Generate impact report listing affected sections and documents
-- [ ] **STOP — present impact report, wait for user decision**
-- [ ] Apply approved changes; mark all other affected documents as `dirty`
+- [ ] Identify affected sections/documents; reconcile clearly authorized behavior and derived artifacts
+- [ ] Ask only for unresolved consequential decisions; mark dependent specs `dirty` when review is needed
 
 ### Every artifact
 - [ ] All IDs unique and following traceability schema

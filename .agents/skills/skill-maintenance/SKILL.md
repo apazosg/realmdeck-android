@@ -48,12 +48,17 @@ belongs in exactly one place.
 
 ## Shared Skill Mirrors
 
-`/workspace/.agents/skills/` is the only editable source for shared skills. Every
-directory with `.agents/specs/SYSTEM.md` must contain an exact, standalone mirror at
-`.agents/skills/`; it is not a place for repository-specific instructions.
+The editable source is `.agents/skills/` at the workspace/repository root calculated by
+`.agents/scripts/sync-shared-skills.sh` (the directory two levels above that script),
+not a hard-coded `/workspace` path. Directories beneath that root containing
+`.agents/specs/SYSTEM.md` are mirror targets; each mirror must be exact and standalone,
+not a place for repository-specific instructions.
 
 - Before and after changing a shared skill, run `.agents/scripts/sync-shared-skills.sh --check`.
-- After changing the source, run `.agents/scripts/sync-shared-skills.sh --write`, then `--check`.
+- Edit only the source under the authorized workspace/repository. Run `--write` only
+  when all targets it can update are within the task's authorized scope; otherwise do
+  not write across repositories and report the boundary conflict.
+- After an authorized `--write`, run `--check` again.
 - A mirror with an unexpected local skill is a finding: the script must fail rather than delete it.
 
 ---
@@ -64,7 +69,7 @@ When the same subject appears in multiple files, the higher priority wins.
 
 | Priority | Location |
 |---|---|
-| 1 (highest) | `/workspace/.agents/skills/{name}/SKILL.md` — canonical implementation guide; repository copies are exact mirrors |
+| 1 (highest) | `<script workspace root>/.agents/skills/{name}/SKILL.md` — canonical implementation guide; repository copies are exact mirrors |
 | 2 | `agents.md` — global rules and routing |
 | 3 | `.agents/references/*.md` — operational details with no owning skill |
 
@@ -92,8 +97,10 @@ file. Move any unique information into the skill first, then delete.
 ### Phase B — Reconcile
 
 1. Re-read the plan from disk.
-2. If the plan changes a shared skill, edit only `/workspace/.agents/skills/`, then run
-   `.agents/scripts/sync-shared-skills.sh --write` followed by `--check`.
+2. If the plan changes a shared skill, edit only the source `.agents/skills/` beneath
+   the workspace/repository root calculated by the sync script. Before `--write`, verify
+   every discovered mirror target is within authorized scope; if not, do not write across
+   repositories and report the conflict. Run `--check` before and after the change.
 3. Execute in plan order. Check each item off after completion.
 4. If execution reveals new information affecting other items, **STOP**, add to
    `## Open Issues`, and surface to the user.
