@@ -1,7 +1,13 @@
-# Current status
+# Status snapshot — 2026-10-25
 
-The current experimental preview is [C146](releases/c146-0.2.122.md), version code
-146 / `0.2.122-performance-preview`. Its source/build/payload audit passed; a
+This is a dated C146 evidence snapshot, not a live inventory or a claim that C146
+is the latest build. Later dated device and development records are preserved in
+the [historical evidence archive](launcher-app-status.md) and linked reports; they
+do not automatically establish a replacement release or general product status.
+
+The experimental preview documented in this snapshot is
+[C146](releases/c146-0.2.122.md), version code 146 /
+`0.2.122-performance-preview`. Its source/build/payload audit passed; a
 same-certificate replacement preserved the three owned progress fingerprints,
 and a MAIN/LAUNCHER start from the ordinary launcher UID was observed on one phone.
 There is no general performance guarantee or full-client/gameplay acceptance.
@@ -11,7 +17,7 @@ Download engineering on `perf/download-bottlenecks` is documented separately in
 the [performance investigation](download-performance-investigation.md). That
 historical measurements do not constitute a speed guarantee for this preview.
 
-## Previous C142 evidence snapshot (2026-10-23)
+## Earlier C142 evidence snapshot (2026-10-23)
 
 RealmDeck Android is an experimental Android
 ARM64 launcher project, not a general release. The previous public preview was

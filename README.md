@@ -16,7 +16,8 @@ the Android package ID are unchanged.
 
 ## Current status
 
-Evidence snapshot: **2026-10-25**. The experimental launcher is C146,
+Evidence snapshot: **2026-10-25** (historical, not a live/latest-build claim). The
+experimental launcher documented in that snapshot is C146,
 version `0.2.122-performance-preview` (version code 146). The earlier C141 first-login
 report does not establish gameplay acceptance for this build.
 

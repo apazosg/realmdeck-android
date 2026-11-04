@@ -1,15 +1,17 @@
 # Documentation index
 
-This index separates current English product guidance from the dated research
-archive. Historical reports retain their original language, evidence, limitations,
-and context; links below do not imply that every archived result is current.
+This index separates product guidance from the dated research archive. Historical
+reports retain their original language, evidence, limitations, and context; links
+below do not imply that every archived result is current or the latest project state.
 
 ## Current product guidance
 
-- [Current status](current-status.md): C142 preview, most recent device evidence,
-  and limits on installation, updates, and source completeness.
-- [C142 release notes](releases/c142-0.2.118.md): user-facing announcement and
-  links to the release assets.
+- [Status snapshot (2026-10-25)](current-status.md): C146 build and one-device
+  launcher-entry evidence, with limits on installation and source completeness.
+  Later dated device/development records are linked in the archive; this snapshot
+  does not establish the latest build or device state.
+- [C146 release notes](releases/c146-0.2.122.md): announcement for the dated
+  snapshot; [C142 release notes](releases/c142-0.2.118.md) describe an earlier build.
 - [Releasing](releasing.md) and the [release-notes template](release-notes-template.md):
   version/tag/asset consistency and publication guidance.
 - [Historical launcher status archive](launcher-app-status.md): dated technical
