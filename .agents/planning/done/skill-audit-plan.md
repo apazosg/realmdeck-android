@@ -1,6 +1,6 @@
 ---
 id: skill-audit-2026-11-04
-state: in-progress
+state: done
 date: 2026-11-04
 ---
 
@@ -8,7 +8,8 @@ date: 2026-11-04
 
 Revisar la organización del repositorio y el desarrollo con agentes, manteniendo
 especificaciones útiles pero reduciendo las aprobaciones y la documentación repetitiva.
-Plan aprobado por el usuario; ejecución en curso.
+Plan aprobado y ejecutado para este repositorio. El usuario aclaró que la fuente
+externa de skills no condiciona los cambios locales.
 
 ## Content
 
@@ -63,7 +64,7 @@ Plan aprobado por el usuario; ejecución en curso.
 
 - [x] 1. Auditar instrucciones, skills, specs y puntos de entrada; identificar
       problemas de autocarga y determinar el mecanismo local de sincronización.
-- [ ] 2. Diseñar y aplicar un flujo SDD proporcional: alcance de las specs,
+- [x] 2. Diseñar y aplicar un flujo SDD proporcional: alcance de las specs,
       descubrimiento, autorización, reconciliación y trazabilidad adecuada al riesgo;
       contemplar secciones aprobadas en documentos `dirty` y el `SYSTEM.md` en
       borrador; alinear instrucciones locales y compartidas sin divergencias.
@@ -74,18 +75,15 @@ Plan aprobado por el usuario; ejecución en curso.
       ajenos. No archivar ni eliminar masivamente por estado o fecha.
 - [x] 5. Evaluar la conveniencia de un CI de validación de PR mínimo con comandos
       existentes y sus dependencias; no publicar ni ejecutar workflows de release.
-- [ ] 6. Validar enlaces y consistencia afectados, sincronización de mirrors,
+- [x] 6. Validar enlaces y consistencia afectados, sincronización de mirrors,
       autocarga de agentes y pruebas concretas para lo modificado. Revisar diff y
       estado, y realizar commits atómicos según las reglas del repositorio.
 
 ## Open Issues
 
-- La skill de mantenimiento exige editar exclusivamente la fuente compartida
-  `/workspace/.agents/skills/`, que no está disponible en este entorno. El script
-  local usa como fuente la raíz de este repo y su `--check` pasa, pero eso no prueba
-  que sea la fuente canónica compartida. No se editaron mirrors. Falta alinear las
-  skills SDD y de mantenimiento con `AGENTS.md`; hasta entonces las aprobaciones y
-  el descubrimiento descritos en la skill SDD siguen contradiciendo la guía local.
+- El usuario confirmó que el alcance es exclusivamente este repositorio. Se alinearon
+  las skills locales SDD y de mantenimiento con `AGENTS.md` y con la ruta fuente
+  calculada por el script local; no se modificaron otros repositorios.
 - Determinar qué planes siguen realmente activos y si los archivos `.orig` tienen
   una función antes de moverlos o eliminarlos. No hay referencias operativas a los
   `.orig` encontradas, pero eso no demuestra que se puedan borrar.
