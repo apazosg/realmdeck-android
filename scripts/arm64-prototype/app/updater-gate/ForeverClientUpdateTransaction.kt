@@ -245,6 +245,37 @@ class ForeverClientUpdateTransaction(
         Files.newDirectoryStream(support).use { children -> return children.iterator().hasNext() }
     }
 
+    /** Read-only private-journal probe for the narrowly scoped absent-client recovery path. */
+    internal fun hasPrivateJournalState(): Boolean {
+        rejectSymlinkComponents(journalDir)
+        if (!Files.isDirectory(journalDir, LinkOption.NOFOLLOW_LINKS)) {
+            throw IllegalStateException("private transaction journal directory is not a regular directory")
+        }
+        var pending = false
+        Files.newDirectoryStream(journalDir).use { children ->
+            for (path in children) {
+                when (path.fileName.toString()) {
+                    JOURNAL_NAME -> {
+                        rejectSymlinkComponents(path)
+                        requireRegularFile(path, "transaction journal")
+                        pending = true
+                    }
+                    JOURNAL_TEMP_NAME -> {
+                        rejectSymlinkComponents(path)
+                        requireRegularFile(path, "transaction journal temporary")
+                        pending = true
+                    }
+                    LOCK_NAME -> {
+                        rejectSymlinkComponents(path)
+                        requireRegularFile(path, "transaction journal lock")
+                    }
+                    else -> throw IllegalStateException("unrecognized private transaction journal state")
+                }
+            }
+        }
+        return pending
+    }
+
     /** Validate and freeze the exact operation list. This method does not mutate the client. */
     fun plan(
         files: List<InputFile>,

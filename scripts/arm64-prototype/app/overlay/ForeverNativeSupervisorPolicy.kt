@@ -17,7 +17,7 @@ import org.json.JSONObject
 
 /** Frozen policy for the native-only supervisor laboratory process. */
 object ForeverNativeSupervisorPolicy {
-    const val PACKAGE = "com.wowforever.arm64probe"
+    const val PACKAGE = "com.pelele.wowforever"
     const val LINKER = "/system/bin/linker64"
     const val SUPERVISOR_NAME = "libforever_run_supervisor.so"
     const val FIXTURE_NAME = "libforever_run_fixture.so"

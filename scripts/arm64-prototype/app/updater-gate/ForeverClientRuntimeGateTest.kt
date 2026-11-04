@@ -9,7 +9,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ForeverClientRuntimeGateTest {
-    private val packageName = "app.gamenative"
+    private val packageName = "com.pelele.wowforever"
     private val uid = 10123
     private val bootId = "12345678-abcd-4321-abcd-123456789abc"
 
@@ -34,7 +34,7 @@ class ForeverClientRuntimeGateTest {
 
     @Test
     fun androidHostCommSuffixStillRequiresExactPackageArgvAndSystemJavaExecutable() {
-        val name = "com.wowforever.arm64probe"
+        val name = "$packageName:arm64probe"
         val host = ProcRow(101, uid, name.takeLast(15), "/system/bin/app_process64", name, 1001)
         fun observe(row: ProcRow) = ForeverClientRuntimeObserver(uid, name, emptyList(), FakeProc(listOf(row))).observe()
         assertEquals(RuntimeObservation.Quiescent, observe(host))

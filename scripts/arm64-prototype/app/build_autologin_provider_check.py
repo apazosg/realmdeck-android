@@ -44,8 +44,8 @@ INSTRUMENTATION_SOURCE = REPO / (
 INSTRUMENTATION_MANIFEST = REPO / "scripts/arm64-prototype/app/instrumentation/AndroidManifest.xml"
 DEFAULT_OUTPUT = EXTERNAL_ROOT / "provider-check-build"
 
-TEST_PACKAGE = "com.wowforever.arm64probe.providercheck"
-TARGET_PACKAGE = "com.wowforever.arm64probe"
+TEST_PACKAGE = "com.pelele.wowforever.providercheck"
+TARGET_PACKAGE = "com.pelele.wowforever"
 RUNNER = "app.gamenative.ForeverFunctionalAutologinProviderInstrumentation"
 CERTIFICATE_SHA256 = "2b082e8200e066e665f73e71f547f827d6674634298024cb0b823be22adb242b"
 

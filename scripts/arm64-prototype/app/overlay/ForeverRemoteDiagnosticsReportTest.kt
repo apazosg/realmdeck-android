@@ -24,7 +24,7 @@ class ForeverRemoteDiagnosticsReportTest {
     }
     private fun baseConfig() = ForeverRemoteDiagnosticsReport.Config(
         device = mapOf("manufacturer" to "Xiaomi", "model" to "xaga", "mystery" to "dropped"),
-        app = mapOf("packageName" to "com.wowforever.arm64probe", "versionName" to "0.2.93-test", "versionCode" to "117"),
+        app = mapOf("packageName" to "com.pelele.wowforever", "versionName" to "0.2.93-test", "versionCode" to "117"),
         client = mapOf("build" to "1.60.1.70450", "architecture" to "arm64", "locale" to "enUS", "status" to "incomplete"),
         requested = mapOf("profileId" to "classic_forever", "resolution" to "1280x720"),
         observed = mapOf("profileId" to null, "gpuBackend" to null),

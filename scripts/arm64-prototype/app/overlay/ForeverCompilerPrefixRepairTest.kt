@@ -382,12 +382,12 @@ class ForeverCompilerPrefixRepairTest {
 
     @Test
     fun androidDataRootSpellingDoesNotBroadenTheOwnedPrefixBoundary() {
-        val owner = File("/data/user/0/com.wowforever.arm64probe/files")
+        val owner = File("/data/user/0/com.pelele.wowforever/files")
         val relative = "imagefs/home/xuser/.wine"
         assertEquals("${owner.path}/$relative", ForeverCompilerPrefixRepair.normalizedOwnedAppAlias(owner,
-            File("/data/data/com.wowforever.arm64probe/files/$relative")))
-        listOf("/data/data/com.other.app/files/$relative", "/data/user/10/com.wowforever.arm64probe/files/$relative",
-            "/data/data/com.wowforever.arm64probe/files-other/$relative").forEach { path ->
+            File("/data/data/com.pelele.wowforever/files/$relative")))
+        listOf("/data/data/com.other.app/files/$relative", "/data/user/10/com.pelele.wowforever/files/$relative",
+            "/data/data/com.pelele.wowforever/files-other/$relative").forEach { path ->
             assertEquals(path, ForeverCompilerPrefixRepair.normalizedOwnedAppAlias(owner, File(path)))
         }
     }

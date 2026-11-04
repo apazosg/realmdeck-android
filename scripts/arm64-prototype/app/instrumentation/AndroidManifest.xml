@@ -2,6 +2,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <instrumentation
         android:name="app.gamenative.ForeverFunctionalAutologinProviderInstrumentation"
-        android:targetPackage="com.wowforever.arm64probe"
+        android:targetPackage="com.pelele.wowforever"
         android:functionalTest="true" />
 </manifest>

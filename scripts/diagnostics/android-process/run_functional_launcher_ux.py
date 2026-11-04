@@ -29,7 +29,7 @@ import xml.etree.ElementTree as ET
 ADB = "/home/adrian/android-sdk/platform-tools/adb"
 SERIAL_ENV_VAR = "WOWFOREVER_ADB_SERIAL"
 SERIAL = os.environ.get(SERIAL_ENV_VAR, "")
-PACKAGE = "com.wowforever.arm64probe"
+PACKAGE = "com.pelele.wowforever"
 UID = 10330
 ACTIVITY = "app.gamenative.ForeverFunctionalPocActivity"
 COMPONENT = f"{PACKAGE}/{ACTIVITY}"
@@ -45,7 +45,7 @@ UI_COMMAND_SECONDS = 10.0
 MAX_SCREENSHOT_BYTES = 8 * 1024 * 1024
 MAX_CONFIG_BYTES = 256 * 1024
 MAX_LOG_BYTES = 64 * 1024
-GAME_ROOT = "/storage/emulated/0/Android/data/com.wowforever.arm64probe/CustomGames/WoW Forever"
+GAME_ROOT = "/storage/emulated/0/Android/data/com.pelele.wowforever/CustomGames/WoW Forever"
 ORIGINAL_CONFIG = f"{GAME_ROOT}/WTF/BetaSuspendedTest.wtf"
 ORIGINAL_PE = f"{GAME_ROOT}/WowB-ARM64.exe"
 DERIVED_CONFIGS = (

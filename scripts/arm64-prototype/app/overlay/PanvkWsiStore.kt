@@ -684,7 +684,7 @@ class PanvkWsiStore(private val context: Context) {
 
     internal fun icdOwnerMatches(actual: String, requested: String): Boolean {
         if (actual == requested) return true
-        val packageRoots = listOf("/data/data/com.wowforever.arm64probe/", "/data/user/0/com.wowforever.arm64probe/")
+        val packageRoots = listOf("/data/data/com.pelele.wowforever/", "/data/user/0/com.pelele.wowforever/")
         for (root in packageRoots) if (requested.startsWith(root)) {
             return packageRoots.any { actual == it + requested.removePrefix(root) }
         }

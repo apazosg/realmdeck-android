@@ -143,8 +143,14 @@ def _json_changed_paths(before: object, after: object, prefix: str = "") -> set[
 
 
 def test_candidate_build_requires_exact_code62_and_uses_code97() -> None:
-    source = 'android {\n    versionCode = 62\n    versionName = "0.2.38-automated"\n}\n'
+    source = ('android {\n    defaultConfig {\n'
+              '        applicationId = "com.wowforever.arm64probe"\n'
+              '        versionCode = 62\n'
+              '        versionName = "0.2.38-automated"\n'
+              '    }\n}\n')
     result = module.transform_build_62_to_candidate(source)
+    assert 'applicationId = "com.pelele.wowforever"' in result
+    assert "com.wowforever.arm64probe" not in result
     assert f'versionCode = {module.CANDIDATE_VERSION[0]}' in result
     assert f'versionName = "{module.CANDIDATE_VERSION[1]}"' in result
     assert 'buildConfigField("String", "FOREVER_SERVER_PROFILE", "\\"classic_forever\\"")' in result
@@ -153,13 +159,58 @@ def test_candidate_build_requires_exact_code62_and_uses_code97() -> None:
     assert 'testInstrumentationRunner = "app.gamenative.ForeverFunctionalAutologinProviderInstrumentation"' in result
     with pytest.raises(module.ReconstructionError, match="exact code62"):
         module.transform_build_62_to_candidate(source.replace("versionCode = 62", "versionCode = 63"))
+    with pytest.raises(module.ReconstructionError, match="exact code62 applicationId preimage"):
+        module.transform_build_62_to_candidate(source.replace("com.wowforever.arm64probe", "com.example.wrong"))
+
+
+def test_historical_overlay_sources_are_authenticated_from_fixed_git_blobs() -> None:
+    historical = module.authenticated_historical_overlay_sources()
+    assert set(historical) == set(module.HISTORICAL_OVERLAY_BLOBS)
+    for name, data in historical.items():
+        assert module.sha256_bytes(data) == module.HISTORICAL_OVERLAY_BLOBS[name][1]
+        assert module.read_stable_file(module.APP_ROOT / "overlay" / name, f"candidate source {name}") != data
+    assert b'com.wowforever.arm64probe/files' in historical["ForeverCompilerPrefixRepair.kt"]
+
+
+def test_pinned_recipe_runs_from_isolated_historical_overlay_view(tmp_path: Path) -> None:
+    historical = module.authenticated_historical_overlay_sources()
+    recipe_path = module.create_historical_recipe_environment(tmp_path, historical)
+    assert module.sha256_file(recipe_path) == module.sha256_file(module.APPLY_OVERLAY)
+    for name, data in historical.items():
+        assert (recipe_path.parent / "overlay" / name).read_bytes() == data
+        assert module.read_stable_file(module.APP_ROOT / "overlay" / name, f"candidate {name}") != data
+
+
+def test_candidate_overlay_sources_replace_only_authenticated_historical_outputs(tmp_path: Path) -> None:
+    historical = module.authenticated_historical_overlay_sources()
+    candidates = {name: b"candidate overlay bytes: " + name.encode() for name in historical}
+    source = tmp_path / "source"
+    for name, data in historical.items():
+        target = source / module.HISTORICAL_OVERLAY_BLOBS[name][2]
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(data)
+    staged = module.stage_candidate_overlay_sources(source, candidates)
+    assert {item["path"] for item in staged} == {
+        details[2] for details in module.HISTORICAL_OVERLAY_BLOBS.values()
+    }
+    for name, data in candidates.items():
+        target = source / module.HISTORICAL_OVERLAY_BLOBS[name][2]
+        assert target.read_bytes() == data
+    broken = source / module.HISTORICAL_OVERLAY_BLOBS["PanvkWsiStore.kt"][2]
+    broken.write_bytes(b"not the historical recipe output")
+    with pytest.raises(module.ReconstructionError, match="did not stage authenticated historical"):
+        module.stage_candidate_overlay_sources(source, candidates)
 
 
 def test_canonical_source_transforms_include_owned_audio_shutdown(tmp_path: Path) -> None:
     functional = module.load_function(module.APPLY_FUNCTIONAL, "audio_reconstruction_regression")
     source = tmp_path / "source"
     fixtures = {
-        module.BUILD: 'android {\n    versionCode = 62\n    versionName = "0.2.38-automated"\n}\n',
+        module.BUILD: ('android {\n    defaultConfig {\n'
+                       '        applicationId = "com.wowforever.arm64probe"\n'
+                       '        versionCode = 62\n'
+                       '        versionName = "0.2.38-automated"\n'
+                       '    }\n}\n'),
         module.MANIFEST: "synthetic manifest",
         module.XSERVER: "synthetic XServer",
         functional.PULSE_AUDIO: functional.AUDIO_STOP_ORIGINAL,
@@ -181,7 +232,11 @@ def test_canonical_source_transforms_include_owned_audio_shutdown(tmp_path: Path
 
 
 def test_candidate_server_profile_field_is_idempotent_and_validated() -> None:
-    source = 'android {\n    versionCode = 62\n    versionName = "0.2.38-automated"\n}\n'
+    source = ('android {\n    defaultConfig {\n'
+              '        applicationId = "com.wowforever.arm64probe"\n'
+              '        versionCode = 62\n'
+              '        versionName = "0.2.38-automated"\n'
+              '    }\n}\n')
     once = module.transform_build_62_to_candidate(source)
     assert once.count("FOREVER_SERVER_PROFILE") == 1
     # Idempotent on a second pass over the already-migrated text.
@@ -507,7 +562,7 @@ def test_updater_gate_admission_matches_exact_current_kotlin_inventory() -> None
 
 
 def test_candidate_version_and_privacy_hash_pins_match_frozen_recipe_output() -> None:
-    assert module.CANDIDATE_VERSION == (168, "0.2.144-portability-private-guard-test")
+    assert module.CANDIDATE_VERSION == (220, "0.2.196-preview")
     assert module.C138_DISPOSITION_SHA256 == "c198e20f582b90e5bc691e3e4712e8b2b1ecf33434bf1f86232c30be7fab2ac6"
     assert module.C138_RECIPE_SHA256 == "f3deeab1112963bfa1b805f1fec465375f64801696cbe918c365855755e29127"
     assert module.C138_PROVENANCE_SHA256 == "5254e4a33471f7c9600140a7c5f0ab6e6f90be493c85d1824b386b6723acda35"
@@ -526,9 +581,9 @@ def test_candidate_version_and_privacy_hash_pins_match_frozen_recipe_output() ->
     assert module.PINNED_CODE64_AUDIT_SHA256 == "325fcad6cb9cc5898628c04568f82636cd59aa129f0fc726ffdddcea17b4e0e8"
     assert module.PINNED_CODE64_NATIVE_SIDECAR_SHA256 == "7318ed2b4f7b14d1fe1d1cd520a7a597c1d938c4cb66b02a403218b7a7f8e6af"
     assert module.PINNED_CODE64_NATIVE_SHA256 == "ec8573de09cddc6f28606a6b361e675a74432d0c3349a4daef0eb4cfe72189b1"
-    assert module.PINNED_CANDIDATE_NATIVE_SHA256 == "8cc7f494b87ae2a53865a39c48c5969dd049ac3fd328d7c87b00e1a70b95baab"
+    assert module.PINNED_CANDIDATE_NATIVE_SHA256 == "a1084ecd8e76095d9140123ed4b6033e5bd9adc77109dd4d098968f43fdea2cb"
     assert module.PINNED_CANDIDATE_NATIVE_BYTES == 1005720
-    assert module.PINNED_CANDIDATE_NATIVE_SIDECAR_SHA256 == "c621c137022e735bbe6d96429b6c7c1f25a4ee50aa5df1d9a2ad5dd1fafe56d1"
+    assert module.PINNED_CANDIDATE_NATIVE_SIDECAR_SHA256 == "d36b8a150ff5d40cd5131abdbd10ab06d163ba66311a19d478ac7bb9ce06e8ab"
     assert module.CANDIDATE_NATIVE_ORIGIN == "candidate-native-c141-eligible-scan"
 
 
@@ -696,8 +751,9 @@ def test_c138_enables_reviewed_assisted_sender_and_marks_capture_check_pending()
     assert "private const val ASSISTED_ENTRY_ENABLED = true" in activity
     marker = module.candidate_marker({}, [], False, {}, {}, {})
     metadata = json.loads(marker)
-    assert metadata["versionCode"] == 168
-    assert metadata["versionName"] == "0.2.144-portability-private-guard-test"
+    assert metadata["package"] == "com.pelele.wowforever"
+    assert metadata["versionCode"] == module.CANDIDATE_VERSION[0]
+    assert metadata["versionName"] == module.CANDIDATE_VERSION[1]
     assert metadata["assistedEntrySecurityGate"] == {
         "status": "ENABLED_PHYSICAL_CAPTURE_VERIFICATION_PENDING",
         "enabled": True,

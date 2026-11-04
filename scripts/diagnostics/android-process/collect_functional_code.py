@@ -20,7 +20,7 @@ import subprocess
 import uuid
 
 
-PACKAGE = "com.wowforever.arm64probe"
+PACKAGE = "com.pelele.wowforever"
 REMOTE_ROOT = "files/functional-poc/captures"
 SOURCE_SIZE = 94_286_544
 SOURCE_SHA256 = "d0dd56226b077466aee75d522ea87232f81f0e03bfa9add374d62c6b45fc1f59"

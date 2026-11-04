@@ -32,7 +32,7 @@ object ForeverPanvkWine {
     const val EXPECTED_WRAPPER_SHA256 = "b598a54166790a6fc071f08495f141f92dc192f1eb339e029bfc7a303c7486ce"
     const val EXPECTED_WRAPPER_SIZE = 19_021_832L
 
-    private const val FIXED_PACKAGE = "com.wowforever.arm64probe"
+    private const val FIXED_PACKAGE = "com.pelele.wowforever"
     private const val RUN_ROOT = "forever/controls/panvk-wine"
     private const val HASH_BUFFER_BYTES = 64 * 1024
     private const val MAX_STREAM_BYTES = APPROVED_SIZE + 1L

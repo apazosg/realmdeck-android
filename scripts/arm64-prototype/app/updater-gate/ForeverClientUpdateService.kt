@@ -567,6 +567,13 @@ class ForeverClientUpdateService private constructor(
         return withStorageIo({ false }) { target ->
             val catalog = catalog()
             val destination = recoveryDestination(target)
+            if (initialReason == "update_recovery_required" &&
+                Files.notExists(target.root.toPath(), LinkOption.NOFOLLOW_LINKS)) {
+                runtimeGate.operations.recoverUpdate(storage.operationStorageId(target)) {
+                    !updater(catalog, includeConfigAssets = false).canRecoverMissingRoot(destination)
+                }
+                return@withStorageIo ForeverClientUpdater.RecoveryStatus(ForeverClientRecoveryResult.CLEAN, false)
+            }
             val status = updater(catalog, includeConfigAssets = false).recover(destination, progress)
             // A transaction journal can recover cleanly while the frozen operation
             // record still says UPDATING; the gate only clears through this

@@ -99,15 +99,15 @@ PINNED_CODE64_NATIVE_SHA256 = "ec8573de09cddc6f28606a6b361e675a74432d0c3349a4dae
 # retagged as this candidate. Only this exact sidecar/SO pair is admitted.
 CANDIDATE_NATIVE_SO = Path(
     "/home/adrian/wowforever-artifacts/arm64-prototype/"
-    "functional-capture-build.wIYy6T/libforever_patcher_jni.so"
+    "functional-capture-build.0yotOQ/libforever_patcher_jni.so"
 )
 CANDIDATE_NATIVE_SIDECAR = Path(
     "/home/adrian/wowforever-artifacts/arm64-prototype/"
-    "functional-capture-build.wIYy6T/provenance.json"
+    "functional-capture-build.0yotOQ/provenance.json"
 )
-PINNED_CANDIDATE_NATIVE_SHA256 = "8cc7f494b87ae2a53865a39c48c5969dd049ac3fd328d7c87b00e1a70b95baab"
+PINNED_CANDIDATE_NATIVE_SHA256 = "a1084ecd8e76095d9140123ed4b6033e5bd9adc77109dd4d098968f43fdea2cb"
 PINNED_CANDIDATE_NATIVE_BYTES = 1005720
-PINNED_CANDIDATE_NATIVE_SIDECAR_SHA256 = "c621c137022e735bbe6d96429b6c7c1f25a4ee50aa5df1d9a2ad5dd1fafe56d1"
+PINNED_CANDIDATE_NATIVE_SIDECAR_SHA256 = "d36b8a150ff5d40cd5131abdbd10ab06d163ba66311a19d478ac7bb9ce06e8ab"
 CANDIDATE_NATIVE_ORIGIN = "candidate-native-c141-eligible-scan"
 PINNED_HISTORICAL_CONTROLLER_SHA256 = "45f80f52a1c840cde21cfff45643532af22787dc9025ec030ba4dfb352aded68"
 PINNED_NEW_CONTROLLER_SHA256 = "5fc316198efb6c04d3b2ab95de5f6cfb8f884827d60fb9d06d291e3a17edf16c"
@@ -140,7 +140,66 @@ BRIDGE_TARGET = Path("app/src/main/java/com/wowforever/launcher/ForeverPatchBrid
 CODE64_NATIVE_MEMBER = "lib/arm64-v8a/libforever_patcher_jni.so"
 FUNCTIONAL_MARKER_MEMBER = "assets/forever/functional-poc/provenance.json"
 SOURCE_VERSION = (62, "0.2.38-automated")
-CANDIDATE_VERSION = (219, "0.2.195-preview")
+CANDIDATE_VERSION = (220, "0.2.196-preview")
+SOURCE_APPLICATION_ID = "com.wowforever.arm64probe"
+CANDIDATE_APPLICATION_ID = "com.pelele.wowforever"
+# Historical overlay preimages are fetched by fixed Git object IDs (never HEAD)
+# and independently authenticated against the unchanged code59 baseline SHA-256.
+HISTORICAL_OVERLAY_BLOBS = {
+    "ForeverCompilerPrefixRepair.kt": (
+        "6f040734c9eb50033b6d52ea11be71ce642953a6",
+        "ef70f74e78cbe4e41477b28a88e0b8842c196b5f7ed19ab02ee67cec6fcb868f",
+        "app/src/main/java/app/gamenative/ForeverCompilerPrefixRepair.kt",
+    ),
+    "ForeverCompilerPrefixRepairTest.kt": (
+        "165b24045f89f6a48b1421b575621709e984fe81",
+        "ee3302a0f4713f1dcf24a0da919f813bc25e4def2defc993fca643d325f44a6f",
+        "app/src/test/java/app/gamenative/ForeverCompilerPrefixRepairTest.kt",
+    ),
+    "ForeverNativeSupervisorPolicy.kt": (
+        "f65193e2b92e4dfab88534e1e30db30b3e63ec45",
+        "2297d7b5ca351ba5ed5e90eb684e703071926322b3cc254975fa9717d272d278",
+        "app/src/main/java/app/gamenative/ForeverNativeSupervisorPolicy.kt",
+    ),
+    "ForeverPanvkWine.kt": (
+        "e37bbcd769f56758c16b1d1109045613085c7f16",
+        "bbe059d4ffe850e53f893630a190f7d7d1eae79a81b9007de1ae32384a95a770",
+        "app/src/main/java/app/gamenative/ForeverPanvkWine.kt",
+    ),
+    "ForeverPanvkWineTest.kt": (
+        "bacc78af70ab5fd1cfbe3bfa3711f8d744f3dac6",
+        "7fdc3a3a732567d94413a2fffa1bc29c4f989ac41fb2ccfd7c6549c689266501",
+        "app/src/test/java/app/gamenative/ForeverPanvkWineTest.kt",
+    ),
+    "PanvkWsiPolicyTest.kt": (
+        "7687fab86cb68ff0ea25791da8893e8bc1777323",
+        "bcced0320c76ba2867366f3cf700dfcda77023139111152eb08e686075f50daa",
+        "app/src/test/java/app/gamenative/PanvkWsiPolicyTest.kt",
+    ),
+    "PanvkWsiStore.kt": (
+        "f305a5c70e122c7d0b91a2bb5bfb27c52518f235",
+        "6341f36130f166b5e2e198b8eb663ad4ea5a9392f26657b07b40e35c878094c7",
+        "app/src/main/java/app/gamenative/PanvkWsiStore.kt",
+    ),
+    # These Wine60 additions are outside the 63-entry code59 overlay baseline,
+    # but their source hashes are frozen in the authenticated provenance pin.
+    "ForeverWineSupervisorPolicy.kt": (
+        "98f46425eb0ba83bdfda814ce09fa685cf704b44",
+        "412001cb759bacce2387ed8bbf610aa5a15f2a56beb6172332b938a70c328d99",
+        "app/src/main/java/app/gamenative/ForeverWineSupervisorPolicy.kt",
+    ),
+    "ForeverWinePrefixTest.kt": (
+        "28eb7458216551721dd0675e7ccb89d314905c84",
+        "ab45247fd098024da959315f41f566563790481ec43336123936cdaf408e3446",
+        "app/src/test/java/app/gamenative/ForeverWinePrefixTest.kt",
+    ),
+    "ForeverWineSupervisorPolicyTest.kt": (
+        "6d4a312bf6adbc773eb6952112dff55d19c711aa",
+        "003d871a685795044bf5115e3526e8f9b2ca0d22e85755dce36c35bde9925c9b",
+        "app/src/test/java/app/gamenative/ForeverWineSupervisorPolicyTest.kt",
+    ),
+}
+PREFIX_REPAIR_SOURCE = APP_ROOT / "overlay/ForeverCompilerPrefixRepair.kt"
 FUNCTIONAL_OVERLAY_NAMES = (
     "ForeverAddons.kt",
     "ForeverAddonsApi.kt",
@@ -1047,9 +1106,11 @@ def stage_new_bridge(source: Path, data: bytes) -> dict[str, object]:
     return {"path": BRIDGE_TARGET.as_posix(), "origin": str(BRIDGE_SOURCE), "sha256": PINNED_BRIDGE_SHA256}
 
 
-def run_code62_recipe(source: Path, inputs: AuthenticatedInputs) -> str:
+def run_code62_recipe(
+    source: Path, inputs: AuthenticatedInputs, recipe_path: Path | None = None,
+) -> str:
     command = [
-        sys.executable, str(APPLY_OVERLAY), "--source", str(source), "--bundle", str(inputs.bundle),
+        sys.executable, str(recipe_path or APPLY_OVERLAY), "--source", str(source), "--bundle", str(inputs.bundle),
         "--probes", str(inputs.probes), "--catalog", str(inputs.catalog), "--native", str(inputs.code62_native),
         "--contract", str(inputs.contract), "--baseline-apk", str(RETAINED_APK),
     ]
@@ -1057,6 +1118,74 @@ def run_code62_recipe(source: Path, inputs: AuthenticatedInputs) -> str:
     if completed.returncode != 0:
         raise ReconstructionError("code59->62 recipe failed:\n" + (completed.stdout + completed.stderr)[-12000:])
     return "\n".join(line for line in completed.stdout.splitlines() if line.strip())
+
+
+def create_historical_recipe_environment(directory: Path, historical_sources: dict[str, bytes]) -> Path:
+    """Run the unchanged pinned recipe against an isolated historical overlay view."""
+    recipe_sha = sha256_file(APPLY_OVERLAY, "code59-to-62 recipe")
+    privacy_provenance_pin_for_recipe(recipe_sha)
+    root = directory / "recipe-root"
+    app_dir = root / "scripts/arm64-prototype/app"
+    app_dir.mkdir(parents=True)
+    recipe_path = app_dir / "apply_overlay.py"
+    shutil.copyfile(APPLY_OVERLAY, recipe_path)
+    shutil.copyfile(BASELINE, app_dir / BASELINE.name)
+    shutil.copytree(APP_ROOT / "overlay", app_dir / "overlay")
+    for name, data in historical_sources.items():
+        target = app_dir / "overlay" / name
+        if name not in HISTORICAL_OVERLAY_BLOBS or not target.is_file() or target.is_symlink():
+            raise ReconstructionError(f"invalid historical overlay source replacement: {name}")
+        target.write_bytes(data)
+    scripts = root / "scripts"
+    os.symlink(ROOT / "scripts/diagnostics", scripts / "diagnostics", target_is_directory=True)
+    os.symlink(ROOT / "forever", root / "forever", target_is_directory=True)
+    if sha256_file(recipe_path, "isolated code59-to-62 recipe") != recipe_sha:
+        raise ReconstructionError("isolated recipe copy differs from the authenticated recipe")
+    return recipe_path
+
+
+def authenticated_historical_prefix_repair() -> bytes:
+    """Compatibility wrapper for focused callers of the original single-source flow."""
+    return authenticated_historical_overlay_sources()["ForeverCompilerPrefixRepair.kt"]
+
+
+def authenticated_historical_overlay_sources() -> dict[str, bytes]:
+    """Fetch all fixed historical Git blobs and authenticate their pinned preimages."""
+    result = {}
+    for name, (blob_id, expected_sha256, _target) in HISTORICAL_OVERLAY_BLOBS.items():
+        completed = subprocess.run(
+            ["git", "cat-file", "blob", blob_id], cwd=ROOT, check=False, capture_output=True,
+        )
+        if completed.returncode != 0:
+            raise ReconstructionError(f"pinned historical overlay blob is unavailable: {name}")
+        if sha256_bytes(completed.stdout) != expected_sha256:
+            raise ReconstructionError(f"pinned historical overlay blob failed SHA-256 authentication: {name}")
+        result[name] = completed.stdout
+    return result
+
+
+def stage_candidate_overlay_sources(source: Path, candidates: dict[str, bytes]) -> list[dict[str, object]]:
+    """Apply captured current sources only after the historical recipe succeeds."""
+    staged = []
+    if set(candidates) != set(HISTORICAL_OVERLAY_BLOBS):
+        raise ReconstructionError("candidate overlay source set differs from fixed historical source set")
+    for name, data in candidates.items():
+        _blob_id, historical_sha256, target_relative = HISTORICAL_OVERLAY_BLOBS[name]
+        target = source / target_relative
+        regular(target, f"historical overlay recipe output: {name}")
+        historical = read_stable_file(target, f"historical overlay recipe output: {name}")
+        if sha256_bytes(historical) != historical_sha256:
+            raise ReconstructionError(f"code62 recipe did not stage authenticated historical overlay source: {name}")
+        target.write_bytes(data)
+        if read_stable_file(target, f"candidate overlay source: {name}") != data:
+            raise ReconstructionError(f"candidate overlay source staging mismatch: {name}")
+        staged.append({
+            "path": target_relative,
+            "historicalRecipeSha256": historical_sha256,
+            "candidateSourceSha256": sha256_bytes(data),
+            "origin": str(APP_ROOT / "overlay" / name),
+        })
+    return staged
 
 
 def replace_code64_native(source: Path, native_bytes: bytes) -> dict[str, object]:
@@ -1175,9 +1304,16 @@ def transform_build_62_to_candidate(text: str) -> str:
     name = re.search(r'\bversionName\s*=\s*"([^"]+)"', text)
     if not code or not name or (int(code.group(1)), name.group(1)) != SOURCE_VERSION:
         raise ReconstructionError("candidate transform requires exact code62 preimage")
+    source_application_id = f'applicationId = "{SOURCE_APPLICATION_ID}"'
+    candidate_application_id = f'applicationId = "{CANDIDATE_APPLICATION_ID}"'
+    if text.count("applicationId = ") != 1 or text.count(source_application_id) != 1:
+        raise ReconstructionError("candidate transform requires exact code62 applicationId preimage")
+    text = text.replace(source_application_id, candidate_application_id, 1)
     text = text.replace(f"versionCode = {SOURCE_VERSION[0]}", f"versionCode = {CANDIDATE_VERSION[0]}", 1)
     text = text.replace(f'versionName = "{SOURCE_VERSION[1]}"', f'versionName = "{CANDIDATE_VERSION[1]}"', 1)
     text = _ensure_candidate_server_profile_field(text)
+    if text.count(candidate_application_id) != 1 or SOURCE_APPLICATION_ID in text:
+        raise ReconstructionError("candidate applicationId postimage is not exact")
     # The provider check extends framework Instrumentation and has no AndroidX
     # runner/Espresso dependency. Keep unavailable test-only packages out of its
     # classpath; main and JVM unit-test dependencies remain untouched.
@@ -1732,7 +1868,7 @@ def candidate_marker(code62_inventory: dict[str, dict[str, object]], transforms:
     value = {
         "schema": 1,
         "variant": "wowforever.functional-launcher-ux/new-candidate-source-lineage",
-        "package": "com.wowforever.arm64probe",
+        "package": "com.pelele.wowforever",
         "versionCode": CANDIDATE_VERSION[0],
         "versionName": CANDIDATE_VERSION[1],
         "lineage": {
@@ -1783,21 +1919,36 @@ def reconstruct(args: argparse.Namespace) -> Path:
     candidate_native_binding, candidate_native_bytes = authenticate_candidate_native()
     controller_bytes, controller = validate_new_controller_source()
     bridge_bytes, bridge = validate_bridge_source()
+    candidate_overlay_sources = {
+        name: read_stable_file(APP_ROOT / "overlay" / name, f"candidate overlay source: {name}")
+        for name in HISTORICAL_OVERLAY_BLOBS
+    }
+    historical_overlay_sources = authenticated_historical_overlay_sources()
     source = safe_extract(args.archive.resolve(), source_parent)
     before_inventory = source_inventory(source)
-    recipe_output = run_code62_recipe(source, inputs)
+    with tempfile.TemporaryDirectory(prefix="historical-overlay-recipe-") as historical_overlay:
+        recipe_path = create_historical_recipe_environment(Path(historical_overlay), historical_overlay_sources)
+        recipe_output = run_code62_recipe(source, inputs, recipe_path)
     code62_inventory = source_inventory(source)
     controller_entry = validate_new_controller_target(source, controller_bytes)
     version = read_text(source, BUILD)
     if "versionCode = 62" not in version or 'versionName = "0.2.38-automated"' not in version:
         raise ReconstructionError("existing bounded recipe did not produce exact code62")
     code62_payloads = source_payload_inventory(source)
+    candidate_overlay_entries = stage_candidate_overlay_sources(source, candidate_overlay_sources)
     privacy_delta = validate_sanitized_c138_payloads(source, inputs)
     native_entry = replace_code64_native(source, inputs.code64_native_bytes)
     candidate_native_entry = replace_candidate_native(source, candidate_native_bytes)
     bridge_entry = stage_new_bridge(source, bridge_bytes)
     functional = load_function(APPLY_FUNCTIONAL, "functional_recipe_for_reconstruction")
     transforms = apply_candidate_source_transforms(source, functional)
+    transforms.extend(candidate_overlay_entries)
+    candidate_build = read_text(source, BUILD)
+    if (
+        candidate_build.count(f'applicationId = "{CANDIDATE_APPLICATION_ID}"') != 1
+        or SOURCE_APPLICATION_ID in candidate_build
+    ):
+        raise ReconstructionError("reconstructed candidate applicationId is not the exact target")
     transforms.extend(stage_functional_sources(source))
     before_branding = (source / MANIFEST).read_bytes()
     after_branding = transform_manifest_branding(before_branding.decode("utf-8")).encode("utf-8")
@@ -1853,7 +2004,19 @@ def reconstruct(args: argparse.Namespace) -> Path:
             "clientTarget": inputs.client_target_manifest,
         },
         "code59To62": {"recipe": str(APPLY_OVERLAY), "stdout": recipe_output, "beforeInventory": before_inventory, "afterInventory": code62_inventory, "newControllerInput": controller_entry},
-        "code62ToCandidate": {"explicitPreimage": {"code": SOURCE_VERSION[0], "name": SOURCE_VERSION[1]}, "transforms": transforms},
+        "code62ToCandidate": {
+            "explicitPreimage": {
+                "code": SOURCE_VERSION[0],
+                "name": SOURCE_VERSION[1],
+                "applicationId": SOURCE_APPLICATION_ID,
+            },
+            "explicitPostimage": {
+                "code": CANDIDATE_VERSION[0],
+                "name": CANDIDATE_VERSION[1],
+                "applicationId": CANDIDATE_APPLICATION_ID,
+            },
+            "transforms": transforms,
+        },
         "code64PayloadParity": parity,
         "approvedPrivacySanitization": privacy_delta,
         "assetOrigins": asset_origins(

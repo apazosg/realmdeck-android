@@ -865,12 +865,27 @@ class ForeverClientUpdateCatalog @JvmOverloads constructor(
             }
         }
 
-        internal fun availableBytes(path: java.nio.file.Path): Long = path.toFile().usableSpace
+        internal fun availableBytes(path: java.nio.file.Path): Long = capacityPath(path).toFile().usableSpace
 
         internal fun sameFilesystem(first: java.nio.file.Path, second: java.nio.file.Path): Boolean =
             if (System.getProperty("java.vm.name") == "Dalvik") {
-                android.system.Os.stat(first.toString()).st_dev == android.system.Os.stat(second.toString()).st_dev
-            } else Files.getFileStore(first) == Files.getFileStore(second)
+                android.system.Os.stat(capacityPath(first).toString()).st_dev ==
+                    android.system.Os.stat(capacityPath(second).toString()).st_dev
+            } else Files.getFileStore(capacityPath(first)) == Files.getFileStore(capacityPath(second))
+
+        /** Use the nearest existing directory to inspect capacity for a not-yet-created install path. */
+        private fun capacityPath(path: java.nio.file.Path): java.nio.file.Path {
+            var current = path.toAbsolutePath().normalize()
+            while (!Files.exists(current, LinkOption.NOFOLLOW_LINKS)) {
+                current = current.parent ?: throw IllegalStateException("storage capacity path has no existing ancestor")
+            }
+            if (Files.isSymbolicLink(current) ||
+                (!Files.isDirectory(current, LinkOption.NOFOLLOW_LINKS) && !Files.isRegularFile(current, LinkOption.NOFOLLOW_LINKS))
+            ) {
+                throw IllegalStateException("storage capacity path is not a regular file or directory")
+            }
+            return current
+        }
 
         internal fun sharedCapacity(first: java.nio.file.Path, second: java.nio.file.Path): Boolean {
             if (sameFilesystem(first, second)) return true

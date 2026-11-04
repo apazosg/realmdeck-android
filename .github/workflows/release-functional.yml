@@ -1,6 +1,6 @@
 name: Functional release APK
 
-# Compila el launcher funcional (com.wowforever.arm64probe) en el runner
+# Compila el launcher funcional (com.pelele.wowforever) en el runner
 # self-hosted de esta máquina, porque la receta depende de artefactos externos
 # (/home/adrian/wowforever-artifacts) que no están en el repositorio.
 #
@@ -251,9 +251,11 @@ jobs:
 
           ## Installation
 
-          Install the APK manually over the existing debug-signed preview. No uninstall
-          or data reset is required, but pause any running download before replacing it.
-          Updates remain manual; this build has no in-app updater.
+          Install the APK manually. This preview uses application ID
+          \`com.pelele.wowforever\`, so it installs alongside the earlier
+          \`com.wowforever.arm64probe\` preview; the old app and its data are not
+          removed or migrated. Pause any running download before replacing the new
+          app. Updates remain manual; this build has no in-app updater.
 
           ## Before you try
 

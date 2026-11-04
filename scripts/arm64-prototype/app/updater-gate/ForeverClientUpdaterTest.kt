@@ -55,6 +55,39 @@ class ForeverClientUpdaterTest {
     }
 
     @Test
+    fun missingClientRootRecoveryRequiresAbsentPrivateStateAndStableIdentity() {
+        Fixture().use { fixture ->
+            val paths = fixture.makePaths()
+            val updater = fixture.updater(paths, emptyMap()) { _, _, _, _ -> error("recovery must not download") }
+            val destination = fixture.destination(paths).copy(revalidate = {
+                check(!paths.client.exists()) { "destination identity changed" }
+            })
+            paths.client.deleteRecursively()
+            assertTrue(updater.canRecoverMissingRoot(destination))
+
+            val journal = File(paths.journal, ".forever-client-update.json")
+            val workspace = File(paths.work, "a".repeat(64))
+            workspace.mkdirs()
+            File(workspace, ".transaction-stage-receipt.json").writeText("{}")
+            assertFalse(updater.canRecoverMissingRoot(destination))
+            workspace.deleteRecursively()
+
+            journal.writeText("{}")
+            assertFalse(updater.canRecoverMissingRoot(destination))
+            journal.delete()
+
+            val intent = File(paths.work, ".forever-portability-intent.json")
+            intent.writeText("{}")
+            assertFalse(updater.canRecoverMissingRoot(destination))
+            intent.delete()
+
+            val changedIdentity = destination.copy(revalidate = { error("destination identity changed") })
+            assertTrue(runCatching { updater.canRecoverMissingRoot(changedIdentity) }.isFailure)
+            assertFalse(paths.client.exists())
+        }
+    }
+
+    @Test
     fun staleRollbackResetCannotRecreateAStageAfterTheClientWasPublished() {
         val assets = configAssetsOrSkip()
         Fixture(cascObjectCount = 4, contiguousRangeObjectCount = 3).use { fixture ->
@@ -1044,20 +1077,70 @@ class ForeverClientUpdaterTest {
             assertEquals(existingFiles, paths.client.walkTopDown().filter { it.isFile }
                 .associate { it.relativeTo(paths.client).invariantSeparatorsPath to it.readBytes().toList() })
 
-            val absentRoot = File(paths.client.parentFile, "not-created")
+            val absentParent = File(paths.client.parentFile, "CustomGames")
+            val absentRoot = File(absentParent, "WoW Forever")
+            val absentFetches = AtomicInteger(0)
+            val absentUpdater = fixture.updater(paths, configAssets) { _, _, _, _ ->
+                absentFetches.incrementAndGet()
+                error("test stops at the first payload request")
+            }
             val absentDestination = ForeverClientUpdateDestination(
                 root = absentRoot,
                 storageId = "synthetic-absent-storage",
                 revalidate = { check(!absentRoot.exists() || absentRoot.isDirectory) },
             )
-            // Storage can resolve an absent path, but updater/service planning and
-            // transaction probes require an existing client directory. Do not
-            // weaken the fail-closed root guard for this unsupported target.
-            assertEquals(ForeverClientUpdater.ResumeGuardState.BLOCKED, updater.resumeGuardState(absentDestination))
+            // A genuinely absent root is the ordinary new-install destination,
+            // not an unavailable transaction probe. Discovery stays read-only;
+            // private journal/workspace evidence still blocks this classification.
+            assertEquals(ForeverClientUpdater.ResumeGuardState.IDLE, absentUpdater.resumeGuardState(absentDestination))
+            assertEquals(ForeverClientUpdater.PortabilitySourceKind.NO_PORTABILITY_CANDIDATE,
+                absentUpdater.discoverPortabilitySource(absentDestination))
+            assertFalse(absentRoot.exists())
+
+            val pendingJournal = File(paths.journal, ".forever-client-update.json")
+            pendingJournal.writeText("{}")
+            assertEquals(ForeverClientUpdater.ResumeGuardState.BLOCKED, absentUpdater.resumeGuardState(absentDestination))
+            assertEquals(ForeverClientUpdater.PortabilitySourceKind.UNREADABLE_OR_AMBIGUOUS,
+                absentUpdater.discoverPortabilitySource(absentDestination))
+            pendingJournal.delete()
+            assertFalse(absentRoot.exists())
+
+            val unavailableRoot = File(paths.client.parentFile, "not-a-directory").apply { writeText("preserve") }
+            val unavailableDestination = absentDestination.copy(
+                root = unavailableRoot,
+                revalidate = { check(unavailableRoot.isFile) },
+            )
+            assertEquals(ForeverClientUpdater.ResumeGuardState.BLOCKED,
+                absentUpdater.resumeGuardState(unavailableDestination))
             assertThrows(IllegalStateException::class.java) {
-                updater.discoverPortabilitySource(absentDestination)
+                absentUpdater.discoverPortabilitySource(unavailableDestination)
+            }
+            assertEquals("preserve", unavailableRoot.readText())
+            unavailableRoot.delete()
+
+            val absentPlan = absentUpdater.plan(absentDestination)
+            assertFalse(absentRoot.exists())
+            val insufficient = ForeverClientUpdateConsent(
+                absentPlan.planId, absentPlan.downloadBytes - 1, absentPlan.peakAdditionalBytes,
+                absentPlan.privateWorkBytes, absentPlan.destinationBytes,
+            )
+            assertThrows(IllegalArgumentException::class.java) {
+                absentUpdater.execute(absentDestination, absentPlan, insufficient)
             }
             assertFalse(absentRoot.exists())
+            assertFalse(absentParent.exists())
+            assertEquals(0, absentFetches.get())
+            val consent = ForeverClientUpdateConsent(
+                absentPlan.planId, absentPlan.downloadBytes, absentPlan.peakAdditionalBytes,
+                absentPlan.privateWorkBytes, absentPlan.destinationBytes,
+            )
+            assertThrows(IllegalStateException::class.java) {
+                absentUpdater.execute(absentDestination, absentPlan, consent)
+            }
+            assertTrue(absentParent.isDirectory)
+            assertTrue(absentRoot.isDirectory)
+            assertTrue(absentFetches.get() > 0)
+            absentParent.deleteRecursively()
         }
     }
 
@@ -4895,7 +4978,9 @@ class ForeverClientUpdaterTest {
             assertTrue(foreign.delete())
 
             // Symlink entry (dangling, so it is the only bad entry).
-            val link = File(dir, "${spec.ekey}.blte")
+            val linkEkey = fixture.targetSpecs().firstOrNull { !File(dir, "${it.ekey}.blte").exists() }?.ekey
+                ?: return@use
+            val link = File(dir, "$linkEkey.blte")
             try {
                 Files.createSymbolicLink(link.toPath(), Path.of("nowhere-target.blte"))
             } catch (_: UnsupportedOperationException) {

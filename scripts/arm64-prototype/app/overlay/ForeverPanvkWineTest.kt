@@ -96,7 +96,7 @@ class ForeverPanvkWineTest {
     fun packageAndExecutableMismatchFailBeforeAnyEnvironmentMutation() {
         val base = ApplicationProvider.getApplicationContext<Context>()
         val context = object : ContextWrapper(assetFailingContext(base)) {
-            override fun getPackageName(): String = "com.wowforever.arm64probe.other"
+            override fun getPackageName(): String = "com.pelele.wowforever.other"
         }
         val container = managedProbe("RUN-scope").apply {
             setExecutablePath("not-the-graphics-probe.exe")
@@ -153,9 +153,9 @@ class ForeverPanvkWineTest {
         }
         val before = env.toString()
         ForeverPanvkWine.applySelectionEnvironment(env, ForeverPanvkWine.EnvironmentSelection(
-            driverPath = "/data/user/0/com.wowforever.arm64probe/files/forever/controls/panvk-wine/RUN-env/",
+            driverPath = "/data/user/0/com.pelele.wowforever/files/forever/controls/panvk-wine/RUN-env/",
             driverName = ForeverPanvkWine.FILE_NAME,
-            hooksPath = "/data/user/0/com.wowforever.arm64probe/files/imagefs/usr/lib",
+            hooksPath = "/data/user/0/com.pelele.wowforever/files/imagefs/usr/lib",
             assetSha256 = ForeverPanvkWine.APPROVED_SHA256,
             wrapperSha256 = ForeverPanvkWine.EXPECTED_WRAPPER_SHA256,
         ))
@@ -347,9 +347,9 @@ class ForeverPanvkWineTest {
     @Test
     fun packagedPinnedAssetIsReadThroughTheRealAssetManagerWhenPresent() {
         val context = ApplicationProvider.getApplicationContext<Context>()
-        assertEquals("com.wowforever.arm64probe", BuildConfig.APPLICATION_ID)
+        assertEquals("com.pelele.wowforever", BuildConfig.APPLICATION_ID)
         assertTrue(BuildConfig.DEBUG)
-        assertEquals("com.wowforever.arm64probe", context.packageName)
+        assertEquals("com.pelele.wowforever", context.packageName)
         val input = context.assets.open(ForeverPanvkWine.ASSET_PATH)
         input.use {
             val digest = MessageDigest.getInstance("SHA-256")
@@ -416,7 +416,7 @@ class ForeverPanvkWineTest {
     }
 
     private fun fixedDebugContext(base: Context): Context = object : ContextWrapper(base) {
-        override fun getPackageName(): String = "com.wowforever.arm64probe"
+        override fun getPackageName(): String = "com.pelele.wowforever"
         override fun getApplicationInfo() = android.content.pm.ApplicationInfo(base.applicationInfo).apply {
             flags = flags or android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE
         }

@@ -12,7 +12,7 @@ import java.lang.reflect.Modifier
 @Config(sdk = [29], application = android.app.Application::class)
 class ForeverWinePrefixTest {
     @org.junit.Test fun filesRootAcceptsBothAndroidUserZeroAliasDirectionsOnly() {
-        val pkg = "com.wowforever.arm64probe"
+        val pkg = "com.pelele.wowforever"
         val legacy = "/data/data/$pkg/files"
         val userZero = "/data/user/0/$pkg/files"
         org.junit.Assert.assertTrue(ForeverWinePrefix.validFilesRootAlias(legacy, userZero, pkg))
@@ -23,7 +23,7 @@ class ForeverWinePrefixTest {
         org.junit.Assert.assertFalse(ForeverWinePrefix.validFilesRootAlias("/foreign/files", "/foreign/files", pkg))
     }
     @Test fun filesRootDiagnosticsEnumerateOnlyOwnAliasKinds() {
-        val pkg = "com.wowforever.arm64probe"
+        val pkg = "com.pelele.wowforever"
         val facts = ForeverWinePrefix.filesRootAliasFacts(
             "/data/data/$pkg/files", "/data/user/0/$pkg/files", pkg,
         )

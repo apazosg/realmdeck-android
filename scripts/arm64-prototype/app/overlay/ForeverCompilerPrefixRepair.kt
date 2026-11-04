@@ -548,7 +548,7 @@ object ForeverCompilerPrefixRepair {
     }
 
     internal fun normalizedOwnedAppAlias(filesRoot: File, candidate: File): String {
-        val roots = setOf("/data/data/com.wowforever.arm64probe/files", "/data/user/0/com.wowforever.arm64probe/files")
+        val roots = setOf("/data/data/com.pelele.wowforever/files", "/data/user/0/com.pelele.wowforever/files")
         val owner = filesRoot.absoluteFile.normalizePath()
         val raw = candidate.absoluteFile.normalizePath()
         if (owner in roots) {

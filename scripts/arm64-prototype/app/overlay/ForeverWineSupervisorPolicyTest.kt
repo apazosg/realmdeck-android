@@ -21,7 +21,7 @@ class ForeverWineSupervisorPolicyTest {
         assertEquals("f479ea8def9dc3cffd42affa489ae1554f9214273b13af7d79053a2773ad6914", ForeverWineSupervisorPolicy.PUBLISHER_SHA256)
         assertEquals(64 * 1024, ForeverWineSupervisorPolicy.MAX_STREAM_BYTES)
         assertEquals(256 * 1024, ForeverWineSupervisorPolicy.MAX_OUTPUT_BYTES)
-        assertTrue(ForeverWineSupervisorPolicy.isSupervisorProcess(true, "com.wowforever.arm64probe", "com.wowforever.arm64probe:wine_supervisor"))
+        assertTrue(ForeverWineSupervisorPolicy.isSupervisorProcess(true, "com.pelele.wowforever", "com.pelele.wowforever:wine_supervisor"))
     }
 
     @Test fun onlyPlatformLinkerAndKnownApexAliasAreAccepted() {

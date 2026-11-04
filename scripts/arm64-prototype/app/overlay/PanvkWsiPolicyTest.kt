@@ -79,10 +79,10 @@ class PanvkWsiPolicyTest {
 
     @Test fun canonicalIcdOwnerAllowsOnlyTheTwoSamePackageRunAliases() {
         val store = PanvkWsiStore(FixtureContext(temporary.newFolder("aliases")))
-        val requested = "/data/data/com.wowforever.arm64probe/files/forever/controls/panvk-wsi/PWSI-0123456789abcdef0123456789abcdef/libvulkan_panfrost.so"
+        val requested = "/data/data/com.pelele.wowforever/files/forever/controls/panvk-wsi/PWSI-0123456789abcdef0123456789abcdef/libvulkan_panfrost.so"
         val actual = requested.replace("/data/data/", "/data/user/0/")
         assertTrue(store.icdOwnerMatches(actual, requested))
-        assertFalse(store.icdOwnerMatches(actual.replace("/com.wowforever.arm64probe/", "/other/"), requested))
+        assertFalse(store.icdOwnerMatches(actual.replace("/com.pelele.wowforever/", "/other/"), requested))
         assertFalse(store.icdOwnerMatches(actual.replace("0123456789abcdef", "ffffffffffffffff"), requested))
     }
 

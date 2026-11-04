@@ -530,6 +530,7 @@ class ForeverClientUpdater(
         }
         checkCancelled(cancelled)
         destination.revalidate()
+        ensureNewDestinationRoot(destination)
 
         val transaction = transaction(destination, leaseHeld)
         val paths = prepareWorkspace(destination, plan, transaction)
@@ -653,6 +654,9 @@ class ForeverClientUpdater(
     fun hasPendingTransaction(destination: ForeverClientUpdateDestination): Boolean {
         val root = destination.root.toPath().toAbsolutePath().normalize()
         requireSafeAncestors(root)
+        if (Files.notExists(root, LinkOption.NOFOLLOW_LINKS)) {
+            return transaction(destination) { false }.hasPrivateJournalState()
+        }
         if (transaction(destination) { false }.hasPendingTransaction()) return true
         val staging = root.resolve(TRANSACTION_STAGING_NAME)
         if (!Files.exists(staging, LinkOption.NOFOLLOW_LINKS)) return false
@@ -666,6 +670,34 @@ class ForeverClientUpdater(
             }
         }
         return false
+    }
+
+    /**
+     * Prove an absent client root has no updater-owned recovery state. This is
+     * only for clearing a stale UPDATING reservation; it never creates or repairs
+     * the destination and treats every private artifact as evidence to preserve.
+     */
+    internal fun canRecoverMissingRoot(destination: ForeverClientUpdateDestination): Boolean {
+        destination.revalidate()
+        val root = destination.root.toPath().toAbsolutePath().normalize()
+        requireSafeAncestors(root)
+        if (!Files.notExists(root, LinkOption.NOFOLLOW_LINKS)) return false
+        if (transaction(destination) { false }.hasPrivateJournalState()) return false
+        val privateWork = privateWorkDirectory.toPath().toAbsolutePath().normalize()
+        requireSafeAncestors(privateWork)
+        if (!Files.isDirectory(privateWork, LinkOption.NOFOLLOW_LINKS)) return false
+        val work = workBase.toPath().toAbsolutePath().normalize()
+        requireSafeAncestors(work)
+        Files.newDirectoryStream(privateWork).use { children ->
+            for (child in children) if (child.toAbsolutePath().normalize() != work) return false
+        }
+        if (!Files.notExists(work, LinkOption.NOFOLLOW_LINKS)) {
+            if (!Files.isDirectory(work, LinkOption.NOFOLLOW_LINKS)) return false
+            Files.newDirectoryStream(work).use { if (it.iterator().hasNext()) return false }
+        }
+        destination.revalidate()
+        requireSafeAncestors(root)
+        return Files.notExists(root, LinkOption.NOFOLLOW_LINKS)
     }
 
     /** Bounded catalog-pinning guard outcome: idle, valid own resume, or fail-closed. */
@@ -783,7 +815,13 @@ class ForeverClientUpdater(
         }
         if (rootForeign) return ResumeGuardState.BLOCKED
         val journalPending: Boolean = try {
-            transaction(destination) { false }.hasPendingTransaction()
+            val root = destination.root.toPath().toAbsolutePath().normalize()
+            if (Files.notExists(root, LinkOption.NOFOLLOW_LINKS)) {
+                // A genuinely absent destination is valid for a new install. The
+                // private journal remains authoritative; unknown/inaccessible roots
+                // still take the ordinary fail-closed transaction probe below.
+                transaction(destination) { false }.hasPrivateJournalState()
+            } else transaction(destination) { false }.hasPendingTransaction()
         } catch (failure: CancellationException) {
             throw failure
         } catch (_: Exception) {
@@ -3148,6 +3186,10 @@ class ForeverClientUpdater(
     private fun inspectTargetState(destination: ForeverClientUpdateDestination): TargetState {
         val root = destination.root.toPath().toAbsolutePath().normalize()
         requireSafeAncestors(root)
+        if (Files.notExists(root, LinkOption.NOFOLLOW_LINKS)) {
+            val markerFingerprint = verifyStorageMarker(destination)
+            return TargetState(null, EMPTY_SOURCE_REVISION, true, markerFingerprint, destination.sourceOrigin)
+        }
         if (!Files.isDirectory(root, LinkOption.NOFOLLOW_LINKS)) throw IllegalArgumentException("client destination is not an existing regular directory")
         val markerFingerprint = verifyStorageMarker(destination)
         val data = root.resolve("Data")
@@ -4389,9 +4431,14 @@ class ForeverClientUpdater(
         requireExactFile(owner.toPath(), expectedOwner, "adopted USB checkpoint identity")
     }
 
-    private fun hasPendingUpdateState(destination: ForeverClientUpdateDestination): Boolean =
-        portabilityIntentPresent() || hasPendingTransaction(destination) ||
+    private fun hasPendingUpdateState(destination: ForeverClientUpdateDestination): Boolean {
+        val root = destination.root.toPath().toAbsolutePath().normalize()
+        val pendingTransaction = if (Files.notExists(root, LinkOption.NOFOLLOW_LINKS)) {
+            transaction(destination) { false }.hasPrivateJournalState()
+        } else hasPendingTransaction(destination)
+        return portabilityIntentPresent() || pendingTransaction ||
             Files.exists(resumableWorkspacePath(destination).toPath(), LinkOption.NOFOLLOW_LINKS)
+    }
 
     internal enum class PortabilitySourceKind {
         EMPTY, NO_PORTABILITY_CANDIDATE, PUBLISHED_CANDIDATE, PARTIAL_CANDIDATE, OWN_PENDING, UNREADABLE_OR_AMBIGUOUS,
@@ -4414,7 +4461,11 @@ class ForeverClientUpdater(
                 } catch (_: Exception) {
                     return@withLease PortabilitySourceKind.UNREADABLE_OR_AMBIGUOUS
                 }
-                if (receipt != null || transaction(destination) { false }.hasPendingTransaction() ||
+                val root = destination.root.toPath().toAbsolutePath().normalize()
+                val pendingTransaction = if (Files.notExists(root, LinkOption.NOFOLLOW_LINKS)) {
+                    transaction(destination) { false }.hasPrivateJournalState()
+                } else transaction(destination) { false }.hasPendingTransaction()
+                if (receipt != null || pendingTransaction ||
                     privateWorkspaceEvidencePresent()
                 ) return@withLease PortabilitySourceKind.UNREADABLE_OR_AMBIGUOUS
             }
@@ -4892,11 +4943,41 @@ class ForeverClientUpdater(
         if (hasPendingTransaction(destination)) throw IllegalStateException("recover the unfinished client transaction before proceeding")
     }
 
+    /** Create a selected new-install root only after the exact plan consent is validated. */
+    private fun ensureNewDestinationRoot(destination: ForeverClientUpdateDestination) {
+        val root = destination.root.toPath().toAbsolutePath().normalize()
+        requireSafeAncestors(root)
+        val missing = ArrayDeque<java.nio.file.Path>()
+        var current: java.nio.file.Path? = root
+        while (current != null && !Files.exists(current, LinkOption.NOFOLLOW_LINKS)) {
+            missing.addFirst(current)
+            current = current.parent
+        }
+        if (current == null || Files.isSymbolicLink(current) || !Files.isDirectory(current, LinkOption.NOFOLLOW_LINKS)) {
+            throw IllegalStateException("client destination parent is not a regular directory")
+        }
+        for (directory in missing) {
+            destination.revalidate()
+            requireSafeAncestors(directory)
+            val parent = directory.parent
+            if (parent == null || Files.isSymbolicLink(parent) || !Files.isDirectory(parent, LinkOption.NOFOLLOW_LINKS)) {
+                throw IllegalStateException("client destination parent changed during creation")
+            }
+            Files.createDirectory(directory)
+        }
+        if (Files.isSymbolicLink(root) || !Files.isDirectory(root, LinkOption.NOFOLLOW_LINKS)) {
+            throw IllegalStateException("client destination is not a regular directory")
+        }
+        destination.revalidate()
+    }
+
     private fun validateDestination(destination: ForeverClientUpdateDestination) {
         require(destination.storageId.matches(Regex("[A-Za-z0-9][A-Za-z0-9._:-]{0,127}"))) { "frozen client storage ID is invalid" }
         val root = destination.root.toPath().toAbsolutePath().normalize()
         requireSafeAncestors(root)
-        if (!Files.isDirectory(root, LinkOption.NOFOLLOW_LINKS)) throw IllegalArgumentException("client destination must already be an existing app-owned directory")
+        if (!Files.notExists(root, LinkOption.NOFOLLOW_LINKS) && !Files.isDirectory(root, LinkOption.NOFOLLOW_LINKS)) {
+            throw IllegalArgumentException("client destination must be an existing directory or definitively absent")
+        }
         verifyStorageMarker(destination)
         val work = privateWorkDirectory.toPath().toAbsolutePath().normalize()
         val journal = privateJournalDirectory.toPath().toAbsolutePath().normalize()

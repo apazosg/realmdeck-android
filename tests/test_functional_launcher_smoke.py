@@ -43,15 +43,15 @@ class FakeAdb:
 
 def _own_tree(inner: str) -> object:
     root = ET.fromstring(
-        '<hierarchy><node package="com.wowforever.arm64probe" class="android.widget.FrameLayout">'
+        '<hierarchy><node package="com.pelele.wowforever" class="android.widget.FrameLayout">'
         f"{inner}</node></hierarchy>"
     )
     for node in root.iter("node"):
-        node.attrib.setdefault("package", "com.wowforever.arm64probe")
+        node.attrib.setdefault("package", "com.pelele.wowforever")
     return SimpleNamespace(
         root=root,
         top_is_own=lambda: True,
-        hierarchy_is_own=lambda: all(n.attrib.get("package") == "com.wowforever.arm64probe" for n in root.iter("node")),
+        hierarchy_is_own=lambda: all(n.attrib.get("package") == "com.pelele.wowforever" for n in root.iter("node")),
     )
 
 

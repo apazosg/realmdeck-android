@@ -35,7 +35,7 @@ const EARLY_NOT_READY: &str = "early candidate guard found no validated candidat
 // In the app's Android namespace /data/user/0 is a root-owned symlink.
 // Use the user-0 app-data anchor directly; retain the no-symlink walk and
 // fixed package/relative output authority. run-as collects the same files.
-const OUTPUT_ROOT: &str = "/data/data/com.wowforever.arm64probe/files/functional-poc/captures";
+const OUTPUT_ROOT: &str = "/data/data/com.pelele.wowforever/files/functional-poc/captures";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) struct CodeWindow {
@@ -1341,7 +1341,7 @@ mod tests {
         assert!(WINDOWS[0].rva + WINDOWS[0].length as u64 <= WINDOWS[1].rva);
         assert_eq!(SNAPSHOT_BYTES, 32768);
         assert_eq!(SNAPSHOT_BYTES * usize::from(MAX_SNAPSHOTS), 65536);
-        assert_eq!(OUTPUT_ROOT, "/data/data/com.wowforever.arm64probe/files/functional-poc/captures");
+        assert_eq!(OUTPUT_ROOT, "/data/data/com.pelele.wowforever/files/functional-poc/captures");
     }
 
     #[test]

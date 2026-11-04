@@ -2620,8 +2620,8 @@ class ForeverFunctionalClientStorageTest {
         // abs(absolutePath.hashCode())): hashing the real USB root cannot
         // yield the fixed functional identity, so the stock `.gamenative`
         // pin is required and never arbitrary.
-        val usbRoot = "/storage/6AD6-EF0E/Android/data/com.wowforever.arm64probe/files/CustomGames/WoW Forever"
-        assertEquals(422876682, abs(usbRoot.hashCode()).let { if (it == 0) 1 else it })
+        val usbRoot = "/storage/6AD6-EF0E/Android/data/com.pelele.wowforever/files/CustomGames/WoW Forever"
+        assertEquals(1061790679, abs(usbRoot.hashCode()).let { if (it == 0) 1 else it })
         assertEquals(1368588668, ForeverFunctionalPoc.APP_ID.removePrefix("CUSTOM_GAME_").toInt())
 
         // The stock pin mechanism binds any root to the fixed identity with

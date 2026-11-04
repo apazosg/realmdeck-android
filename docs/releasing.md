@@ -97,7 +97,7 @@ in-place upgrades for installed builds.
 ## Automated functional builds (self-hosted)
 
 [`.github/workflows/release-functional.yml`](../.github/workflows/release-functional.yml)
-builds the functional launcher (`com.wowforever.arm64probe`) on the self-hosted
+builds the functional launcher (`com.pelele.wowforever`) on the self-hosted
 runner labeled `realmdeck-build`, because the recipe reads artifacts outside the
 repository.
 

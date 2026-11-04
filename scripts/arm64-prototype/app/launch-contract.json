@@ -8,7 +8,7 @@
     "baseline": {"versionCode": 60, "versionName": "0.2.36-automated"}
   },
   "target": {
-    "application_id": "com.wowforever.arm64probe",
+    "application_id": "com.pelele.wowforever",
     "version_code": 62,
     "version_name": "0.2.38-automated",
     "abi": "arm64-v8a",

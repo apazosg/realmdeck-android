@@ -16,7 +16,7 @@ import org.json.JSONObject
 /** Closed Android-side policy for the first SERVER_ISOLATION Wine handoff. */
 object ForeverWineSupervisorPolicy {
     const val SCHEMA = 2
-    const val PACKAGE = "com.wowforever.arm64probe"
+    const val PACKAGE = "com.pelele.wowforever"
     const val PROCESS_SUFFIX = ":wine_supervisor"
     const val LINKER = "/system/bin/linker64"
     private const val LINKER_APEX_ALIAS = "/apex/com.android.runtime/bin/linker64"

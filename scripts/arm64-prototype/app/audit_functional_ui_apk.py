@@ -538,7 +538,7 @@ def main() -> None:
     require('Number of signers: 1' in commands['signature'], 'unexpected signer count')
     badging = commands['badging']
     code, version = helper.CANDIDATE_VERSION
-    require(f"name='com.wowforever.arm64probe' versionCode='{code}' versionName='{version}'" in badging,
+    require(f"name='com.pelele.wowforever' versionCode='{code}' versionName='{version}'" in badging,
             'candidate identity mismatch')
     require("native-code: 'arm64-v8a'" in badging, 'candidate ABI mismatch')
     require("sdkVersion:'29'" in badging and "targetSdkVersion:'36'" in badging, 'SDK drift')

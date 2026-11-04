@@ -20,7 +20,7 @@ import subprocess
 import sys
 
 
-PACKAGE = "com.wowforever.arm64probe"
+PACKAGE = "com.pelele.wowforever"
 CURRENT_VERSION = (63, "0.2.39-functional-poc")
 TARGET_VERSION = (64, "0.2.40-functional-forever-poc")
 PINNED_UPSTREAM_COMMIT = "205cbf8ddc06f855a1b85ba57c78c4be9a6930aa"
