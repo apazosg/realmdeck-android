@@ -12,9 +12,13 @@ import okhttp3.Call
 import okhttp3.OkHttpClient
 import okhttp3.Request
 
-/** Per-request Wi-Fi binding. Never binds the process or the running game. */
+/**
+ * Per-request Wi-Fi binding. Never binds the process or the running game.
+ * A VPN over Wi-Fi is eligible and keeps its tunnel; cellular, including a VPN
+ * whose underlying transport is cellular, is not.
+ */
 object ForeverWifiDownloads {
-    class Unavailable(val vpnActive: Boolean = false) : IOException("wifi_required")
+    class Unavailable : IOException("wifi_required")
     private var manager: ConnectivityManager? = null
     private val connections = WeakHashMap<HttpURLConnection, Network>()
     private val calls = WeakHashMap<Call, Network>()
@@ -48,7 +52,6 @@ object ForeverWifiDownloads {
 
     internal fun eligible(caps: NetworkCapabilities?): Boolean = caps != null &&
         caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) &&
-        !caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN) &&
         caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
         caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
 
@@ -56,7 +59,7 @@ object ForeverWifiDownloads {
         val service = manager ?: throw Unavailable()
         val network = service.activeNetwork
         val caps = network?.let(service::getNetworkCapabilities)
-        if (network == null || !eligible(caps)) throw Unavailable(caps?.hasTransport(NetworkCapabilities.TRANSPORT_VPN) == true)
+        if (network == null || !eligible(caps)) throw Unavailable()
         // Android's URLConnection pool belongs to the Network *instance*, not
         // its netId. Retain one representative while freshly checking eligibility.
         return boundNetwork?.takeIf { it == network } ?: network.also { boundNetwork = it }

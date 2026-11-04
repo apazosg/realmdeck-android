@@ -150,8 +150,7 @@ object ForeverFunctionalUiText {
     fun userMessage(failure: Throwable): String {
         val wifiFailure = generateSequence(failure) { it.cause }.filterIsInstance<ForeverWifiDownloads.Unavailable>().firstOrNull()
         if (wifiFailure != null) {
-            return if (wifiFailure.vpnActive) "Descarga en pausa: esta versión no admite descargar con una VPN activa. Tu VPN no se omite."
-            else "Conéctate a una red Wi-Fi con acceso a Internet para continuar. El progreso guardado se conserva."
+            return "Conéctate a una red Wi-Fi con acceso a Internet para continuar. El progreso guardado se conserva."
         }
         val code = (failure as? ForeverFunctionalClientStorage.StorageException)?.code
         if (code != null) {

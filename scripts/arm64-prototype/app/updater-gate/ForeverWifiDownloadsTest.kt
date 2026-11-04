@@ -58,20 +58,33 @@ class ForeverWifiDownloadsTest {
         val call = ForeverWifiDownloads.newCall(OkHttpClient(), Request.Builder().url("https://example.invalid/").build())
         assertFalse(call.isCanceled())
 
-        // Wi-Fi remains physically available: selecting a VPN must not bypass it
-        // by continuing requests on the underlying raw Wi-Fi network.
+        // A VPN over Wi-Fi is eligible and routes through the tunnel; the raw
+        // Wi-Fi connection is interrupted so it cannot bypass the VPN.
         val vpn = ShadowNetwork.newInstance(ConnectivityManager.TYPE_VPN)
         val vpnCaps = NetworkCapabilities()
-        shadowOf(vpnCaps).addTransportType(NetworkCapabilities.TRANSPORT_VPN)
+        shadowOf(vpnCaps).apply {
+            addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
+            addTransportType(NetworkCapabilities.TRANSPORT_VPN)
+            addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+            addCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+        }
         connectivity.setActiveNetworkInfo(ShadowNetworkInfo.newInstance(NetworkInfo.DetailedState.CONNECTED,
             ConnectivityManager.TYPE_VPN, 0, true, true))
         connectivity.setNetworkCapabilities(vpn, vpnCaps)
         connectivity.networkCallbacks.forEach { it.onAvailable(vpn) }
         assertTrue(call.isCanceled())
+        assertTrue(ForeverWifiDownloads.available())
+        ForeverWifiDownloads.requireAvailable()
+        val vpnCall = ForeverWifiDownloads.newCall(OkHttpClient(), Request.Builder().url("https://example.invalid/").build())
+        assertFalse(vpnCall.isCanceled())
+
+        // A VPN whose underlying transport becomes cellular is not eligible.
+        shadowOf(vpnCaps).removeTransportType(NetworkCapabilities.TRANSPORT_WIFI)
+        shadowOf(vpnCaps).addTransportType(NetworkCapabilities.TRANSPORT_CELLULAR)
+        connectivity.networkCallbacks.forEach { it.onCapabilitiesChanged(vpn, vpnCaps) }
+        assertTrue(vpnCall.isCanceled())
         assertFalse(ForeverWifiDownloads.available())
-        val blocked = assertThrows(ForeverWifiDownloads.Unavailable::class.java) { ForeverWifiDownloads.requireAvailable() }
-        assertTrue(blocked.vpnActive)
-        assertTrue(ForeverFunctionalUiText.userMessage(blocked).contains("Tu VPN no se omite"))
+        assertThrows(ForeverWifiDownloads.Unavailable::class.java) { ForeverWifiDownloads.requireAvailable() }
         connectivity.setActiveNetworkInfo(wifiInfo)
         val resumed = ForeverWifiDownloads.newCall(OkHttpClient(), Request.Builder().url("https://example.invalid/").build())
         connectivity.removeNetwork(wifi)
@@ -95,6 +108,11 @@ class ForeverWifiDownloadsTest {
         shadow.removeTransportType(NetworkCapabilities.TRANSPORT_CELLULAR)
         shadow.addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
         assertTrue(ForeverWifiDownloads.eligible(caps))
+        shadow.addTransportType(NetworkCapabilities.TRANSPORT_VPN)
+        assertTrue(ForeverWifiDownloads.eligible(caps))
+        shadow.removeTransportType(NetworkCapabilities.TRANSPORT_WIFI)
+        assertFalse(ForeverWifiDownloads.eligible(caps))
+        shadow.addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
         shadow.removeCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
         assertFalse(ForeverWifiDownloads.eligible(caps))
         assertFalse(ForeverWifiDownloads.eligible(null))

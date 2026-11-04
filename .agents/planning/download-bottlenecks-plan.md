@@ -108,6 +108,13 @@ C143 window now exceeds it; repeatability and whole-client behavior remain open.
 Improve demonstrated bottlenecks incrementally and remeasure; a complete
 prediction of the final speedup is not a prerequisite for a small proven fix.
 
+## 2026-11-04 — VPN over Wi-Fi downloads
+
+El usuario pidió eliminar el bloqueo de descargas con una VPN activa. La red por
+defecto se acepta si su transporte subyacente es Wi-Fi; una VPN sobre cellular
+sigue excluida. No se relaja la política Wi-Fi-only ni se omite el túnel: las
+conexiones se siguen abriendo sobre la red por defecto.
+
 ## Existing behavior to preserve
 
 - US-008 FR-002/003/004/011: accurate consented costs, individual authentication,
@@ -115,7 +122,8 @@ prediction of the final speedup is not a prerequisite for a small proven fix.
 - US-008 NFR-001 through NFR-004: bounded cursors/queues, strict HTTP/integrity,
   owned no-follow paths and independent integrity review before activation.
 - US-007 FR-005/NFR-002: unchanged physical storage identity validation.
-- Wi-Fi-only app-managed downloads; no cellular fallback or VPN bypass.
+- Wi-Fi-only app-managed downloads; no cellular fallback. A VPN over Wi-Fi is
+  eligible and its tunnel is not bypassed; a VPN over cellular is not eligible.
 - Sixteen fetch workers, 34 reserved raw keys and a 1-GiB raw budget. Each archive
   batch contains at most 16 exactly contiguous objects and 1 MiB, with no overfetch.
 - No installation reset, client duplication, cross-volume migration, checkpoint
