@@ -42,6 +42,19 @@ class ForeverClientUpdaterTest {
         .joinToString("") { "%02x".format(it) }
 
     @Test
+    fun cleanRecoveryReleasesAnInterruptedUpdateGate() {
+        Fixture().use { fixture ->
+            val paths = fixture.makePaths()
+            val gate = ForeverClientOperationLease(File(paths.privateRoot, "operation-state")) { RuntimeObservation.Quiescent }
+            gate.acquireUpdate("synthetic-storage") { true }.close()
+            assertEquals("update_recovery_required", gate.blockingReason())
+            val updater = fixture.updater(paths, emptyMap()) { _, _, _, _ -> error("recovery must not download") }
+            assertEquals(ForeverClientRecoveryResult.CLEAN, updater.recover(fixture.destination(paths)).result)
+            assertEquals(null, gate.blockingReason())
+        }
+    }
+
+    @Test
     fun staleRollbackResetCannotRecreateAStageAfterTheClientWasPublished() {
         val assets = configAssetsOrSkip()
         Fixture(cascObjectCount = 4, contiguousRangeObjectCount = 3).use { fixture ->

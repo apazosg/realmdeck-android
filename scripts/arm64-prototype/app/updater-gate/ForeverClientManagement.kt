@@ -275,6 +275,9 @@ fun ForeverClientManagementDialog(
     // guest/storage/qualification gates; this only sequences the user action.
     fun startUpdate(target: ForeverClientUpdateCheck.Fingerprint) {
         runOperation("Preparando la descarga…") { service ->
+            if (ForeverClientRuntimeGate.forContext(context).blockingReason() == "update_recovery_required") {
+                service.recover(::publishProgress)
+            }
             // A reservation left by a prior session is recovered only after a
             // fresh quiescence/ownership proof for the selected destination;
             // live or unproven runtimes still block with their distinct texts.
@@ -331,6 +334,9 @@ fun ForeverClientManagementDialog(
 
     fun continueInstallation() {
         runOperation("Consultando versión…") { service ->
+            if (ForeverClientRuntimeGate.forContext(context).blockingReason() == "update_recovery_required") {
+                service.recover(::publishProgress)
+            }
             // Same proven-closed prior-session recovery as update/repair; a live
             // or unproven runtime retains exclusion.
             ForeverFunctionalPoc.recoverStaleGuestBeforePlay(context)

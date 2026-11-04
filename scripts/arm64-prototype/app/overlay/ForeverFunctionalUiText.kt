@@ -209,6 +209,8 @@ object ForeverFunctionalUiText {
             // not present a stale guest record as a live game (US-008 AC-05).
             "recover the unfinished guest operation" in raw ->
                 "Hay una partida anterior pendiente de recuperar. Vuelve a intentarlo."
+            "update_recovery_required" in raw ->
+                "Hay una actualización anterior pendiente de recuperación. Comprueba el destino y vuelve a intentarlo."
             "runtime" in raw || "guest" in raw || "storage_busy" in raw -> "Cierra WoW antes de continuar."
             "permission" in raw || "access" in raw || "namespace" in raw -> "Android no permite acceder a esta ubicación. Elige otra en Ajustes."
             "http" in raw || "connect" in raw || "network" in raw -> "No se pudo completar la descarga. Comprueba la conexión y reintenta."

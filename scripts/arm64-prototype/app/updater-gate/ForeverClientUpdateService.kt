@@ -571,7 +571,8 @@ class ForeverClientUpdateService private constructor(
             // A transaction journal can recover cleanly while the frozen operation
             // record still says UPDATING; the gate only clears through this
             // explicit completion step, and only when the record was frozen.
-            if (!status.pendingTransaction && initialReason == "update_recovery_required") {
+            if (!status.pendingTransaction && initialReason == "update_recovery_required" &&
+                runtimeGate.blockingReason() == "update_recovery_required") {
                 runtimeGate.operations.recoverUpdate(
                     storage.operationStorageId(target),
                 ) { updater(catalog, includeConfigAssets = false).hasPendingTransaction(destination) }

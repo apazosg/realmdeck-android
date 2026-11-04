@@ -3,6 +3,7 @@ package app.gamenative
 import android.content.pm.ActivityInfo
 import android.os.Looper
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -394,6 +395,17 @@ class ForeverFunctionalLauncherUxTest {
         ).forEach { raw ->
             assertEquals("planning gate must stay truthful for: $raw", expected, ForeverFunctionalUiText.userMessage(Exception(raw)))
         }
+    }
+
+    @Test
+    fun pendingUpdateRecoveryIsNotReportedAsFailedRecovery() {
+        val message = ForeverFunctionalUiText.userMessage(Exception("update_recovery_required"))
+        assertEquals(
+            "Hay una actualización anterior pendiente de recuperación. Comprueba el destino y vuelve a intentarlo.",
+            message,
+        )
+        assertFalse("Falló la recuperación" in message)
+        assertFalse("update_recovery_required" in message)
     }
 
     @Test
