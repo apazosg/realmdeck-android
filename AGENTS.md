@@ -14,31 +14,36 @@ limitations.
 ## Start with the specifications
 
 This is a monorepo. Behavioral specifications live in `.agents/specs/`; `SYSTEM.md`
-contains only constraints that apply across the system, and each feature spec is a
-self-contained User Story document. Specs are discoverable through their YAML
-frontmatter `description`; do not maintain a second index of individual story files
-here. Load the relevant story before changing behavior, and load `SYSTEM.md` for
-cross-cutting work.
+contains cross-system constraints and each feature spec is a self-contained User
+Story document. Before changing behavior, locate relevant stories yourself by
+searching `.agents/specs/` and their YAML `description` (or use specs surfaced by
+your host when available); do not assume host injection. Load relevant stories and
+consult `SYSTEM.md` for cross-cutting work. Do not maintain a duplicate story index
+here. For SDD details, load the `spec-as-source-management` skill when available.
 
 ### Spec-driven development loop
 
-1. Before implementation, identify the relevant approved User Story and its UC/AC,
-   FR/NFR, and test cases. If expected behavior is absent or ambiguous, record the
-   question instead of inventing a requirement.
-2. For a requested behavior change, update the story’s UC/AC first and obtain the
-   required approval before deriving downstream requirements and tests. Keep each
-   FR traceable to its source UC/AC and each test case traceable to the FR it checks.
-3. Implement against the approved behavior. When code and a ready spec disagree,
-   determine whether the code is defective or the spec needs a product decision;
-   do not silently alter an approved requirement. Ask the user when intended
-   behavior is unclear or when a change affects another story.
-4. Update FR/NFR and test cases with implementation changes. Mark dependent specs
-   `dirty` when their approved behavior needs review. Label code-derived content
-   `[INFERRED]`, unconfirmed premises `[ASSUMPTION]`, and unsupported coverage
-   `[PENDING]`; list unresolved decisions under `Open Questions`.
-5. Validate frontmatter, unique IDs, traceability, links, and relevant tests before
-   declaring the work complete. Keep operational history and volatile test status in
-   `docs/`, not duplicated in behavioral requirements.
+1. Determine the task's spec scope and inspect relevant UC/AC, FR/NFR, tests, and
+   applicable system constraints. A spec's `ready` state indicates approval; in a
+   `dirty` spec, use only clearly unaffected, previously approved sections and
+   treat changed or dependent sections as unresolved. A `draft` `SYSTEM.md` is not
+   blanket approval: use established repository safety rules, and do not treat
+   unapproved draft choices as binding requirements.
+2. An explicit request authorizes the behavior it clearly specifies, including
+   coherent mechanical updates to its spec-derived artifacts; do not add approval
+   gates just to derive FR/NFR or tests. Preserve proportional traceability and
+   update affected artifacts when useful. Ask before proceeding when intent is
+   ambiguous, a consequential product/system decision is needed, or significant
+   risk, irreversibility, or cross-feature impact is involved. Do not silently
+   contradict an unrelated approved requirement.
+3. Keep FRs traceable to their source UC/AC and tests to FRs where those artifacts
+   are maintained. Mark dependent specs `dirty` when their approved behavior needs
+   review. Label code-derived content `[INFERRED]`, unconfirmed premises
+   `[ASSUMPTION]`, unsupported coverage `[PENDING]`, and unresolved decisions under
+   `Open Questions`.
+4. Validate relevant links, traceability, and tests proportionately to the change.
+   Keep operational history and volatile test status in `docs/`, not duplicated in
+   behavioral requirements.
 
 Do not put feature requirements in this file or in `SYSTEM.md`; the User Stories are
 the behavioral source of truth.
@@ -135,6 +140,9 @@ whole-client integrity check.
 - `.agents/references/device-control-scrcpy.md` — scrcpy device-control
   procedure.
 - `.agents/planning/` — active plans; completed plans are retained in `done/`.
+- Plan states are declared, not inferred from age: confirm evidence and ownership
+  before reclassifying or moving plans. `SKILL.md` is active; `.orig` files are
+  backups without authority and must be preserved until their origin is clarified.
 - `docs/architecture.md` — architecture baseline and decisions.
 - `docs/launcher-app-status.md` — functional launcher status and evidence limits.
 - `docs/launcher-design.md` — launcher product/design decisions.
