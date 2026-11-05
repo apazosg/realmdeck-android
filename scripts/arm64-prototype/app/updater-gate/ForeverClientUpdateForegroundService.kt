@@ -154,7 +154,7 @@ class ForeverClientUpdateForegroundService : Service() {
         acquireLocks()
         startForeground(
             NOTIFICATION_ID,
-            notification(execution.progress.value),
+            notification(execution.progress.value, execution.detail.value),
             ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC,
         )
         scope.launch {
@@ -269,18 +269,18 @@ class ForeverClientUpdateForegroundService : Service() {
         execution.detail.value = update
         val text = ForeverFunctionalUiText.downloadStatusText(update, execution.progress.value)
         execution.progress.value = text
-        publishNotification(text)
+        publishNotification(text, update)
     }
 
-    private fun publishNotification(text: String) {
+    private fun publishNotification(text: String, detail: ForeverClientUpdateProgress? = null) {
         val now = System.currentTimeMillis()
         if (now - lastNotificationMillis <= NOTIFICATION_THROTTLE_MILLIS) return
         lastNotificationMillis = now
-        runCatching { manager.notify(NOTIFICATION_ID, notification(text)) }
+        runCatching { manager.notify(NOTIFICATION_ID, notification(text, detail)) }
             .onFailure { Log.w(TAG, "progress notification failed", it) }
     }
 
-    private fun notification(text: String): Notification {
+    internal fun notification(text: String, detail: ForeverClientUpdateProgress? = null): Notification {
         val pause = PendingIntent.getService(
             this,
             0,
@@ -293,7 +293,7 @@ class ForeverClientUpdateForegroundService : Service() {
             packageManager.getLaunchIntentForPackage(packageName) ?: Intent().setPackage(packageName),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
-        return NotificationCompat.Builder(this, CHANNEL_ID)
+        val builder = NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_sys_download)
             .setContentTitle("Descargando WoW")
             .setContentText(text)
@@ -302,8 +302,13 @@ class ForeverClientUpdateForegroundService : Service() {
             .setOnlyAlertOnce(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setCategory(NotificationCompat.CATEGORY_PROGRESS)
-            .addAction(0, "Pausar", pause)
-            .build()
+        val percent = ForeverFunctionalUiText.downloadPercent(detail)
+        if (percent != null) {
+            builder.setProgress(100, percent, false)
+        } else {
+            builder.setProgress(0, 0, true)
+        }
+        return builder.addAction(0, "Pausar", pause).build()
     }
 
     private fun createChannel() {

@@ -191,6 +191,22 @@ class ForeverFunctionalPocActivity : ComponentActivity() {
         syncGamePresentation()
     }
 
+    private companion object {
+        const val NOTIFICATION_PERMISSION_REQUEST = 1001
+    }
+
+    private fun requestNotificationPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) !=
+            android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) {
+            requestPermissions(
+                arrayOf(android.Manifest.permission.POST_NOTIFICATIONS),
+                NOTIFICATION_PERMISSION_REQUEST,
+            )
+        }
+    }
+
     override fun dispatchKeyEvent(event: android.view.KeyEvent): Boolean {
         cancelAssistedEntry?.invoke()
         if (wineGuiRunning && PluviaApp.events.emit(app.gamenative.events.AndroidEvent.KeyEvent(event)) {
@@ -264,6 +280,7 @@ class ForeverFunctionalPocActivity : ComponentActivity() {
     override fun onCreate(state: Bundle?) {
         super.onCreate(state)
         ForeverWifiDownloads.initialize(this)
+        requestNotificationPermission()
         if (!ForeverFunctionalPoc.protectActiveAssistedCredentialWindow(window)) {
             finish()
             return

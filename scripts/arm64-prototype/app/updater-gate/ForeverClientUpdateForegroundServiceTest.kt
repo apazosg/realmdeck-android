@@ -1,6 +1,7 @@
 package app.gamenative
 
 import android.app.Application
+import android.app.Notification
 import android.app.Service
 import android.content.Intent
 import org.junit.After
@@ -38,6 +39,26 @@ class ForeverClientUpdateForegroundServiceTest {
         ForeverClientUpdateExecution.applying.value = false
         ForeverClientUpdateExecution.detail.value = null
         ForeverClientUpdateExecution.progress.value = ""
+    }
+
+    @Test
+    fun downloadNotificationShowsDeterminateProgress() {
+        val controller = Robolectric.buildService(ForeverClientUpdateForegroundService::class.java).create()
+        try {
+            val detail = ForeverClientUpdateProgress(
+                ForeverClientUpdateProgress.Phase.DOWNLOADING,
+                completedObjects = 0,
+                totalObjects = 0,
+                transferredBytes = 512,
+                totalTransferBytes = 1024,
+            )
+            val notification = controller.get().notification("Descargando 512 B de 1 KiB", detail)
+            assertEquals(100, notification.extras.getInt(Notification.EXTRA_PROGRESS_MAX))
+            assertEquals(50, notification.extras.getInt(Notification.EXTRA_PROGRESS))
+            assertFalse(notification.extras.getBoolean(Notification.EXTRA_PROGRESS_INDETERMINATE))
+        } finally {
+            controller.destroy()
+        }
     }
 
     @Test
