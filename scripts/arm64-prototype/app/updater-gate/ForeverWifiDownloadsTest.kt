@@ -1,9 +1,11 @@
 package app.gamenative
 
 import android.app.Application
-import android.net.NetworkCapabilities
 import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.net.NetworkInfo
+import okhttp3.OkHttpClient
+import okhttp3.Request
 import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -13,88 +15,73 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowNetwork
 import org.robolectric.shadows.ShadowNetworkInfo
-import okhttp3.OkHttpClient
-import okhttp3.Request
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [29], application = Application::class)
 class ForeverWifiDownloadsTest {
-    @Test fun wifiLossCancelsBoundCallsAndDoesNotFallBackToAvailableCellular() {
+    @Test
+    fun wifiLossCancelsBoundCallsAndTailnetVpnUsesWifiUnderlay() {
         val app = RuntimeEnvironment.getApplication()
         val manager = app.getSystemService(ConnectivityManager::class.java)
         val connectivity = shadowOf(manager)
         connectivity.clearAllNetworks()
+
         val cellular = ShadowNetwork.newInstance(ConnectivityManager.TYPE_MOBILE)
-        val cellCaps = NetworkCapabilities()
-        shadowOf(cellCaps).apply {
-            addTransportType(NetworkCapabilities.TRANSPORT_CELLULAR)
-            addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-            addCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
-        }
-        val cellInfo = ShadowNetworkInfo.newInstance(NetworkInfo.DetailedState.CONNECTED,
-            ConnectivityManager.TYPE_MOBILE, 0, true, true)
+        val cellCaps = capabilities(NetworkCapabilities.TRANSPORT_CELLULAR)
+        val cellInfo = networkInfo(ConnectivityManager.TYPE_MOBILE)
         connectivity.setDefaultNetworkActive(true)
         connectivity.setActiveNetworkInfo(cellInfo)
         connectivity.setNetworkCapabilities(cellular, cellCaps)
         ForeverWifiDownloads.initialize(app)
         assertFalse(ForeverWifiDownloads.available())
+        assertThrows(ForeverWifiDownloads.Unavailable::class.java) { ForeverWifiDownloads.requireAvailable() }
 
         val wifi = ShadowNetwork.newInstance(ConnectivityManager.TYPE_WIFI)
-        val wifiCaps = NetworkCapabilities()
-        shadowOf(wifiCaps).apply {
-            addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
-            addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-            addCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
-        }
-        val wifiInfo = ShadowNetworkInfo.newInstance(NetworkInfo.DetailedState.CONNECTED,
-            ConnectivityManager.TYPE_WIFI, 0, true, true)
+        val wifiCaps = capabilities(NetworkCapabilities.TRANSPORT_WIFI)
+        val wifiInfo = networkInfo(ConnectivityManager.TYPE_WIFI)
         connectivity.setActiveNetworkInfo(wifiInfo)
         connectivity.setNetworkCapabilities(wifi, wifiCaps)
         assertTrue(ForeverWifiDownloads.available())
-        val selectedNetwork = ForeverWifiDownloads::class.java.getDeclaredMethod("network").apply { isAccessible = true }
-        val firstNetwork = selectedNetwork.invoke(ForeverWifiDownloads)
-        connectivity.setActiveNetworkInfo(wifiInfo) // New wrapper, same netId.
-        org.junit.Assert.assertSame(firstNetwork, selectedNetwork.invoke(ForeverWifiDownloads))
         val call = ForeverWifiDownloads.newCall(OkHttpClient(), Request.Builder().url("https://example.invalid/").build())
         assertFalse(call.isCanceled())
 
-        // A VPN over Wi-Fi is eligible and routes through the tunnel; the raw
-        // Wi-Fi connection is interrupted so it cannot bypass the VPN.
+        // A tailnet-only VPN has no public default route; keep the validated
+        // Wi-Fi underlay instead of binding requests to the tunnel.
         val vpn = ShadowNetwork.newInstance(ConnectivityManager.TYPE_VPN)
-        val vpnCaps = NetworkCapabilities()
-        shadowOf(vpnCaps).apply {
-            addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
-            addTransportType(NetworkCapabilities.TRANSPORT_VPN)
-            addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-            addCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
-        }
-        connectivity.setActiveNetworkInfo(ShadowNetworkInfo.newInstance(NetworkInfo.DetailedState.CONNECTED,
-            ConnectivityManager.TYPE_VPN, 0, true, true))
+        val vpnCaps = capabilities(NetworkCapabilities.TRANSPORT_WIFI, NetworkCapabilities.TRANSPORT_VPN)
+        connectivity.setActiveNetworkInfo(networkInfo(ConnectivityManager.TYPE_VPN))
         connectivity.setNetworkCapabilities(vpn, vpnCaps)
         connectivity.networkCallbacks.forEach { it.onAvailable(vpn) }
-        assertTrue(call.isCanceled())
+        assertFalse(call.isCanceled())
         assertTrue(ForeverWifiDownloads.available())
-        ForeverWifiDownloads.requireAvailable()
-        val vpnCall = ForeverWifiDownloads.newCall(OkHttpClient(), Request.Builder().url("https://example.invalid/").build())
-        assertFalse(vpnCall.isCanceled())
+        val fallbackCall = ForeverWifiDownloads.newCall(OkHttpClient(), Request.Builder().url("https://example.invalid/").build())
+        assertFalse(fallbackCall.isCanceled())
 
-        // A VPN whose underlying transport becomes cellular is not eligible.
-        shadowOf(vpnCaps).removeTransportType(NetworkCapabilities.TRANSPORT_WIFI)
-        shadowOf(vpnCaps).addTransportType(NetworkCapabilities.TRANSPORT_CELLULAR)
-        connectivity.networkCallbacks.forEach { it.onCapabilitiesChanged(vpn, vpnCaps) }
-        assertTrue(vpnCall.isCanceled())
-        assertFalse(ForeverWifiDownloads.available())
-        assertThrows(ForeverWifiDownloads.Unavailable::class.java) { ForeverWifiDownloads.requireAvailable() }
-        connectivity.setActiveNetworkInfo(wifiInfo)
-        val resumed = ForeverWifiDownloads.newCall(OkHttpClient(), Request.Builder().url("https://example.invalid/").build())
+        // Losing the Wi-Fi underlay leaves only a cellular path; never fall back.
         connectivity.removeNetwork(wifi)
-        connectivity.setActiveNetworkInfo(cellInfo)
         connectivity.networkCallbacks.forEach { it.onLost(wifi) }
-        assertTrue(resumed.isCanceled())
+        assertTrue(fallbackCall.isCanceled())
         assertFalse(ForeverWifiDownloads.available())
         assertThrows(ForeverWifiDownloads.Unavailable::class.java) {
             ForeverWifiDownloads.newCall(OkHttpClient(), Request.Builder().url("https://example.invalid/").build())
         }
+    }
+
+    @Test
+    fun selectNetworkUsesVpnWithRouteAndFallsBackForTailnetOnlyVpn() {
+        val wifi = ShadowNetwork.newInstance(ConnectivityManager.TYPE_WIFI)
+        val wifiCaps = capabilities(NetworkCapabilities.TRANSPORT_WIFI)
+        val vpn = ShadowNetwork.newInstance(ConnectivityManager.TYPE_VPN)
+        val vpnCaps = capabilities(NetworkCapabilities.TRANSPORT_WIFI, NetworkCapabilities.TRANSPORT_VPN)
+        val cellular = ShadowNetwork.newInstance(ConnectivityManager.TYPE_MOBILE)
+        val cellCaps = capabilities(NetworkCapabilities.TRANSPORT_CELLULAR)
+        val candidates = listOf(vpn to vpnCaps, wifi to wifiCaps, cellular to cellCaps)
+
+        assertEquals(vpn, ForeverWifiDownloads.selectNetwork(vpn, vpnCaps, candidates) { true })
+        assertEquals(wifi, ForeverWifiDownloads.selectNetwork(vpn, vpnCaps, candidates) { false })
+        assertEquals(wifi, ForeverWifiDownloads.selectNetwork(wifi, wifiCaps, candidates) { false })
+        assertNull(ForeverWifiDownloads.selectNetwork(cellular, cellCaps, listOf(cellular to cellCaps)) { true })
+        assertNull(ForeverWifiDownloads.selectNetwork(null, null, listOf(cellular to cellCaps)) { true })
     }
 
     @Test fun unmeteredCellularAndUnvalidatedWifiAreNotEligible() {
@@ -128,4 +115,16 @@ class ForeverWifiDownloadsTest {
             assertTrue(ForeverFunctionalUiText.userMessage(expected).contains("Wi-Fi"))
         }
     }
+
+    private fun capabilities(vararg transports: Int): NetworkCapabilities =
+        NetworkCapabilities().also { caps ->
+            shadowOf(caps).apply {
+                transports.forEach(::addTransportType)
+                addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                addCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+            }
+        }
+
+    private fun networkInfo(type: Int): NetworkInfo =
+        ShadowNetworkInfo.newInstance(NetworkInfo.DetailedState.CONNECTED, type, 0, true, true)
 }

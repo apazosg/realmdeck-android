@@ -95,7 +95,8 @@ object ForeverClientUpdateCheck {
             parseVersions(bytes)
         } catch (cancelledFailure: CancellationException) {
             throw cancelledFailure
-        } catch (_: Exception) {
+        } catch (failure: Exception) {
+            android.util.Log.w("ForeverClientUpdate", "official metadata check failed", failure)
             return CheckResult(
                 Status.METADATA_UNAVAILABLE,
                 "No se pudo verificar la metadata oficial; estado desconocido.",
