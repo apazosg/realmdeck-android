@@ -140,7 +140,7 @@ BRIDGE_TARGET = Path("app/src/main/java/com/wowforever/launcher/ForeverPatchBrid
 CODE64_NATIVE_MEMBER = "lib/arm64-v8a/libforever_patcher_jni.so"
 FUNCTIONAL_MARKER_MEMBER = "assets/forever/functional-poc/provenance.json"
 SOURCE_VERSION = (62, "0.2.38-automated")
-CANDIDATE_VERSION = (220, "0.2.196-preview")
+CANDIDATE_VERSION = (221, "0.2.197-preview")
 SOURCE_APPLICATION_ID = "com.wowforever.arm64probe"
 CANDIDATE_APPLICATION_ID = "com.pelele.wowforever"
 # Historical overlay preimages are fetched by fixed Git object IDs (never HEAD)
