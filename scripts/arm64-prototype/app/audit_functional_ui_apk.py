@@ -209,7 +209,9 @@ def check_descriptor_delta(added: set[str], removed: set[str]) -> None:
         # exact additions observed in the canonical candidate's D8 output.
         'Lapp/gamenative/ForeverWifiDownloads;',
         'Lapp/gamenative/ForeverWifiDownloads$$ExternalSyntheticLambda0;',
+        'Lapp/gamenative/ForeverWifiDownloads$$ExternalSyntheticLambda1;',
         'Lapp/gamenative/ForeverWifiDownloads$BoundClient;',
+        'Lapp/gamenative/ForeverWifiDownloads$UnboundClient;',
         'Lapp/gamenative/ForeverWifiDownloads$Unavailable;',
         'Lapp/gamenative/ForeverWifiDownloads$callback$1;',
         'Lapp/gamenative/ForeverClientDownloadRate;',
