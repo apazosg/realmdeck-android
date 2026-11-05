@@ -673,9 +673,10 @@ class ForeverClientUpdater(
     }
 
     /**
-     * Prove an absent client root has no updater-owned recovery state. This is
+     * Prove an absent client root has no unrecoverable updater-owned state. This is
      * only for clearing a stale UPDATING reservation; it never creates or repairs
-     * the destination and treats every private artifact as evidence to preserve.
+     * the destination. A rebuildable archive-order cache may remain; any journal,
+     * staging, portability, or unknown private artifact preserves the gate.
      */
     internal fun canRecoverMissingRoot(destination: ForeverClientUpdateDestination): Boolean {
         destination.revalidate()
@@ -688,8 +689,16 @@ class ForeverClientUpdater(
         if (!Files.isDirectory(privateWork, LinkOption.NOFOLLOW_LINKS)) return false
         val work = workBase.toPath().toAbsolutePath().normalize()
         requireSafeAncestors(work)
+        val archiveOrder = archiveOrderDirectory.toPath().toAbsolutePath().normalize()
+        requireSafeAncestors(archiveOrder)
         Files.newDirectoryStream(privateWork).use { children ->
-            for (child in children) if (child.toAbsolutePath().normalize() != work) return false
+            for (child in children) {
+                val candidate = child.toAbsolutePath().normalize()
+                if (candidate == work) continue
+                if (candidate != archiveOrder) return false
+                // Archive ordering is a rebuildable cache, not transaction evidence.
+                if (Files.isSymbolicLink(child) || !Files.isDirectory(child, LinkOption.NOFOLLOW_LINKS)) return false
+            }
         }
         if (!Files.notExists(work, LinkOption.NOFOLLOW_LINKS)) {
             if (!Files.isDirectory(work, LinkOption.NOFOLLOW_LINKS)) return false

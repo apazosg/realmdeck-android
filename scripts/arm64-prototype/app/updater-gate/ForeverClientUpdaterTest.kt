@@ -55,7 +55,7 @@ class ForeverClientUpdaterTest {
     }
 
     @Test
-    fun missingClientRootRecoveryRequiresAbsentPrivateStateAndStableIdentity() {
+    fun missingClientRootRecoveryAllowsOnlyRebuildableCacheState() {
         Fixture().use { fixture ->
             val paths = fixture.makePaths()
             val updater = fixture.updater(paths, emptyMap()) { _, _, _, _ -> error("recovery must not download") }
@@ -64,6 +64,10 @@ class ForeverClientUpdaterTest {
             })
             paths.client.deleteRecursively()
             assertTrue(updater.canRecoverMissingRoot(destination))
+
+            val archiveOrder = File(paths.work, ".forever-client-archive-order").apply { mkdirs() }
+            assertTrue(updater.canRecoverMissingRoot(destination))
+            archiveOrder.deleteRecursively()
 
             val journal = File(paths.journal, ".forever-client-update.json")
             val workspace = File(paths.work, "a".repeat(64))
@@ -84,6 +88,30 @@ class ForeverClientUpdaterTest {
             val changedIdentity = destination.copy(revalidate = { error("destination identity changed") })
             assertTrue(runCatching { updater.canRecoverMissingRoot(changedIdentity) }.isFailure)
             assertFalse(paths.client.exists())
+        }
+    }
+
+    @Test
+    fun missingRootWithArchiveOrderCacheReleasesInterruptedUpdateGate() {
+        Fixture().use { fixture ->
+            val paths = fixture.makePaths()
+            val gate = ForeverClientOperationLease(File(paths.privateRoot, "operation-state")) { RuntimeObservation.Quiescent }
+            gate.acquireUpdate("synthetic-storage") { true }.close()
+            assertEquals("update_recovery_required", gate.blockingReason())
+
+            paths.client.deleteRecursively()
+            val destination = fixture.destination(paths).copy(
+                revalidate = { check(!paths.client.exists()) { "destination identity changed" } },
+            )
+            val archiveOrder = File(paths.work, ".forever-client-archive-order").apply { check(mkdir()) }
+            File(archiveOrder, "archive-order.sqlite3").writeBytes(byteArrayOf(1, 2, 3))
+
+            val updater = fixture.updater(paths, emptyMap()) { _, _, _, _ -> error("recovery must not download") }
+            assertTrue(updater.canRecoverMissingRoot(destination))
+
+            gate.recoverUpdate("synthetic-storage") { false }
+            assertEquals(null, gate.blockingReason())
+            assertTrue(File(archiveOrder, "archive-order.sqlite3").exists())
         }
     }
 

@@ -569,9 +569,14 @@ class ForeverClientUpdateService private constructor(
             val destination = recoveryDestination(target)
             if (initialReason == "update_recovery_required" &&
                 Files.notExists(target.root.toPath(), LinkOption.NOFOLLOW_LINKS)) {
-                runtimeGate.operations.recoverUpdate(storage.operationStorageId(target)) {
-                    !updater(catalog, includeConfigAssets = false).canRecoverMissingRoot(destination)
+                // A missing root can only clear the stale reservation when every
+                // remaining private artifact is rebuildable cache state. Never pass
+                // a negated proof to recoverUpdate: that turns an interrupted
+                // metadata download into a permanent retry loop.
+                check(updater(catalog, includeConfigAssets = false).canRecoverMissingRoot(destination)) {
+                    "the client root is missing but private update state cannot be recovered safely"
                 }
+                runtimeGate.operations.recoverUpdate(storage.operationStorageId(target)) { false }
                 return@withStorageIo ForeverClientUpdater.RecoveryStatus(ForeverClientRecoveryResult.CLEAN, false)
             }
             val status = updater(catalog, includeConfigAssets = false).recover(destination, progress)
