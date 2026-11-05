@@ -453,10 +453,12 @@ fun ForeverClientManagementDialog(
                 Text(if (inline && inspection?.installedVersion == null) "Instalar WoW" else "WoW",
                     style = if (inline) MaterialTheme.typography.titleMedium else MaterialTheme.typography.titleLarge)
                 inspection?.let { current ->
-                    Text("Destino: ${current.storageLabel}")
-                    Text("Ruta: ${current.destinationPath?.takeIf { it.isNotBlank() } ?: "No disponible"}")
-                    if (!inline || details) Text(current.installedVersion?.let { "Instalado: $it" } ?: if (current.clientPresent)
-                        "Hay archivos del cliente, pero no se pudo identificar la instalación." else "Cliente no instalado.")
+                    if (!inline || details) {
+                        Text("Destino: ${current.storageLabel}")
+                        Text("Ruta: ${current.destinationPath?.takeIf { it.isNotBlank() } ?: "No disponible"}")
+                        Text(current.installedVersion?.let { "Instalado: $it" } ?: if (current.clientPresent)
+                            "Hay archivos del cliente, pero no se pudo identificar la instalación." else "Cliente no instalado.")
+                    }
                 }
                 if (busy || executionBusy || executionPendingHandoff) {
                     val detail by execution.detail.collectAsState()
@@ -490,14 +492,15 @@ fun ForeverClientManagementDialog(
                     if (portable != null) {
                         val verified = portable.verification
                         val costs = verified.review
-                        Text("Destino: ${portable.candidate.destinationPath.takeIf { it.isNotBlank() } ?: "No disponible"}")
-                        Text("Versión: ${portable.candidate.admission.target.version}")
-                        Text("Candidatos localizados sin verificar: ${verified.prefix.candidateCount} objetos")
-                        Text("Pendientes CASC: ${verified.targetPlan.missingObjects} objetos")
+                        Text("Datos localizados: ${verified.prefix.candidateCount} objetos")
                         Text("Descarga prevista, incluidos archivos sueltos: hasta ${ForeverFunctionalUiText.clientBytes(costs.payloadCeilingBytes)}")
-                        Text("Espacio adicional previsto: ${ForeverFunctionalUiText.clientBytes(costs.peakAdditionalBytes)}")
-                        Text("App: ${ForeverFunctionalUiText.clientBytes(costs.privateAdditionalBytes)} · USB: ${ForeverFunctionalUiText.clientBytes(costs.destinationAdditionalBytes)}")
-                        Text("Al confirmar se reutilizarán los datos localizados; cada objeto se verifica al usarlo y, si el plan actualizado se mantiene dentro de estos límites, comenzará la descarga.")
+                        if (!inline || details) {
+                            Text("Destino: ${portable.candidate.destinationPath.takeIf { it.isNotBlank() } ?: "No disponible"}")
+                            Text("Versión: ${portable.candidate.admission.target.version}")
+                            Text("Pendientes CASC: ${verified.targetPlan.missingObjects} objetos")
+                            Text("Espacio adicional previsto: ${ForeverFunctionalUiText.clientBytes(costs.peakAdditionalBytes)}")
+                            Text("App: ${ForeverFunctionalUiText.clientBytes(costs.privateAdditionalBytes)} · USB: ${ForeverFunctionalUiText.clientBytes(costs.destinationAdditionalBytes)}")
+                        }
                         Button(enabled = costs.hasEnoughSpace, onClick = { adoptPortableDownload(portable) }) {
                             Text("Recuperar datos localizados")
                         }
@@ -505,17 +508,19 @@ fun ForeverClientManagementDialog(
                         TextButton(onClick = { portabilityReview = null }) { Text("Cancelar revisión") }
                     } else if (readyPlan != null) {
                         planNotice?.let { Text(it) }
-                        Text("Destino: ${readyPlan.destinationPath.takeIf { it.isNotBlank() } ?: "No disponible"}")
-                        Text("Versión: ${readyPlan.version}")
                         Text(if (readyPlan.payloadCeilingBytes > readyPlan.downloadBytes) {
                             "Descarga: hasta ${ForeverFunctionalUiText.clientBytes(readyPlan.payloadCeilingBytes)}"
                         } else "Descarga: ${ForeverFunctionalUiText.clientBytes(readyPlan.downloadBytes)}")
-                        Text("Espacio adicional: ${ForeverFunctionalUiText.clientBytes(readyPlan.peakAdditionalBytes)}")
-                        if (!readyPlan.privateAndDestinationShareFileStore) {
-                            Text("Almacenamiento de la app: hasta ${ForeverFunctionalUiText.clientBytes(readyPlan.privateWorkBytes)}")
-                            Text("Volumen del cliente: hasta ${ForeverFunctionalUiText.clientBytes(readyPlan.destinationBytes)}")
-                        }
                         if (!readyPlan.hasEnoughSpace) Text("No hay espacio suficiente.", color = MaterialTheme.colorScheme.error)
+                        if (!inline || details) {
+                            Text("Destino: ${readyPlan.destinationPath.takeIf { it.isNotBlank() } ?: "No disponible"}")
+                            Text("Versión: ${readyPlan.version}")
+                            Text("Espacio adicional: ${ForeverFunctionalUiText.clientBytes(readyPlan.peakAdditionalBytes)}")
+                            if (!readyPlan.privateAndDestinationShareFileStore) {
+                                Text("Almacenamiento de la app: hasta ${ForeverFunctionalUiText.clientBytes(readyPlan.privateWorkBytes)}")
+                                Text("Volumen del cliente: hasta ${ForeverFunctionalUiText.clientBytes(readyPlan.destinationBytes)}")
+                            }
+                        }
                         Button(
                             enabled = readyPlan.hasEnoughSpace,
                             modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
@@ -533,7 +538,7 @@ fun ForeverClientManagementDialog(
                     } else if (inline && local != null && !local.clientPresent) {
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             Icon(Icons.Default.Wifi, contentDescription = "Wi-Fi")
-                            Text("Preparación: hasta 1 GiB de metadatos", style = MaterialTheme.typography.bodySmall)
+                            Text("Metadatos: hasta 1 GiB", style = MaterialTheme.typography.bodySmall)
                         }
                         Button(onClick = ::continueInstallation, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
                             Icon(Icons.Default.ArrowForward, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
@@ -545,8 +550,7 @@ fun ForeverClientManagementDialog(
                         val pastedReady = ForeverClientUpdateService.isPastedSourceCompletable(local.pastedReport)
                         if (installed != null && latest != null && installed != latest.version) {
                             Text("Disponible: ${latest.version}")
-                            Text("Al continuar se consultan los archivos de la versión (hasta 1 GiB). El tamaño del juego se confirma después.",
-                                style = MaterialTheme.typography.bodySmall)
+                            Text("Metadatos: hasta 1 GiB", style = MaterialTheme.typography.bodySmall)
                             Button(
                                 modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
                                 onClick = { startUpdate(latest) },
@@ -561,7 +565,7 @@ fun ForeverClientManagementDialog(
                             if (latest == null) TextButton(onClick = ::checkForUpdates) { Text("Buscar actualizaciones") }
                         } else if (latest != null) {
                             if (local.clientPresent && !pastedReady) {
-                                Text("Continuar consultará metadatos de hasta 1 GiB por Wi-Fi y comprobará el destino; antes de modificar o descargar verás el coste. Los datos no verificables se conservarán.")
+                                Text("Metadatos: hasta 1 GiB", style = MaterialTheme.typography.bodySmall)
                                 Button(onClick = ::continueInstallation, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Continuar") }
                             } else {
                                 Text("Disponible: ${latest.version}")
@@ -581,7 +585,7 @@ fun ForeverClientManagementDialog(
                     } else {
                         Button(onClick = ::inspectLocal, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Reintentar") }
                     }
-                    if (readyPlan == null && portable == null && execution.resumePlan == null) {
+                    if (details && readyPlan == null && portable == null && execution.resumePlan == null) {
                         TextButton(onClick = ::recoverPortableDownload) { Text("Recuperar adopción interrumpida") }
                     }
                 }

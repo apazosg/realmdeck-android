@@ -1804,12 +1804,6 @@ private fun ForeverFunctionalPocScreen(
             ) {
                 Column(modifier = Modifier.padding(18.dp)) {
                     ForeverSectionHeader("Cliente")
-                    Text(
-                        "Servidor: ${settings.profile.displayName}",
-                        modifier = Modifier.padding(top = 8.dp),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        style = MaterialTheme.typography.bodySmall,
-                    )
                     // Single real-status block. A live download dominates
                     // partial-file labels; the hardcoded build is never shown
                     // as the installed version (the target build is authoritative
@@ -1842,18 +1836,13 @@ private fun ForeverFunctionalPocScreen(
                         is ForeverFunctionalLauncherUx.HomeState.Downloading -> {
                             val detail = downloadDetail
                             Text(
-                                if (state.applying) "Aplicando los archivos…" else "Descargando el cliente…",
-                                modifier = Modifier.padding(top = 14.dp),
-                                style = MaterialTheme.typography.bodyLarge,
-                            )
-                            Text(
-                                ForeverFunctionalUiText.downloadStatusText(
+                                if (state.applying) "Aplicando los archivos…"
+                                else ForeverFunctionalUiText.downloadStatusText(
                                     detail,
                                     downloadProgress.ifBlank { "Descargando…" },
                                 ),
-                                modifier = Modifier.padding(top = 6.dp),
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.padding(top = 14.dp),
+                                style = MaterialTheme.typography.bodyLarge,
                             )
                             val fraction = ForeverFunctionalUiText.downloadFraction(detail)
                             ForeverClientDownloadEstimate()
@@ -1878,12 +1867,6 @@ private fun ForeverFunctionalPocScreen(
                                             ),
                                     )
                                 }
-                                Text(
-                                    "${ForeverFunctionalUiText.downloadPercent(detail)} %",
-                                    modifier = Modifier.padding(top = 6.dp),
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    style = MaterialTheme.typography.bodySmall,
-                                )
                             }
                             Row(
                                 modifier = Modifier
@@ -1953,17 +1936,16 @@ private fun ForeverFunctionalPocScreen(
                             )
                         }
                     }
-                    if (!inlineClientManagement) Text(
-                        "Almacenamiento: ${readiness.storageLabel}",
-                        modifier = Modifier.padding(top = 6.dp),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        style = MaterialTheme.typography.bodySmall,
-                    )
                     if (!inlineClientManagement) TextButton(
                         onClick = { showClientDetails = !showClientDetails },
                         modifier = Modifier.heightIn(min = 48.dp),
                     ) { Text(if (showClientDetails) "Ocultar detalles" else "Detalles") }
                     if (showClientDetails && !inlineClientManagement) {
+                        Text(
+                            "Almacenamiento: ${readiness.storageLabel}",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
                         Text(
                             "Ruta: ${readiness.storageRoute}",
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
