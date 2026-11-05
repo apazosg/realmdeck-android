@@ -162,12 +162,13 @@ def test_wifi_and_rate_descriptors_are_admitted_by_exact_name_only():
     wifi = 'Lapp/gamenative/ForeverWifiDownloads'
     rate = 'Lapp/gamenative/ForeverClientDownloadRate'
     module.check_descriptor_delta({
-        f'{wifi};', f'{wifi}$$ExternalSyntheticLambda0;', f'{wifi}$BoundClient;',
-        f'{wifi}$Unavailable;', f'{wifi}$callback$1;', f'{rate};',
+        f'{wifi};', f'{wifi}$$ExternalSyntheticLambda0;', f'{wifi}$$ExternalSyntheticLambda1;',
+        f'{wifi}$BoundClient;', f'{wifi}$UnboundClient;', f'{wifi}$Unavailable;',
+        f'{wifi}$callback$1;', f'{rate};',
         f'{rate}$Companion;', f'{rate}$Estimate;', f'{rate}$Sample;',
     }, set())
     for neighbor in (f'{wifi}Unexpected;', f'{wifi}$Unreviewed;',
-                     f'{wifi}$$ExternalSyntheticLambda1;', f'{rate}$Unreviewed;'):
+                     f'{wifi}$$ExternalSyntheticLambda2;', f'{rate}$Unreviewed;'):
         with pytest.raises(ValueError, match='unapproved DEX descriptor'):
             module.check_descriptor_delta({neighbor}, set())
 
